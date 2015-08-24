@@ -56,7 +56,7 @@
     <ErrorReport>prompt</ErrorReport>
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
     <UseVSHostingProcess>true</UseVSHostingProcess>
-    <PlatformTarget>AnyCPU</PlatformTarget>
+    <PlatformTarget>x86</PlatformTarget>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <OutputPath>bin\Release\</OutputPath>
@@ -193,6 +193,8 @@
   </ItemGroup>
   <ItemGroup>
     <ExternalComponents Include="$(SolutionDir)..\external\Capstone.NET\*.dll" />
+    <ExternalComponents_x86 Include="$(SolutionDir)..\external\Capstone.NET\x86\*.dll" />
+    <ExternalComponents_x64 Include="$(SolutionDir)..\external\Capstone.NET\x64\*.dll" />
   </ItemGroup>
   <Target Name="BeforeBuild">
     <Message Importance="high" Text="Copying Decompiler metadata files to $(TargetDir)" />
@@ -209,6 +211,8 @@
     <Copy SourceFiles="@(OdbgScripts)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
     <Message Importance="high" Text="Copying external binaries to $(TargetDir)" />
     <Copy SourceFiles="@(ExternalComponents)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(ExternalComponents_x86)" DestinationFolder="$(TargetDir)x86" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(ExternalComponents_x64)" DestinationFolder="$(TargetDir)x64" SkipUnchangedFiles="true" />
   </Target>
   <PropertyGroup>
     <PreBuildEvent>

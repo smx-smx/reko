@@ -53,8 +53,13 @@ namespace Reko.Arch.Arm
 
         public static Dictionary<string, RegisterStorage> RegistersByName { get; set; }
 
+        private static Type capAss;
+
         static A32Registers()
         {
+            //$HACK: Force capstone library into memory.
+            capAss = typeof(Gee.External.Capstone.CapstoneDisassembler);
+
             r0 = new RegisterStorage("r0", 0, PrimitiveType.Word32);
             r1 = new RegisterStorage("r1", 1, PrimitiveType.Word32);
             r2 = new RegisterStorage("r2", 2, PrimitiveType.Word32);
