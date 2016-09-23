@@ -62,7 +62,7 @@ namespace Reko.UnitTests.Analysis
             Identifier returnValue,
             params Identifier[] parameters)
         {
-            return Ptr32(new FunctionType("", returnValue, parameters));
+            return Ptr32(new FunctionType(returnValue, parameters));
         }
 
         private Identifier VoidId()
@@ -83,7 +83,7 @@ namespace Reko.UnitTests.Analysis
             return new Identifier(
                 "",
                 PrimitiveType.Word32,
-                new RegisterStorage("eax", 0, 0, PrimitiveType.Word32));
+                RegisterStorage.Reg32("eax", 0));
         }
 
         private Identifier EcxId()
@@ -91,7 +91,7 @@ namespace Reko.UnitTests.Analysis
             return new Identifier(
                 "",
                 PrimitiveType.Word32,
-                new RegisterStorage("ecx", 1, 0, PrimitiveType.Word32));
+                RegisterStorage.Reg32("ecx", 1));
         }
 
         private DataType VtblStr(params DataType[] methods)
@@ -118,11 +118,11 @@ namespace Reko.UnitTests.Analysis
                 VoidId());
             var fn0004 = FnPtr32(
                 VoidId(),
-                StackId(0, Int32()));
+                StackId(4, Int32()));
             var fn0008 = FnPtr32(
                 VoidId(),
-                StackId(0, Int32()),
-                StackId(4, Int32()));
+                StackId(4, Int32()),
+                StackId(8, Int32()));
             return VtblStr(fn0000, fn0004, fn0008);
         }
 
@@ -131,16 +131,16 @@ namespace Reko.UnitTests.Analysis
             var fn0000 = FnPtr32(
                 EaxId(),
                 EcxId(),
-                StackId(0, Int32()));
+                StackId(4, Int32()));
             var fn0004 = FnPtr32(
                 EaxId(),
                 EcxId(),
-                StackId(0, Int32()));
+                StackId(4, Int32()));
             var fn0008 = FnPtr32(
                 EaxId(),
                 EcxId(),
-                StackId(0, Int32()),
-                StackId(4, Int32()));
+                StackId(4, Int32()),
+                StackId(8, Int32()));
             return VtblStr(fn0000, fn0004, fn0008);
         }
 

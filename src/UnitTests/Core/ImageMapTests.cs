@@ -140,7 +140,6 @@ namespace Reko.UnitTests.Core
             var segmentMap = new SegmentMap(addrBase,
                 new ImageSegment("code", addrBase, 0x100, AccessMode.ReadWrite));
             var map = segmentMap.CreateImageMap();
-            var curAddr = addrBase;
 
             var itemAddress1 = addrBase;
             var itemAddress2 = CreateImageMapItem(map, PrimitiveType.Int32);
@@ -204,7 +203,6 @@ namespace Reko.UnitTests.Core
             segmentMap.AddSegment(textAddr, "text", AccessMode.ReadWrite, 0x100);
 
             var map = segmentMap.CreateImageMap();
-            var curAddr = addrBase;
 
             CreateImageMapItem(map, PrimitiveType.Int32, addrBase + 0x1000);
 
@@ -233,7 +231,7 @@ namespace Reko.UnitTests.Core
         [Test]
         public void Im_FireChangeEvent()
         {
-            var map = new ImageMap(addrBase, 0x100);
+            var map = new ImageMap(addrBase);
             var mapChangedFired = false;
             map.MapChanged += (sender, e) => { mapChangedFired = true; };
             map.AddItem(addrBase, new ImageMapItem { DataType = new CodeType() });

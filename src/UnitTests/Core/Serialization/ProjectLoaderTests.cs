@@ -49,6 +49,8 @@ namespace Reko.UnitTests.Core.Serialization
         private IPlatform platform;
         private IProcessorArchitecture arch;
         private Dictionary<string, object> loadedOptions;
+        private ITypeLibraryLoaderService tlSvc;
+        private OperatingEnvironment oe;
 
         [SetUp]
         public void Setup()
@@ -68,7 +70,7 @@ namespace Reko.UnitTests.Core.Serialization
 
         private void Given_TestOS()
         {
-            var oe = mr.Stub<OperatingEnvironment>();
+            this.oe = mr.Stub<OperatingEnvironment>();
             this.platform = mr.Stub<IPlatform>();
             this.cfgSvc.Stub(c => c.GetEnvironment("testOS")).Return(oe);
             oe.Stub(e => e.Load(sc, null)).IgnoreArguments().Return(platform);
@@ -77,10 +79,16 @@ namespace Reko.UnitTests.Core.Serialization
 
         private void Given_Platform(IPlatform platform)
         {
-            var oe = mr.Stub<OperatingEnvironment>();
+            this.oe = mr.Stub<OperatingEnvironment>();
             this.platform = platform;
             this.cfgSvc.Stub(c => c.GetEnvironment("testOS")).Return(oe);
             oe.Stub(e => e.Load(sc, null)).IgnoreArguments().Return(platform);
+        }
+
+        private void Given_TypeLibraryLoaderService()
+        {
+            this.tlSvc = mr.Stub<ITypeLibraryLoaderService>();
+            sc.AddService<ITypeLibraryLoaderService>(this.tlSvc);
         }
 
         [Test(Description = "If the project file just has a single metadata file, we don't know what the platform is; so ask the user.")]
@@ -88,7 +96,6 @@ namespace Reko.UnitTests.Core.Serialization
         {
             var ldr = mr.Stub<ILoader>();
             var oracle = mr.StrictMock<IOracleService>();
-            var arch = mr.Stub<IProcessorArchitecture>();
             var platform = mockFactory.CreatePlatform();
             var typeLib = new TypeLibrary();
             ldr.Stub(l => l.LoadMetadata(Arg<string>.Is.NotNull, Arg<IPlatform>.Is.Equal(platform), Arg<TypeLibrary>.Is.NotNull)).Return(typeLib);
@@ -110,37 +117,7 @@ namespace Reko.UnitTests.Core.Serialization
             mr.VerifyAll();
         }
 
-        [Test]
-        [Ignore("do we care about old V2 project files anymore?")]
-        public void Prld_LoadMetadata_SingleBinary_ShouldNotQuery()
-        {
-            var ldr = mr.Stub<ILoader>();
-            var oracle = mr.StrictMock<IOracleService>();
-            var arch = mr.Stub<IProcessorArchitecture>();
-            var platform = mockFactory.CreatePlatform();
-            var typelibrary = new TypeLibrary();
-            Given_Binary(ldr, platform);
-            ldr.Stub(l => l.LoadMetadata(Arg<string>.Is.NotNull, Arg<IPlatform>.Is.Same(platform), Arg<TypeLibrary>.Is.NotNull)).Return(typelibrary);
-            mr.ReplayAll();
-
-            var prld = new ProjectLoader(sc, ldr);
-            prld.LoadProject(
-                "project.dcproj",
-                new Project_v2
-                {
-                    Inputs = {
-                    new DecompilerInput_v2 {
-                        Filename = "foo.exe",
-                    },
-                    new MetadataFile_v2 {
-                        Filename = "foo",
-                    }
-                }
-                });
-            mr.VerifyAll();
-        }
-
-        private void Given_Binary(ILoader ldr, IPlatform platform)
+          private void Given_Binary(ILoader ldr, IPlatform platform)
         {
             ldr.Stub(l => l.LoadImageBytes(
                 Arg<string>.Is.Anything,
@@ -148,7 +125,7 @@ namespace Reko.UnitTests.Core.Serialization
             ldr.Stub(l => l.LoadExecutable(
                 Arg<string>.Is.Anything,
                 Arg<byte[]>.Is.Anything,
-                Arg<Address>.Is.Anything)).Return(new Program { Platform = platform });
+                Arg<Address>.Is.Anything)).Return(new Program { Platform = platform, Architecture = arch });
         }
 
         public class TestPlatform : Platform
@@ -373,14 +350,14 @@ namespace Reko.UnitTests.Core.Serialization
                 OsPath.Absolute("meta1.xml"),
                 this.platform,
                 new TypeLibrary(
-                    types1, new Dictionary<string, ProcedureSignature>()
+                    types1, new Dictionary<string, FunctionType>(), new Dictionary<string, DataType>()
                 )
             );
             mockFactory.CreateLoadMetadataStub(
                 OsPath.Absolute("meta2.xml"),
                 this.platform,
                 new TypeLibrary(
-                    types2, new Dictionary<string, ProcedureSignature>()
+                    types2, new Dictionary<string, FunctionType>(), new Dictionary<string, DataType>()
                 )
             );
             mr.ReplayAll();
@@ -418,6 +395,45 @@ namespace Reko.UnitTests.Core.Serialization
             Assert.AreEqual(1, project.Programs.Count);
         }
 
+        [Test(Description = "Failure to load v3 project file")]
+        public void Prld_issue_299()
+        {
+            var sExp =
+@"<?xml version=""1.0"" encoding=""utf-8""?>
+<project xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xmlns:xsd=""http://www.w3.org/2001/XMLSchema"" xmlns=""http://schemata.jklnet.org/Reko/v3"">
+  <input>
+    <filename>switch.dll</filename>
+    <disassembly>switch.asm</disassembly>
+    <intermediate-code>switch.dis</intermediate-code>
+    <output>switch.c</output>
+    <types-file>switch.h</types-file>
+    <global-vars>switch.globals.c</global-vars>
+    <user>
+      <procedure name=""get"">
+        <address>10071000</address>
+        <CSignature>char * get(unsigned int n)</CSignature>
+      </procedure>
+      <heuristic name=""shingle"" />
+    </user>
+  </input>
+</project>
+";
+            var ldr = mr.Stub<ILoader>();
+            var platform = new TestPlatform(sc);
+            Given_TestArch();
+            Given_TestOS();
+            Given_Binary(ldr, platform);
+            Given_TypeLibraryLoaderService();
+            oe.Stub(o => o.TypeLibraries).Return(new List<ITypeLibraryElement>());
+            oe.Stub(o => o.CharacteristicsLibraries).Return(new List<ITypeLibraryElement>());
+            mr.ReplayAll();
+
+            var prld = new ProjectLoader(sc, ldr);
+            var project = prld.LoadProject("/foo/bar", new MemoryStream(Encoding.UTF8.GetBytes(sExp)));
+
+            Assert.AreEqual(1, project.Programs.Count);
+        }
+       
         [Test]
         public void Prld_LoadGlobalUserData()
         {

@@ -66,7 +66,6 @@ namespace Reko.Analysis
                     try
                     {
                         RewriteCall(stm, ci);
-                        throw new NotImplementedException("bleh");      //$DEBUG
                     }
                     catch (Exception ex)
                     {
@@ -91,7 +90,7 @@ namespace Reko.Analysis
                 return;
             var returnId = ft.ReturnValue.DataType is VoidType ?
                 null : ft.ReturnValue;
-            var sigCallee = new ProcedureSignature(returnId, ft.Parameters);
+            var sigCallee = new FunctionType(returnId, ft.Parameters);
             var ab = new ApplicationBuilder(
                 program.Architecture, proc.Frame, call.CallSite,
                 call.Callee, sigCallee, true);
@@ -251,18 +250,6 @@ namespace Reko.Analysis
 
         private Identifier FindUsedId(CallInstruction call, Storage storage)
         {
-            var locStorage = storage as StackLocalStorage;
-            // $HACK: ApplicationBuilder returns stack arguments shifted by
-            // return address size. Add return address size to stack offset to
-            // correct parameters binding.
-            // Once analysis-development branch is complete it will make
-            // dealing with MIPS ELF binaries a lot nicer.
-            storage =
-                locStorage == null ?
-                storage :
-                new StackLocalStorage(
-                    locStorage.StackOffset + frame.ReturnAddressSize,
-                    locStorage.DataType);
             return call.Uses.Select(u => u.Expression).
                 OfType<Identifier>().
                 Where(usedId => usedId.Storage.Equals(storage)).

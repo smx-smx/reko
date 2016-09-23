@@ -37,17 +37,20 @@ namespace Reko.Core.Serialization
         private Frame frame;
         private Argument_v1 argCur;
         private int retAddressOnStack;  // number of bytes on the stack occupied by return address
+        private int stackAlignment;
 
         public ArgumentDeserializer(
             ProcedureSerializer procSer, 
             IProcessorArchitecture arch, 
             Frame frame, 
-            int retAddressOnStack)
+            int retAddressOnStack,
+            int stackAlign)
         {
             this.procSer = procSer;
             this.arch = arch;
             this.frame = frame;
             this.retAddressOnStack = retAddressOnStack;
+            this.stackAlignment = stackAlign;
         }
 
         public Identifier VisitRegister(Register_v1 reg)
@@ -78,7 +81,12 @@ namespace Reko.Core.Serialization
         {
             if (argCur.Name == "...")
             {
-                return procSer.CreateId("...", new UnknownType(), new StackArgumentStorage(procSer.StackOffset, new UnknownType()));
+                return procSer.CreateId(
+                    "...",
+                    new UnknownType(),
+                    new StackArgumentStorage(
+                        procSer.StackOffset + retAddressOnStack,
+                        new UnknownType()));
             }
             if (argCur.Type == null)
                 throw new ApplicationException(string.Format("Argument '{0}' has no type.", argCur.Name));
@@ -95,14 +103,18 @@ namespace Reko.Core.Serialization
             var idArg = procSer.CreateId(
                 name,
                 dt,
-                new StackArgumentStorage(procSer.StackOffset, dt));
-            procSer.StackOffset += dt.Size;
+                new StackArgumentStorage(procSer.StackOffset + retAddressOnStack, dt));
+            int words = (dt.Size + (stackAlignment - 1)) / stackAlignment;
+            procSer.StackOffset += words * stackAlignment;
             return idArg;
         }
 
         public Identifier Deserialize(FpuStackVariable_v1 fs)
         {
-            var idArg = procSer.CreateId(argCur.Name ?? "fpArg" + procSer.FpuStackOffset, PrimitiveType.Real64, new FpuStackStorage(procSer.FpuStackOffset, PrimitiveType.Real64));
+            var idArg = procSer.CreateId(
+                argCur.Name ?? "fpArg" + procSer.FpuStackOffset, 
+                PrimitiveType.Real64,
+                new FpuStackStorage(procSer.FpuStackOffset, PrimitiveType.Real64));
             ++procSer.FpuStackOffset;
             return idArg;
         }

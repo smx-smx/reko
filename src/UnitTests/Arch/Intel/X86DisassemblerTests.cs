@@ -557,6 +557,7 @@ movzx	ax,byte ptr [bp+04]
         {
             var instr = Disassemble32(0xE9, 0x78, 0x56, 0x34, 012);
             var addrOp = (AddressOperand)instr.op1;
+            Assert.AreEqual("0C35567D", addrOp.ToString());
         }
 
         [Test]
@@ -827,6 +828,12 @@ movzx	ax,byte ptr [bp+04]
             Assert.AreEqual("word16", instr[13].dataWidth.Name);
             Assert.AreEqual(Opcode.stos, instr[14].code);
             Assert.AreEqual("word32", instr[14].dataWidth.Name);
+        }
+
+        [Test]
+        public void X86Dis_regression()
+        {
+            AssertCode64("movups\t[rsp+20],xmm0", 0x0F, 0x11, 0x44, 0x24, 0x20);
         }
     }
 }

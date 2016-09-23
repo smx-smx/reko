@@ -18,33 +18,31 @@
  */
 #endregion
 
-using Reko.Gui.Controls;
-using Reko.Scanning;
+using Reko.Core.Analysis;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Reko.Core.Types;
+using Reko.Core;
 
-namespace Reko.Gui
+namespace Reko.Environments.Windows
 {
-    public interface ISearchDialog : IDialog
+    /// <summary>
+    /// Microsoft's implementation of wsprintf differs in its interpretation
+    /// of the format string.
+    /// </summary>
+    public class MsAPrintfFormatParser : MsPrintfFormatParser
     {
-        event EventHandler Load;
-        event EventHandler Closed;
+        public MsAPrintfFormatParser(
+            Program program,
+            Address addrInstr,
+            string format,
+            IServiceProvider services)
+        :
+        base(program, addrInstr, format, services)
+        {
+        }
 
-        IServiceProvider Services { get; }
-        string InitialPattern { get; set; }
-
-        IComboBox Patterns { get; }
-        ICheckBox RegexCheckbox { get; }
-        IComboBox Encodings { get; }
-        IComboBox Scopes { get; }
-        ITextBox StartAddress { get; }
-        ITextBox EndAddress { get; }
-        IButton SearchButton { get; }
-        ICheckBox ScannedMemory { get; }
-        ICheckBox UnscannedMemory { get; }
-
-        StringSearch<byte> ImageSearcher { get; set; }
     }
 }

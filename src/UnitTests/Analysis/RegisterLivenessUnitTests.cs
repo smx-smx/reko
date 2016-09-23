@@ -114,7 +114,7 @@ namespace Reko.UnitTests.Analysis
 		[Test]
 		public void Rl_AlAhUses2()
 		{
-			Identifier al = f.EnsureRegister(Registers.al);
+			f.EnsureRegister(Registers.al);
 			Identifier ah = f.EnsureRegister(Registers.ah);
 			Identifier ax = f.EnsureRegister(Registers.ax);
 
@@ -220,7 +220,7 @@ namespace Reko.UnitTests.Analysis
 		public void Rl_CallToProcedureWithValidSignature()
 		{
 			Procedure callee = new Procedure("callee", null);
-			callee.Signature = new ProcedureSignature(
+			callee.Signature = new FunctionType(
 				f.EnsureRegister(Registers.eax),
 				new Identifier[] {
 					f.EnsureRegister(Registers.ebx),
@@ -241,7 +241,7 @@ namespace Reko.UnitTests.Analysis
 		public void Rl_CallToProcedureWithStackArgs()
 		{
 			Procedure callee = new Procedure("callee", null);
-			callee.Signature = new ProcedureSignature(
+			callee.Signature = new FunctionType(
 				f.EnsureRegister(Registers.eax),
 				new Identifier[] {
                     new Identifier("arg04", PrimitiveType.Word16, new StackArgumentStorage(4, PrimitiveType.Word16)),
@@ -274,9 +274,9 @@ namespace Reko.UnitTests.Analysis
 			ProcedureFlow pf = new ProcedureFlow(callee, program.Architecture);
 			mpprocflow[callee] = pf;
 
-			Identifier loc08 = m.Frame.EnsureStackLocal(-8, PrimitiveType.Word32);
-			Identifier loc0C = m.Frame.EnsureStackLocal(-12, PrimitiveType.Word32);
-			Identifier loc10 = m.Frame.EnsureStackLocal(-16, PrimitiveType.Word32);
+			m.Frame.EnsureStackLocal(-8, PrimitiveType.Word32);
+			m.Frame.EnsureStackLocal(-12, PrimitiveType.Word32);
+			m.Frame.EnsureStackLocal(-16, PrimitiveType.Word32);
 			rl.CurrentState = new RegisterLiveness.ByPassState(program.Architecture);
             var ci = new CallInstruction(
                 new ProcedureConstant(PrimitiveType.Pointer32, callee),
@@ -291,7 +291,7 @@ namespace Reko.UnitTests.Analysis
 		{
 			Procedure callee = new Procedure("callee", null);
 			Identifier edx = new Identifier("edx", PrimitiveType.Word32, Registers.edx);
-			callee.Signature = new ProcedureSignature(
+			callee.Signature = new FunctionType(
 				new Identifier("eax", PrimitiveType.Word32, Registers.eax),
 				new Identifier[] { new Identifier("ecx",    PrimitiveType.Word32, Registers.ecx),
 								   new Identifier("arg04",  PrimitiveType.Word16, new StackArgumentStorage(4, PrimitiveType.Word16)),

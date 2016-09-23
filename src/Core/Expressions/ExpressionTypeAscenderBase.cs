@@ -23,11 +23,16 @@ using Reko.Core.Types;
 using System;
 
 namespace Reko.Core.Expressions
-{ 
+{
     /// <summary>
     /// Collect type information by pulling type information from
     /// the leaves of expression trees to their roots.
     /// </summary>
+    /// <remarks>
+    ///    root
+    ///  ↑ /  \ ↑
+    /// leaf  leaf
+    /// </remarks>
     public abstract class ExpressionTypeAscenderBase : ExpressionVisitor<DataType>
     {
         private IPlatform platform;
@@ -63,8 +68,8 @@ namespace Reko.Core.Expressions
 
         public DataType VisitArrayAccess(ArrayAccess acc)
         {
-            DataType dtArr = acc.Array.Accept(this);
-            DataType dtIdx = acc.Index.Accept(this);
+            acc.Array.Accept(this);
+            acc.Index.Accept(this);
             return RecordDataType(acc.DataType, acc);
         }
 
@@ -80,7 +85,7 @@ namespace Reko.Core.Expressions
             DataType dt;
             if (binExp.Operator == Operator.IAdd)
             {
-                dt = FieldType(dtLeft, dtRight, binExp.Right);
+                dt = GetPossibleFieldType(dtLeft, dtRight, binExp.Right);
                 if (dt == null)
                 {
                     dt = PullSumDataType(dtLeft, dtRight);
@@ -144,25 +149,57 @@ namespace Reko.Core.Expressions
             return RecordDataType(dt, binExp);
         }
 
-        private DataType FieldType(DataType dtLeft, DataType dtRight, Expression right)
+        /// <summary>
+        /// If dtLeft is a (ptr (struct ...)) and dtRight is a non-pointer
+        /// constant, this could be a field access.
+        /// </summary>
+        /// <param name="dtLeft">Possible pointer to a structure</param>
+        /// <param name="dtRight">Type of possible offset</param>
+        /// <param name="right">Possible constant offset from start of structure</param>
+        /// <returns>A (ptr field-type) if it was a ptr-to-struct, else null.</returns>
+        private Pointer GetPossibleFieldType(DataType dtLeft, DataType dtRight, Expression right)
+        {
+            Constant cOffset;
+            if (!right.As(out cOffset))
+                return null;
+            var ptRight = dtRight as PrimitiveType;
+            if (ptRight == null || ptRight.Domain == Domain.Pointer)
+                return null;
+            int offset = cOffset.ToInt32();
+
+            return GetPossibleFieldType(dtLeft, offset);
+        }
+
+        /// <summary>
+        /// If dtLeft is a (ptr (struct ...)) and there is a field at the
+        /// given offset in that structure, this could be a field access.
+        /// </summary>
+        /// <param name="dtLeft">Possible pointer to a structure</param>
+        /// <param name="offset"></param>
+        /// <returns>A (ptr field-type) if it was a ptr-to-struct, else null.</returns>
+        private Pointer GetPossibleFieldType(DataType dtLeft, int offset)
         {
             var ptrLeft = dtLeft.ResolveAs<Pointer>();
-            var ptRight = dtRight as PrimitiveType;
-            if (ptrLeft == null || ptRight == null || ptRight.Domain == Domain.Pointer)
+            if (ptrLeft == null)
                 return null;
 
             var pointee = ptrLeft.Pointee;
             var strPointee = pointee.ResolveAs<StructureType>();
-                Constant cOffset;
-            if (strPointee == null || !right.As(out cOffset))
+            if (strPointee == null)
                 return null;
 
-            int offset = cOffset.ToInt32();
             var field = strPointee.Fields.LowerBound(offset);
-            //$BUG: offset != field.Offset?
-            if (field == null || offset >= field.Offset + field.DataType.Size)
+            if (field == null)
                 return null;
-            return factory.CreatePointer(field.DataType, dtLeft.Size); 
+            // We're collecting _DataTypes_, so if we encounter
+            // a TypeReference, we need to drill past it.
+            var dtField = field.DataType.ResolveAs<DataType>();
+            if (dtField == null)
+                return null;
+            //$BUG: offset != field.Offset?
+            if (offset >= field.Offset + dtField.Size)
+                return null;
+            return factory.CreatePointer(dtField, dtLeft.Size);
         }
 
         private DataType PullSumDataType(DataType dtLeft, DataType dtRight)
@@ -195,7 +232,7 @@ namespace Reko.Core.Expressions
                 dtLeft is Pointer)
             {
                 if (ptRight != null && (ptRight.Domain & Domain.Integer) != 0)
-                    return dtLeft;
+                    return PrimitiveType.Create(Domain.Pointer, dtLeft.Size);
                 throw new NotImplementedException(string.Format("Pulling difference {0} and {1}", dtLeft, dtRight));
             }
             if (ptRight != null && ptRight.Domain == Domain.Pointer || 
@@ -229,22 +266,23 @@ namespace Reko.Core.Expressions
 
         public DataType VisitConstant(Constant c)
         {
-            return RecordDataType(GlobalType(c) ?? c.DataType, c);
+            var dt = ExistingGlobalField(c) ?? c.DataType;
+            return RecordDataType(dt, c);
         }
 
-        private DataType GlobalType(Constant c)
+        private DataType ExistingGlobalField(Constant c)
         {
             var pt = c.DataType as PrimitiveType;
             if (pt == null || (pt.Domain & Domain.Pointer) == 0)
                 return null;
             var global = factory.CreatePointer(globalFields, pt.Size);
-            return FieldType(global, PrimitiveType.Int32, c);
+            return GetPossibleFieldType(global, PrimitiveType.Int32, c);
         }
 
         public DataType VisitDepositBits(DepositBits d)
         {
             var dtSource = d.Source.Accept(this);
-            var dtBits = d.InsertedBits.Accept(this);
+            d.InsertedBits.Accept(this);
             return EnsureDataType(dtSource, d);
         }
 
@@ -277,20 +315,21 @@ namespace Reko.Core.Expressions
 
         public DataType VisitMemoryAccessCommon(Expression access, Expression ea)
         {
-            var dtEa = MemoryAccessType(ea.Accept(this));
-            var ptEa = dtEa.ResolveAs<Pointer>();
+            var dtEa = ea.Accept(this);
+            var ptEa = GetPossibleFieldType(dtEa, 0);
+            if (ptEa == null)
+            {
+                ptEa = dtEa.ResolveAs<Pointer>();
+            }
             DataType dt;
             if (ptEa != null)
+            {
+                //$REVIEW: what if sizeof(access) != sizeof(field_at_0)?
                 dt = ptEa.Pointee;
+            }
             else
                 dt = access.DataType;
             return RecordDataType(dt, access);
-        }
-
-        private DataType MemoryAccessType(DataType dt)
-        {
-            var c = Constant.Zero(PrimitiveType.Int32);
-            return FieldType(dt, c.DataType, c) ?? dt;
         }
 
         public DataType VisitMkSequence(MkSequence seq)
@@ -382,6 +421,10 @@ namespace Reko.Core.Expressions
         public DataType VisitUnaryExpression(UnaryExpression unary)
         {
             var dt = unary.Expression.Accept(this);
+            if (unary.Operator == Operator.AddrOf)
+            {
+                dt = unary.DataType;
+            }
             return RecordDataType(dt, unary);
         }
     }

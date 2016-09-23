@@ -49,6 +49,11 @@ namespace Reko.CmdLine
             return new NullCodeLocation(program.SegmentMap.MapLinearAddressToAddress(stm.LinearAddress).ToString());
         }
 
+        public ICodeLocation CreateJumpTableNavigator(Program program, Address addrIndirectJump, Address addrVector, int stride)
+        {
+            return new NullCodeLocation(addrIndirectJump.ToString());
+        }
+
         public void AddDiagnostic(ICodeLocation location, Diagnostic d)
         {
             Console.Out.WriteLine("{0}: {1}: {2}",
@@ -99,6 +104,11 @@ namespace Reko.CmdLine
 
         public void ShowProgress(string caption, int numerator, int denominator)
         {
+        }
+
+        public bool IsCanceled()
+        {
+            return false;
         }
     }
 }

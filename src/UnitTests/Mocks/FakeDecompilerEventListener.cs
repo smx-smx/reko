@@ -92,6 +92,11 @@ namespace Reko.UnitTests.Mocks
             lastStatus = status;
         }
 
+        public bool IsCanceled()
+        {
+            return false;
+        }
+
         public void CodeStructuringComplete()
         {
         }
@@ -160,6 +165,11 @@ namespace Reko.UnitTests.Mocks
         public ICodeLocation CreateStatementNavigator(Program program, Statement stm)
         {
             return new NullCodeLocation(program.SegmentMap.MapLinearAddressToAddress(stm.LinearAddress).ToString());
+        }
+
+        public ICodeLocation CreateJumpTableNavigator(Program program, Address addrIndirectJump, Address addrVector, int stride)
+        {
+            return new NullCodeLocation(addrIndirectJump.ToString());
         }
 
         #region IWorkerDialogService Members

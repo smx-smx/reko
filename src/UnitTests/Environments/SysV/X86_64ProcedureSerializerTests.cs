@@ -41,7 +41,6 @@ namespace Reko.UnitTests.Environments.SysV
         private MockFactory mockFactory;
         private X86ArchitectureFlat64 arch;
         private X86_64ProcedureSerializer ser;
-        private SysVPlatform platform;
         private ISerializedTypeVisitor<DataType> deserializer;
 
         [SetUp]
@@ -50,12 +49,11 @@ namespace Reko.UnitTests.Environments.SysV
             mr = new MockRepository();
             mockFactory = new MockFactory(mr);
             arch = new X86ArchitectureFlat64();
-            platform = new SysVPlatform(null, arch);
         }
 
         private void Given_ProcedureSerializer()
         {
-            this.deserializer = mockFactory.CreateDeserializer();
+            this.deserializer = mockFactory.CreateDeserializer(arch.PointerType.Size);
             this.ser = new X86_64ProcedureSerializer(arch, deserializer, "");
         }
 
@@ -78,7 +76,7 @@ namespace Reko.UnitTests.Environments.SysV
 
             mr.ReplayAll();
 
-            var sig = new ProcedureSignature(
+            var sig = new FunctionType(
                 new Identifier("rbx", PrimitiveType.Word32, arch.GetRegister("rbx")),
                 new Identifier[] {
                     new Identifier("rbx", PrimitiveType.Word32, arch.GetRegister("rbx"))
@@ -110,7 +108,7 @@ namespace Reko.UnitTests.Environments.SysV
         {
             Procedure proc = new Procedure("foo", arch.CreateFrame())
             {
-                Signature = new ProcedureSignature(
+                Signature = new FunctionType(
                     new Identifier("rax", PrimitiveType.Word32, arch.GetRegister("rax")),
                     new Identifier[] {
                         new Identifier("arg00", PrimitiveType.Word32, arch.GetRegister("rdi")),
@@ -263,7 +261,7 @@ namespace Reko.UnitTests.Environments.SysV
             Assert.AreEqual("rcx", args[3].Storage.ToString());
             Assert.AreEqual("r8", args[4].Storage.ToString());
             Assert.AreEqual("r9", args[5].Storage.ToString());
-            Assert.AreEqual("Stack +0000", args[6].Storage.ToString());
+            Assert.AreEqual("Stack +0008", args[6].Storage.ToString());
         }
     }
 }

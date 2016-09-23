@@ -34,6 +34,11 @@ namespace Reko.Typing
     /// <summary>
     /// Pushes type information down from the root of an expression to its leaves.
     /// </summary>
+    /// <remarks>
+    ///    root
+    ///  ↓ /  \ ↓
+    /// leaf  leaf
+    /// </remarks>
     public class ExpressionTypeDescender : ExpressionVisitor<bool, TypeVariable>
     {
         // Matches the effective address of Mem[p + c] where c is a constant.
@@ -114,7 +119,6 @@ namespace Reko.Typing
                 .Select(a => new Identifier("", a, null))
                 .ToArray();
             var fn = factory.CreateFunctionType(
-                null, 
                 new Identifier("", ret, null),
                 parameters);
             var pfn = factory.CreatePointer(fn, funcPtrSize);
@@ -354,7 +358,7 @@ namespace Reko.Typing
             if (dtDiff is Pointer || ptDiff != null && ptDiff.Domain == Domain.Pointer)
             {
                 if (ptSub != null && (ptSub.Domain & Domain.Integer) != 0)
-                    return dtDiff;  //$REVIEW: is this really OK? should probably be pointer.
+                    return PrimitiveType.Create(Domain.Pointer, dtDiff.Size);
                 throw new NotImplementedException(string.Format("Not handling {0} and {1} yet", dtDiff, dtSub));
             }
             if (dtDiff is MemberPointer || ptDiff != null && ptDiff.Domain == Domain.Offset)
@@ -739,9 +743,12 @@ namespace Reko.Typing
 
         public bool VisitUnaryExpression(UnaryExpression unary, TypeVariable tv)
         {
+            if (unary.Operator == Operator.AddrOf)
+            {
+                MeetDataType(unary, factory.CreatePointer(unary.Expression.DataType, unary.DataType.Size));
+            }
             unary.Expression.Accept(this, unary.Expression.TypeVariable);
             return false;
-            throw new NotImplementedException();
         }
     }
 }

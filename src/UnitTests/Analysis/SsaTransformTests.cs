@@ -99,7 +99,7 @@ namespace Reko.UnitTests.Analysis
             //   esp_2 = fp - 4
             //   mov [fp - 8],eax
 
-            var vp = new ValuePropagator(this.pb.Program.Architecture, ssa.SsaState.Identifiers, proc);
+            var vp = new ValuePropagator(this.pb.Program.Architecture, ssa.SsaState);
             vp.Transform();
 
             ssa.RenameFrameAccesses = true;
@@ -258,7 +258,6 @@ ProcedureBuilder_exit:
                 var sp = m.Register(m.Architecture.StackRegister);
                 var bp = m.Frame.CreateTemporary("bp", sp.DataType);
                 var r1 = m.Reg32("r1", 1);
-                var r2 = m.Reg32("r2", 2);
                 var flags = m.Architecture.GetFlagGroup(1).FlagRegister;
                 var cr = m.Frame.EnsureFlagGroup(flags, 0x3, "CZS", PrimitiveType.Byte);
                 m.Assign(sp, m.Frame.FramePointer);
@@ -331,7 +330,6 @@ ProcedureBuilder_exit:
                 var sp = m.Register(m.Architecture.StackRegister);
                 var bp = m.Frame.CreateTemporary("bp", sp.DataType);
                 var r1 = m.Reg32("r1", 1);
-                var r2 = m.Reg32("r2", 2);
                 var flags = m.Architecture.GetFlagGroup(1).FlagRegister;
                 var cr = m.Frame.EnsureFlagGroup(flags, 0x3, "CZS", PrimitiveType.Byte);
                 m.Assign(sp, m.Frame.FramePointer);
@@ -449,7 +447,6 @@ ProcedureBuilder_exit:
                 var sp = m.Register(m.Architecture.StackRegister);
                 var bp = m.Frame.CreateTemporary("bp", sp.DataType);
                 var r1 = m.Reg32("r1", 1);
-                var r2 = m.Reg32("r2", 2);
                 var flags = m.Architecture.GetFlagGroup(1).FlagRegister;
                 var cr = m.Frame.EnsureFlagGroup(flags, 0x3, "CZS", PrimitiveType.Byte);
                 m.Assign(sp, m.Frame.FramePointer);
@@ -571,8 +568,8 @@ ProcedureBuilder_exit:
 ";
             RunTest2(sExp, m =>
             {
-                var regA = new RegisterStorage("a", 0, 0, PrimitiveType.Word32);
-                var regB = new RegisterStorage("b", 1, 0, PrimitiveType.Word32);
+                var regA = RegisterStorage.Reg32("a", 0);
+                var regB = RegisterStorage.Reg32("b", 1);
                 var a = m.Frame.EnsureRegister(regA);
                 var b = m.Frame.EnsureRegister(regB);
                 m.Assign(a, 3);

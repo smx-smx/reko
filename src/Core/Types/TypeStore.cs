@@ -45,7 +45,6 @@ namespace Reko.Core.Types
     {
         private SortedList<int, EquivalenceClass> usedClasses;
         private Dictionary<TypeVariable, Expression> tvSources;
-        private DataTypeComparer tycomp = new DataTypeComparer();
 
         public TypeStore()
         {
@@ -111,9 +110,13 @@ namespace Reko.Core.Types
                 EquivalenceClass c = tv.Class;
                 DataType dtOld = c.DataType;
                 if (dtOld != null)
+                {
                     dt = u.Unify(dt, dtOld);
+                }
                 else if (dt != null)
+                {
                     dt = dt.Clone();        // why clone???
+                }
                 c.DataType = dt;
             }
         }

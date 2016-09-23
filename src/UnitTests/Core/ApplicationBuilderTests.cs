@@ -39,7 +39,7 @@ namespace Reko.UnitTests.Core
 		private Identifier arg08;
 		private Identifier arg0C;
 		private Identifier regOut;
-		private ProcedureSignature sig;
+		private FunctionType sig;
         private ApplicationBuilder ab;
 
 		public ApplicationBuilderTests()
@@ -51,7 +51,8 @@ namespace Reko.UnitTests.Core
 			arg08 = new Identifier("arg08",   PrimitiveType.Word16, new StackArgumentStorage(8, PrimitiveType.Word16));
 			arg0C = new Identifier("arg0C",   PrimitiveType.Byte, new StackArgumentStorage(0x0C, PrimitiveType.Byte));
 			regOut = new Identifier("edxOut", PrimitiveType.Word32, new OutArgumentStorage(frame.EnsureRegister(Registers.edx)));
-            sig = new ProcedureSignature(ret,
+            sig = new FunctionType(
+                ret,
                 new Identifier[] { arg04, arg08, arg0C, regOut });
         }
 
@@ -77,7 +78,7 @@ namespace Reko.UnitTests.Core
 			Assert.IsTrue(sig.Parameters[3].Storage is OutArgumentStorage);
             ab = new ApplicationBuilder(arch, frame, new CallSite(4, 0), new Identifier("foo", PrimitiveType.Word32, null), sig, false);
             var instr = ab.CreateInstruction();
-			Assert.AreEqual("eax = foo(Mem0[esp + 4:word32], Mem0[esp + 8:word16], Mem0[esp + 12:byte], out edx)", instr.ToString());
+			Assert.AreEqual("eax = foo(Mem0[esp:word32], Mem0[esp + 4:word16], Mem0[esp + 8:byte], out edx)", instr.ToString());
 		}
 
         [Test]
@@ -90,10 +91,8 @@ namespace Reko.UnitTests.Core
             var callee = new Procedure("callee", new  Frame (PrimitiveType.Word16));
             var wArg = callee.Frame.EnsureStackArgument(0, PrimitiveType.Word16);
             var dwArg = callee.Frame.EnsureStackArgument(2, PrimitiveType.Word32);
-            callee.Signature = new ProcedureSignature(
-                null,
-                wArg,
-                dwArg);
+            callee.Signature = FunctionType.Action(
+                new Identifier[] { wArg, dwArg });
             var cs = new CallSite(0, 0)
             {
                 StackDepthOnEntry = 6
@@ -106,14 +105,13 @@ namespace Reko.UnitTests.Core
         [Test(Description="The byte is smaller than the target register, so we expect a 'DPB' instruction")]
         public void AppBld_BindByteToRegister()
         {
-            var caller = new Procedure("caller", new Frame(PrimitiveType.Pointer32));
             var callee = new Procedure("callee", new Frame(PrimitiveType.Pointer32));
             var ab = new ApplicationBuilder(
                 arch, 
                 callee.Frame,
                 new CallSite(4, 0), 
                 new Identifier("foo", PrimitiveType.Pointer32, null),
-                new ProcedureSignature(new Identifier("bRet", PrimitiveType.Byte, Registers.eax)),
+                new FunctionType(new Identifier("bRet", PrimitiveType.Byte, Registers.eax), new Identifier[0]),
                 true);
             var instr = ab.CreateInstruction();
             Assert.AreEqual("eax = DPB(eax, foo(), 0)", instr.ToString());

@@ -44,7 +44,6 @@ namespace Reko.UnitTests.Environments.SysV
         private MockFactory mockFactory;
         private X86ArchitectureFlat32 arch;
         private X86ProcedureSerializer ser;
-        private SysVPlatform platform;
         private ISerializedTypeVisitor<DataType> deserializer;
 
         [SetUp]
@@ -53,12 +52,11 @@ namespace Reko.UnitTests.Environments.SysV
             mr = new MockRepository();
             mockFactory = new MockFactory(mr);
             arch = new X86ArchitectureFlat32();
-            platform = new SysVPlatform(null, arch);
         }
 
         private void Given_ProcedureSerializer()
         {
-            this.deserializer = mockFactory.CreateDeserializer();
+            this.deserializer = mockFactory.CreateDeserializer(arch.PointerType.Size);
             this.ser = new X86ProcedureSerializer(arch, deserializer, "");
         }
 
@@ -81,7 +79,7 @@ namespace Reko.UnitTests.Environments.SysV
 
             mr.ReplayAll();
 
-            var sig = new ProcedureSignature(
+            var sig = new FunctionType(
                 new Identifier("eax", PrimitiveType.Word32, arch.GetRegister("rbx")),
                 new Identifier[] {
                     new Identifier("arg04", PrimitiveType.Word32, new StackArgumentStorage(4, PrimitiveType.Int32))
@@ -112,7 +110,7 @@ namespace Reko.UnitTests.Environments.SysV
         {
             Procedure proc = new Procedure("foo", arch.CreateFrame())
             {
-                Signature = new ProcedureSignature(
+                Signature = new FunctionType(
                     new Identifier("eax", PrimitiveType.Word32, arch.GetRegister("eax")),
                     new Identifier[] {
                         new Identifier("arg00", PrimitiveType.Word32, new StackArgumentStorage(4, PrimitiveType.Int32))
@@ -188,9 +186,9 @@ namespace Reko.UnitTests.Environments.SysV
             var sig = ser.Deserialize(ssig, arch.CreateFrame());
             Assert.AreEqual(
                 string.Format(
-                    "FpuStack real64 ()(){0}// stackDelta: 0; fpuStackDelta: 1; fpuMaxParam: -1{0}",
+                    "FpuStack real64 foo(){0}// stackDelta: 0; fpuStackDelta: 1; fpuMaxParam: -1{0}",
                     nl),
-                sig.ToString());
+                sig.ToString("foo", FunctionType.EmitFlags.AllDetails));
         }
 
         [Test]
@@ -245,9 +243,9 @@ namespace Reko.UnitTests.Environments.SysV
             var args = sig.Parameters;
             Assert.AreEqual(
                 string.Format(
-                    "void ()(Stack int16 hArg04, Stack int8 wArg08, Stack real32 rArg0C){0}// stackDelta: 0; fpuStackDelta: 0; fpuMaxParam: -1{0}",
+                    "void foo(Stack int16 hArg04, Stack int8 wArg08, Stack real32 rArg0C){0}// stackDelta: 0; fpuStackDelta: 0; fpuMaxParam: -1{0}",
                     nl),
-                sig.ToString());
+                sig.ToString("foo", FunctionType.EmitFlags.AllDetails));
         }
     }
 }

@@ -43,15 +43,19 @@ namespace Reko.Typing
         private DecompilerEventListener eventListener;
 
         public TypeCollector(
-            TypeFactory factory, TypeStore store, Program program,
+            TypeFactory factory, 
+            TypeStore store,
+            Program program,
             DecompilerEventListener eventListener)
         {
             this.factory = factory;
             this.store = store;
             this.program = program;
+            if (eventListener == null)
+                throw new ArgumentNullException("eventListener");
+            this.eventListener = eventListener;
             this.asc = new ExpressionTypeAscender(program, store, factory);
             this.desc = new ExpressionTypeDescender(program, store, factory);
-            this.eventListener = eventListener;
         }
 
         public void CollectTypes()
@@ -66,6 +70,8 @@ namespace Reko.Typing
                 CollectProcedureSignature(p);
                 foreach (Statement stm in p.Statements)
                 {
+                    if (eventListener.IsCanceled())
+                        return;
                     try
                     {
                         stm.Instruction.Accept(this);
@@ -98,8 +104,8 @@ namespace Reko.Typing
         /// </summary>
         private void CollectProcedureSignature(Procedure proc)
         {
-            ProcedureSignature sig = proc.Signature;
-            if (sig.ReturnValue != null)
+            FunctionType sig = proc.Signature;
+            if (!sig.HasVoidReturn)
             {
                 desc.MeetDataType(sig.ReturnValue, sig.ReturnValue.DataType);
             }
@@ -126,7 +132,7 @@ namespace Reko.Typing
 
         public void VisitBranch(Branch branch)
         {
-            var dt = branch.Condition.Accept(asc);
+            branch.Condition.Accept(asc);
             desc.MeetDataType(branch.Condition, PrimitiveType.Bool);
             branch.Condition.Accept(desc, branch.Condition.TypeVariable);
         }

@@ -62,7 +62,6 @@ namespace Reko.Core.Configuration
 
     public class RekoConfigurationService : IConfigurationService
     {
-        private RekoConfiguration_v1 config;
         private List<LoaderConfiguration> loaders;
         private List<SignatureFile> sigFiles;
         private List<Architecture> architectures;
@@ -73,7 +72,6 @@ namespace Reko.Core.Configuration
 
         public RekoConfigurationService(RekoConfiguration_v1 config)
         {
-            this.config = config;
             this.loaders = LoadCollection(config.Loaders, LoadLoaderConfiguration);
             this.sigFiles = LoadCollection(config.SignatureFiles, LoadSignatureFile);
             this.architectures = LoadCollection(config.Architectures, LoadArchitecture);
@@ -216,7 +214,6 @@ namespace Reko.Core.Configuration
         /// <returns></returns>
         public static RekoConfigurationService Load()
         {
-            var cur = Directory.GetCurrentDirectory();
             var appConfig = AppDomain.CurrentDomain.SetupInformation.ConfigurationFile;
             var appDir = Path.GetDirectoryName(appConfig);
             var configFileName = ConfigurationManager.AppSettings["RekoConfiguration"];

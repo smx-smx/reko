@@ -36,10 +36,8 @@ namespace Reko.UnitTests.Evaluation
     [TestFixture]
     public class ExpressionSimplifierTests
     {
-        private Dictionary<Expression, Expression> table;
         private ExpressionSimplifier simplifier;
         private Identifier foo;
-        private Identifier bar;
         private ProcedureBuilder m;
 
         [SetUp]
@@ -51,7 +49,6 @@ namespace Reko.UnitTests.Evaluation
         private void Given_ExpressionSimplifier()
         {
             SsaIdentifierCollection ssaIds = BuildSsaIdentifiers();
-            table = new Dictionary<Expression, Expression>();
             simplifier = new ExpressionSimplifier(new SsaEvaluationContext(null, ssaIds));
         }
 
@@ -60,7 +57,6 @@ namespace Reko.UnitTests.Evaluation
             var mrFoo = new RegisterStorage("foo", 1, 0, PrimitiveType.Word32);
             var mrBar = new RegisterStorage("bar", 2, 1, PrimitiveType.Word32);
             foo = new Identifier(mrFoo.Name, mrFoo.DataType, mrFoo);
-            bar = new Identifier(mrBar.Name, mrBar.DataType, mrBar);
 
             var coll = new SsaIdentifierCollection();
             var src = Constant.Word32(1);
@@ -128,6 +124,18 @@ namespace Reko.UnitTests.Evaluation
             Given_ExpressionSimplifier();
             var expr = m.Cast(new TypeReference("BYTE", PrimitiveType.Byte), Constant.Word32(0x11));
             Assert.AreEqual("0x11", expr.Accept(simplifier).ToString());
+        }
+
+        [Test]
+        public void Exs_CastCast()
+        {
+            Given_ExpressionSimplifier();
+            var expr = m.Cast(
+                PrimitiveType.Real32,
+                m.Cast(
+                    PrimitiveType.Real64,
+                    m.Load(PrimitiveType.Real32, m.Word32(0x123400))));
+            Assert.AreEqual("Mem0[0x00123400:real32]", expr.Accept(simplifier).ToString());
         }
     }
 }

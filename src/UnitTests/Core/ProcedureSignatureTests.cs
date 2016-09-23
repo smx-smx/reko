@@ -57,21 +57,19 @@ namespace Reko.UnitTests.Core
 			Assert.AreEqual(PrimitiveType.Word32, arg.DataType);
 			Assert.AreEqual("eax", arg.Name);
 			Assert.AreEqual(PrimitiveType.Word32, arg.DataType);
-
-			Identifier arg2 = new Identifier(Registers.eax.Name, Registers.eax.DataType, Registers.eax);
 		}
 
 		[Test]
 		public void PsigValidArguments()
 		{
 			Identifier arg = new Identifier(Registers.eax.Name, Registers.eax.DataType, Registers.eax);
-			ProcedureSignature sig = new ProcedureSignature(null, new Identifier[] { arg });
+			FunctionType sig = FunctionType.Action(new Identifier[] { arg });
 			Assert.IsTrue(sig.ParametersValid);
 
-			sig = new ProcedureSignature(arg, null);
+			sig = new FunctionType(arg, new Identifier[0]);
 			Assert.IsTrue(sig.ParametersValid);
 
-			sig = new ProcedureSignature();
+			sig = new FunctionType();
 			Assert.IsFalse(sig.ParametersValid);
 		}
 	}

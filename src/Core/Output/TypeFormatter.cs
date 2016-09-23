@@ -294,13 +294,13 @@ namespace Reko.Core.Output
 			if (mode == Mode.Writing)
 			{
                 object v;
-                if (visited.TryGetValue(str, out v) && (v == Defined || v == Declared))
+                if (visited.TryGetValue(str, out v) && (v == Defined))
 				{
                     writer.WriteKeyword("struct");
                     writer.Write(" ");
                     writer.Write(str.Name);
 				}
-				else if (v != Declared)
+				else
 				{
 					visited[str] = Declared;
 					ScanFields(str);
@@ -452,7 +452,8 @@ namespace Reko.Core.Output
 
         public Formatter VisitTypeVariable(TypeVariable t)
 		{
-			throw new NotImplementedException("TypeFormatter.TypeVariable");
+            this.writer.WriteType(t.Name, t);
+            return writer;
 		}
 
         public Formatter VisitUnion(UnionType ut)

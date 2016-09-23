@@ -101,7 +101,7 @@ namespace Reko.Core.Types
 				return AreCompatible(sa, sb);
 			}
 
-			ArrayType aa = a as ArrayType;
+            ArrayType aa = a as ArrayType;
 			ArrayType ab = b as ArrayType;
 			if (aa != null && ab != null)
 			{
@@ -246,10 +246,10 @@ namespace Reko.Core.Types
 
 			TypeVariable tA = a as TypeVariable;
 			TypeVariable tB = b as TypeVariable;
-			if (tA != null && tB != null)
-			{
-				return UnifyTypeVariables(tA, tB);
-			}
+            if (tA != null && tB != null)
+            {
+                return UnifyTypeVariables(tA, tB);
+            }
 
             TypeReference trA = a as TypeReference;
             TypeReference trB = b as TypeReference;
@@ -364,12 +364,12 @@ namespace Reko.Core.Types
 			{
 				return UnifyStructures(strA, strB);
 			}
-			if (strA != null && strA.Size >= b.Size)
+			if (strA != null && (strA.Size == 0 || strA.Size >= b.Size))
 			{
                 MergeIntoStructure(b, strA);
 				return strA;
 			}
-			if (strB != null && strB.Size >= a.Size)
+			if (strB != null && (strB.Size == 0 || strB.Size >= a.Size))
 			{
                 MergeIntoStructure(a, strB);
 				return strB;
@@ -458,7 +458,7 @@ namespace Reko.Core.Types
 				var dt = Unify(a.Parameters[i].DataType, b.Parameters[i].DataType);
                 args[i] = new Identifier(null, dt, null);   //$BUG: unify storages!
 			}
-			return factory.CreateFunctionType(null, new Identifier("", ret, null), args);
+			return factory.CreateFunctionType(new Identifier("", ret, null), args);
 		}
 
 		/// <summary>
@@ -620,9 +620,9 @@ namespace Reko.Core.Types
 
         private DataType UnifyTypeVariable(TypeVariable tv, DataType dt)
         {
-            tv.DataType = UnifyInternal(tv.DataType, dt);
-            tv.OriginalDataType = UnifyInternal(tv.OriginalDataType, dt);
-            return tv;
+            // TypeVariable should be already unified with this DataType by
+            // ExpressionTypeAscender so just return DataType
+            return dt;
         }
 
         public UnionType UnifyUnions(UnionType u1, UnionType u2)

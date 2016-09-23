@@ -194,7 +194,7 @@ namespace Reko.Core.Output
 		{
 			int prec = SetPrecedence(PrecedenceCase);
 			writer.Write("(");
-            cast.DataType.Accept(new TypeFormatter(writer, true));
+            new TypeReferenceFormatter(writer).WriteTypeReference(cast.DataType);
 			writer.Write(") ");
 			cast.Expression.Accept(this);
 			ResetPresedence(prec);
@@ -582,7 +582,7 @@ namespace Reko.Core.Output
 #endregion
 
 
-#region IAbsynStatementVisitor //////////////////////
+		#region IAbsynStatementVisitor //////////////////////
 
 		public void VisitAssignment(AbsynAssignment a)
 		{
@@ -810,7 +810,7 @@ namespace Reko.Core.Output
 
 		public void Write(Procedure proc)
 		{
-			proc.Signature.Emit(proc.QualifiedName(), ProcedureSignature.EmitFlags.None, writer, this, new TypeFormatter(writer, true));
+			proc.Signature.Emit(proc.QualifiedName(), FunctionType.EmitFlags.None, writer, this, new TypeFormatter(writer, true));
 			writer.WriteLine();
 			writer.Write("{");
             writer.WriteLine();

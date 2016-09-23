@@ -21,6 +21,7 @@
 using NUnit.Framework;
 using Reko.Arch.M68k;
 using Reko.Core;
+using Reko.Core.Types;
 using Reko.Environments.AmigaOS;
 using System;
 using System.Collections.Generic;
@@ -40,7 +41,7 @@ namespace Reko.UnitTests.Environments.AmigaOS
             var ahl = new AmigaHeaderLoader(null, "", Encoding.UTF8.GetBytes(
                 "[[reko::amiga_function_vector(ExecLibrary, -432)]] [[reko::returns(register,\"A0\")]] " +
                 "void * FlobDevice([[reko::arg(register, \"A1\")]] struct Device * device);"));
-            var Q = ahl.Load(platform, new TypeLibrary());
+            ahl.Load(platform, new TypeLibrary());
             var svc = ahl.SystemServices[-432];
             Assert.AreEqual("a0", svc.Signature.ReturnValue.Storage.ToString());
             Assert.AreEqual("a1", svc.Signature.Parameters[0].Storage.ToString());
@@ -56,7 +57,7 @@ namespace Reko.UnitTests.Environments.AmigaOS
                 "void  FrabDevice([[reko::arg(register, \"A1\")]] struct Device * device);"));
             var Q = ahl.Load(platform, new TypeLibrary());
             var svc = ahl.SystemServices[-432];
-            Assert.IsNull(svc.Signature.ReturnValue);
+            Assert.IsInstanceOf<VoidType>(svc.Signature.ReturnValue.DataType);
         }
     }
 }

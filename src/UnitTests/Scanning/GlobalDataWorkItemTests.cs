@@ -95,11 +95,9 @@ namespace Reko.UnitTests.Scanning
                 ReturnValue = new Argument_v1(null, new PrimitiveType_v1(Domain.Character, 1), null, false),
             };
             var ft1 = new FunctionType(
-                null,
                 new Identifier("", PrimitiveType.Int32, null),
                 new Identifier[0]);
             var ft2 = new FunctionType(
-                null,
                 new Identifier("", PrimitiveType.Char, null),
                 new Identifier[0]);
             var str = new StructureType();
@@ -145,7 +143,6 @@ namespace Reko.UnitTests.Scanning
             Given_Program(Address.Ptr32(0x43210000), bytes);
 
             var ft = new FunctionType(
-                null,
                 new Identifier("", PrimitiveType.Real32, null),
                 new Identifier[0]);
             var str = new StructureType("str", 0);
@@ -180,7 +177,6 @@ namespace Reko.UnitTests.Scanning
             Given_Program(Address.Ptr32(0x43210000), bytes);
 
             var ft = new FunctionType(
-                null,
                 new Identifier("", PrimitiveType.Real32, null),
                 new Identifier[0]);
             var str = new StructureType();
@@ -202,13 +198,14 @@ namespace Reko.UnitTests.Scanning
         [Test]
         public void Gdwi_FunctionType()
         {
-            Given_Program(Address.Ptr32(0x12340000), new byte[4]);
+            var addr = Address.Ptr32(0x12340000);
+            Given_Program(addr, new byte[4]);
             var ft = new FunctionType(
-               null,
                new Identifier("", PrimitiveType.Real32, null),
                new Identifier[0]);
             scanner.Expect(s => s.EnqueueUserProcedure(
-                Arg<Procedure_v1>.Matches(up => up.Address == "12340000")));
+                Arg<Address>.Is.Equal(addr),
+                Arg<FunctionType>.Is.NotNull));
             mr.ReplayAll();
 
             var gdwi = new GlobalDataWorkItem(scanner, program, program.ImageMap.BaseAddress, ft);

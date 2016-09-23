@@ -36,7 +36,7 @@ namespace Reko.Typing
 	{
 		private TypeFactory factory;
 		private TypeStore store;
-		private ProcedureSignature signature;
+		private FunctionType signature;
         private Dictionary<ushort, TypeVariable> segTypevars;
         private Dictionary<string, EquivalenceClass> typeReferenceClasses;
 
@@ -56,7 +56,6 @@ namespace Reko.Typing
 			var tvGlobals = store.EnsureExpressionTypeVariable(factory, program.Globals, "globals_t");
             tvGlobals.OriginalDataType = program.Globals.DataType;
 
-            this.segTypevars = segTypevars;
             EnsureSegmentTypeVariables(program.SegmentMap.Segments.Values);
             foreach (Procedure proc in program.Procedures.Values)
             {
@@ -86,11 +85,11 @@ namespace Reko.Typing
             }
         }
 
-        public void EnsureSignatureTypeVariables(ProcedureSignature signature)
+        public void EnsureSignatureTypeVariables(FunctionType signature)
         {
             if (signature == null || !signature.ParametersValid)
                 return;
-            if (signature.ReturnValue != null)
+            if (!signature.HasVoidReturn)
             {
                 signature.ReturnValue.Accept(this);
             }
@@ -124,7 +123,7 @@ namespace Reko.Typing
             var oldSig = signature;
 			signature = null;
 			appl.Procedure.Accept(this);
-			ProcedureSignature sig = signature;
+			FunctionType sig = signature;
 
 			if (sig != null)
 			{
@@ -287,7 +286,7 @@ namespace Reko.Typing
             if (ret.Expression == null)
                 return;
             ret.Expression.Accept(this);
-            if (signature.ReturnValue != null)
+            if (!signature.HasVoidReturn)
             {
                 store.MergeClasses(
                     signature.ReturnValue.TypeVariable,
