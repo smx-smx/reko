@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,6 +27,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using Rhino.Mocks;
 
 namespace Reko.UnitTests.Analysis
 {
@@ -67,7 +68,7 @@ namespace Reko.UnitTests.Analysis
 
 			var reg   = ssaIds.Where(s => s.Identifier.Name == "reg").Single();
 			var reg_5 = ssaIds.Where(s => s.Identifier.Name == "reg_2").Single();
-            var reg_6 = ssaIds.Where(s => s.Identifier.Name == "reg_3").Single();
+			Assert.IsTrue(ssaIds.Where(s => s.Identifier.Name == "reg_3").Any());
 
 			Assert.AreEqual("reg_2 = PHI(reg, reg_3)", reg_5.DefStatement.Instruction.ToString());
 			Assert.IsTrue(lci.IsLiveOut(reg.Identifier, reg_5.DefStatement));
@@ -103,7 +104,6 @@ namespace Reko.UnitTests.Analysis
 		{
 			Build(new LiveLoopMock().Procedure, new FakeArchitecture());
 			var lci = new LiveCopyInserter(proc, ssaIds);
-            proc.ControlGraph.Blocks[1].Dump();
             var i_1 = ssaIds.Where(s => s.Identifier.Name == "i_1").Single();
             var idNew = lci.InsertAssignmentNewId(i_1.Identifier, proc.ControlGraph.Blocks[2], 2);
 			lci.RenameDominatedIdentifiers(i_1, ssaIds[idNew]);
@@ -154,10 +154,10 @@ namespace Reko.UnitTests.Analysis
 			RunTest("Fragments/while_loop.asm", "Analysis/LciWhileLoop.txt");
 		}
 
-		protected new void RunTest(string sourceFile, string outputFile)
+		protected void RunTest(string sourceFile, string outputFile)
 		{
-			Program prog = RewriteFile(sourceFile);
-			Build(prog.Procedures.Values[0], prog.Architecture);
+			Program program = RewriteFile(sourceFile);
+			Build(program.Procedures.Values[0], program.Architecture);
 			LiveCopyInserter lci = new LiveCopyInserter(proc, ssaIds);
 			lci.Transform();
 			using (FileUnitTester fut = new FileUnitTester(outputFile))
@@ -171,18 +171,25 @@ namespace Reko.UnitTests.Analysis
 		{
             var platform = new DefaultPlatform(null, arch);
 			this.proc = proc;
-			Aliases alias = new Aliases(proc, arch);
+            var importResolver = MockRepository.GenerateStub<IImportResolver>();
+            importResolver.Replay();
+            Aliases alias = new Aliases(proc, arch);
 			alias.Transform();
 			var gr = proc.CreateBlockDominatorGraph();
-			SsaTransform sst = new SsaTransform(new ProgramDataFlow(), proc, gr);
+			SsaTransform sst = new SsaTransform(
+                new ProgramDataFlow(),
+                proc,
+                null,
+                gr,
+                new HashSet<RegisterStorage>());
 			SsaState ssa = sst.SsaState;
 			this.ssaIds = ssa.Identifiers;
 
-			ConditionCodeEliminator cce = new ConditionCodeEliminator(ssa.Identifiers, platform);
+			ConditionCodeEliminator cce = new ConditionCodeEliminator(ssa, platform);
 			cce.Transform();
 			DeadCode.Eliminate(proc, ssa);
 
-			ValuePropagator vp = new ValuePropagator(ssa.Identifiers, proc);
+			ValuePropagator vp = new ValuePropagator(arch, ssa);
 			vp.Transform();
 
 			Coalescer coa = new Coalescer(proc, ssa);

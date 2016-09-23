@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,14 +34,24 @@ namespace Reko.CmdLine
             return new NullCodeLocation(address.ToString());
         }
 
-        public ICodeLocation CreateProcedureNavigator(Procedure proc)
+        public ICodeLocation CreateProcedureNavigator(Program program, Procedure proc)
         {
             return new NullCodeLocation(proc.Name);
         }
 
-        public ICodeLocation CreateBlockNavigator(Block block)
+        public ICodeLocation CreateBlockNavigator(Program program, Block block)
         {
             return new NullCodeLocation(block.Name);
+        }
+
+        public ICodeLocation CreateStatementNavigator(Program program, Statement stm)
+        {
+            return new NullCodeLocation(program.SegmentMap.MapLinearAddressToAddress(stm.LinearAddress).ToString());
+        }
+
+        public ICodeLocation CreateJumpTableNavigator(Program program, Address addrIndirectJump, Address addrVector, int stride)
+        {
+            return new NullCodeLocation(addrIndirectJump.ToString());
         }
 
         public void AddDiagnostic(ICodeLocation location, Diagnostic d)
@@ -57,9 +67,19 @@ namespace Reko.CmdLine
             Console.Out.WriteLine("{0}: warning: {1}", location.Text, message);
         }
 
+        public void Warn(ICodeLocation location, string message, params object[] args)
+        {
+            Warn(location, string.Format(message, args));
+        }
+
         public void Error(ICodeLocation location, string message)
         {
             Console.Out.WriteLine("{0}: error: {1}", location.Text, message);
+        }
+
+        public void Error(ICodeLocation location, string message, params object[] args)
+        {
+            Error(location, string.Format(message, args));
         }
 
         public void Error(ICodeLocation location, Exception ex, string message)
@@ -73,12 +93,22 @@ namespace Reko.CmdLine
             }
         }
 
+        public void Error(ICodeLocation location, Exception ex, string message, params object[] args)
+        {
+            Error(location, ex, string.Format(message, args));
+        }
+
         public void ShowStatus(string caption)
         {
         }
 
         public void ShowProgress(string caption, int numerator, int denominator)
         {
+        }
+
+        public bool IsCanceled()
+        {
+            return false;
         }
     }
 }

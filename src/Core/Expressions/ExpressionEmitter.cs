@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -95,9 +95,9 @@ namespace Reko.Core.Expressions
             return new Dereference(a.DataType, a);
         }
 
-        public DepositBits Dpb(Expression dst, Expression src, int offset, int bitCount)
+        public DepositBits Dpb(Expression dst, Expression src, int offset)
         {
-            return new DepositBits(dst, src, offset, bitCount);
+            return new DepositBits(dst, src, offset);
         }
 
         public BinaryExpression Eq(Expression a, Expression b)
@@ -125,14 +125,20 @@ namespace Reko.Core.Expressions
             return new BinaryExpression(Operator.FDiv, PrimitiveType.Real64, a, b);
         }
 
-        public FieldAccess Field(DataType dt, Expression e, string name)
+        public FieldAccess Field(DataType dt, Expression e, Field field)
         {
-            return new FieldAccess(dt, e, name);
+            return new FieldAccess(dt, e, field);
+        }
+
+        public FieldAccess Field(DataType dt, Expression e, string fieldName)
+        {
+            var field = new StructureField(0, dt, fieldName);
+            return new FieldAccess(dt, e, field);
         }
 
         public Expression FMul(Expression a, Expression b)
         {
-            return new BinaryExpression(Operator.FMul, PrimitiveType.Real64, a, b);
+            return new BinaryExpression(Operator.FMul, a.DataType, a, b);
         }
 
         public Application Fn(Expression e, params Expression[] exps)
@@ -147,9 +153,12 @@ namespace Reko.Core.Expressions
 
         public Application Fn(ExternalProcedure ep, params Expression[] args)
         {
+            var retType = ep.Signature.ReturnValue != null
+                ? ep.Signature.ReturnValue.DataType
+                : VoidType.Instance;
             return new Application(
                 new ProcedureConstant(PrimitiveType.Pointer32, ep), 
-                ep.Signature.ReturnValue.DataType,
+                retType,
                 args);
         }
 
@@ -158,7 +167,42 @@ namespace Reko.Core.Expressions
             return new Application(new ProcedureConstant(PrimitiveType.Pointer32, ppp), ppp.ReturnType, args);
         }
 
-        public Expression FSub(Expression a, Expression b)
+        public Expression FNeg(Expression a)
+        {
+            return new UnaryExpression(Operator.FNeg, a.DataType, a);
+        }
+
+        public Expression FEq(Expression a, Expression b)
+        {
+            return new BinaryExpression(Operator.Feq, PrimitiveType.Bool, a, b);
+        }
+
+        public Expression FNe(Expression a, Expression b)
+        {
+            return new BinaryExpression(Operator.Fne, PrimitiveType.Bool, a, b);
+        }
+
+        public Expression FGe(Expression a, Expression b)
+        {
+            return new BinaryExpression(Operator.Fge, PrimitiveType.Bool, a, b);
+        }
+
+        public Expression FGt(Expression a, Expression b)
+        {
+            return new BinaryExpression(Operator.Fgt, PrimitiveType.Bool, a, b);
+        }
+
+        public Expression FLe(Expression a, Expression b)
+        {
+            return new BinaryExpression(Operator.Fle, PrimitiveType.Bool, a, b);
+        }
+
+        public Expression FLt(Expression a, Expression b)
+        {
+            return new BinaryExpression(Operator.Flt, PrimitiveType.Bool, a, b);
+        }
+
+        public BinaryExpression FSub(Expression a, Expression b)
         {
             return new BinaryExpression(Operator.FSub, PrimitiveType.Real64, a, b);
         }
@@ -248,9 +292,19 @@ namespace Reko.Core.Expressions
             return Lt(a, Constant.Create(a.DataType, b));
         }
 
+        public MemberPointerSelector MembPtr8(Expression ptr, Expression membPtr)
+        {
+            return new MemberPointerSelector(PrimitiveType.Byte, new Dereference(PrimitiveType.Pointer32, ptr), membPtr);
+        }
+
         public MemberPointerSelector MembPtrW(Expression ptr, Expression membPtr)
         {
             return new MemberPointerSelector(PrimitiveType.Word16, new Dereference(PrimitiveType.Pointer32, ptr), membPtr);
+        }
+
+        public Expression Mod(Expression opLeft, Expression opRight)
+        {
+            return new BinaryExpression(Operator.IMod, opLeft.DataType, opLeft, opRight);
         }
 
         public BinaryExpression Ne0(Expression expr)
@@ -298,6 +352,11 @@ namespace Reko.Core.Expressions
         public SegmentedAccess SegMem(DataType dt, Expression basePtr, Expression ptr)
         {
             return new SegmentedAccess(MemoryIdentifier.GlobalMemory, basePtr, ptr, dt);
+        }
+
+        public SegmentedAccess SegMemB(Expression basePtr, Expression ptr)
+        {
+            return new SegmentedAccess(MemoryIdentifier.GlobalMemory, basePtr, ptr, PrimitiveType.Byte);
         }
 
         public SegmentedAccess SegMemW(Expression basePtr, Expression ptr)
@@ -358,6 +417,11 @@ namespace Reko.Core.Expressions
         public Expression Or(Expression a, Expression b)
         {
             return new BinaryExpression(Operator.Or, a.DataType, a, b);
+        }
+
+        public Expression Or(Expression a, int b)
+        {
+            return new BinaryExpression(Operator.Or, a.DataType, a, Constant.Create(a.DataType, b));
         }
 
         public BinaryExpression Sar(Expression e, byte sh)

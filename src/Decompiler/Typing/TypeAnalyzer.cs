@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,9 +31,10 @@ namespace Reko.Typing
 {
 	/// <summary>
 	/// Gathers type information, infers structure, union, and array types,
-	/// then rewrites the program as appropriate to incorporate the inferred types.
-	/// Much of the type inference code in this namespace was inspired by the master's thesis
-	/// "Entwicklung eines Typanalysesystem für einen Decompiler", 2004, by Raimar Falke.
+	/// then rewrites the program as appropriate to incorporate the inferred
+    /// types. Much of the type inference code in this namespace was inspired
+    /// by the master's thesis "Entwicklung eines Typanalysesystem für einen
+    /// Decompiler", 2004, by Raimar Falke.
 	/// </summary>
 	public class TypeAnalyzer
 	{
@@ -43,10 +44,9 @@ namespace Reko.Typing
 		private TypeStore store;
 		private ExpressionNormalizer aen;
 		private EquivalenceClassBuilder eqb;
-		private TraitCollector trco;
-		private DataTypeBuilder dtb;
+        private TypeCollector tyco;
         //private DerivedPointerAnalysis dpa;
-		private TypeVariableReplacer tvr;
+        private TypeVariableReplacer tvr;
 		private TypeTransformer trans;
 		private ComplexTypeNamer ctn;
 		private TypedExpressionRewriter ter;
@@ -57,48 +57,49 @@ namespace Reko.Typing
 		}
 
 		/// <summary>
-		/// Performs type analysis and rewrites program based on the inferred information.
+		/// Performs type analysis and rewrites program based on the inferred
+        /// information.
 		/// </summary>
 		/// <remarks>
-		/// For instance, all MemoryAccesses will be converted to structure field
-		/// accesses or array accesses as appropriate.
+		/// For instance, all MemoryAccesses will be converted to structure
+        /// field accesses or array accesses as appropriate.
 		/// </remarks>
-		/// <param name="prog"></param>
-		public void RewriteProgram(Program prog)
+		/// <param name="program"></param>
+		public void RewriteProgram(Program program)
 		{
-            factory = prog.TypeFactory;
-            store = prog.TypeStore;
+            factory = program.TypeFactory;
+            store = program.TypeStore;
 
-            aen = new ExpressionNormalizer(prog.Platform.PointerType);
+            aen = new ExpressionNormalizer(program.Platform.PointerType);
             eqb = new EquivalenceClassBuilder(factory, store);
-            dtb = new DataTypeBuilder(factory, store, prog.Platform);
-            trco = new TraitCollector(factory, store, dtb, prog);
-            //dpa = new DerivedPointerAnalysis(factory, store, prog.Architecture);
+            tyco = new TypeCollector(
+                program.TypeFactory, program.TypeStore, program,
+                eventListener);
+            //dpa = new DerivedPointerAnalysis(factory, store, program.Architecture);
             tvr = new TypeVariableReplacer(store);
-            trans = new TypeTransformer(factory, store,prog, eventListener);
+            trans = new TypeTransformer(factory, store,program, eventListener);
             ctn = new ComplexTypeNamer();
-            ter = new TypedExpressionRewriter(prog);
+            ter = new TypedExpressionRewriter(program, eventListener);
 
-            // RestrictProcedures(prog, 0, 1, true); //$DEBUG
+            // RestrictProcedures(program, 0, 60, true); // Re-enable this for debugging
             eventListener.ShowStatus("Gathering primitive datatypes from instructions.");
-			aen.Transform(prog);
-			eqb.Build(prog);
-            eventListener.ShowStatus("Collecting datatype usage traits.");
-			trco.CollectProgramTraits(prog);
-            eventListener.ShowStatus("Building equivalence classes.");
-			dtb.BuildEquivalenceClassDataTypes();
+			aen.Transform(program);
+            eqb.Build(program);
+
+            eventListener.ShowStatus("Collecting data types");
+            tyco.CollectTypes();
+            store.BuildEquivalenceClassDataTypes(factory);
             //dpa.FollowConstantPointers(prog);
-			tvr.ReplaceTypeVariables();
+            tvr.ReplaceTypeVariables();
 
             eventListener.ShowStatus("Transforming datatypes.");
-			var ppr = new PtrPrimitiveReplacer(factory, store, prog);
-			ppr.ReplaceAll();
+			var ppr = new PtrPrimitiveReplacer(factory, store, program);
+			ppr.ReplaceAll(eventListener);
 
 			trans.Transform();
 			ctn.RenameAllTypes(store);
-			store.Dump();
             eventListener.ShowStatus("Rewriting expressions.");
-			ter.RewriteProgram(prog);
+			ter.RewriteProgram(program);
 		}
 
         /// <summary>
@@ -107,18 +108,18 @@ namespace Reko.Typing
         /// procedure start.
         /// </summary>
         [Conditional("DEBUG")]
-        private void RestrictProcedures(Program prog, int start, int count, bool dumpProcedures)
+        private void RestrictProcedures(Program program, int start, int count, bool dumpProcedures)
         {
-            count = Math.Min(count, prog.Procedures.Values.Count);
+            count = Math.Min(count, program.Procedures.Values.Count);
             Procedure[] procs = new Procedure[count];
             for (int i = 0; i < count; ++i)
             {
-                procs[i] = prog.Procedures.Values[i + start];
+                procs[i] = program.Procedures.Values[i + start];
             }
-            prog.Procedures.Clear();
+            program.Procedures.Clear();
             for (uint i = 0; i < procs.Length; ++i)
             {
-                prog.Procedures[Address.Ptr32(i)] = procs[i];
+                program.Procedures[Address.Ptr32(i)] = procs[i];
                 if (dumpProcedures)
                 {
                     procs[i].Dump(true);

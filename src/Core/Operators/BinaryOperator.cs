@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,12 +30,17 @@ namespace Reko.Core.Operators
 		{
 		}
 
-		protected Constant BuildConstant(DataType t1, DataType t2, int val)
+        protected bool ValidArgs(Constant c1, Constant c2)
+        {
+            return c1.IsValid && c2.IsValid;
+        }
+
+        protected Constant BuildConstant(DataType t1, DataType t2, int val)
 		{
 			PrimitiveType p1 = (PrimitiveType) t1;
 			PrimitiveType p2 = (PrimitiveType) t2;
 			int size = Math.Max(p1.Size, p2.Size);
-			return Constant.Create(PrimitiveType.Create(p1.Domain&p2.Domain, size), val);
+			return Constant.Create(PrimitiveType.Create(p1.Domain|p2.Domain, size), val);
 		}
 
         protected Constant BuildConstant(DataType t1, DataType t2, double val)

@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -46,36 +46,44 @@ namespace Reko.UnitTests.Analysis
 {
 	public abstract class AnalysisTestBase
 	{
-        private Platform platform;
+        protected IPlatform platform;
+        private ServiceContainer sc;
 
-		protected void DumpProcedureFlows(Program prog, DataFlowAnalysis dfa, RegisterLiveness live, TextWriter w)
+        public AnalysisTestBase()
+        {
+            //$TODO: this is a hard dependency on the file system.
+            sc = new ServiceContainer();
+            sc.AddService<IFileSystemService>(new FileSystemServiceImpl());
+        }
+
+        protected void DumpProcedureFlows(Program program, DataFlowAnalysis dfa, RegisterLiveness live, TextWriter w)
 		{
-			foreach (Procedure proc in prog.Procedures.Values)
+			foreach (Procedure proc in program.Procedures.Values)
 			{
 				w.WriteLine("// {0} /////////////////////", proc.Name);
 				ProcedureFlow flow = dfa.ProgramDataFlow[proc];
-				DataFlow.EmitRegisters(prog.Architecture, "\tLiveOut:  ", flow.grfLiveOut, flow.LiveOut, w);
+				DataFlow.EmitRegisters(program.Architecture, "\tLiveOut:  ", flow.grfLiveOut, flow.LiveOut, w);
 				w.WriteLine();
-				DataFlow.EmitRegisters(prog.Architecture, "\tMayUseIn: ", flow.grfMayUse, flow.MayUse, w);
+				DataFlow.EmitRegisters(program.Architecture, "\tMayUseIn: ", flow.grfMayUse, flow.MayUse, w);
 				w.WriteLine();
-				DataFlow.EmitRegisters(prog.Architecture, "\tBypassIn: ", flow.grfMayUse, flow.ByPass, w);
+				DataFlow.EmitRegisters(program.Architecture, "\tBypassIn: ", flow.grfMayUse, flow.ByPass, w);
 				w.WriteLine();
-				DataFlow.EmitRegisters(prog.Architecture, "\tTrashed:  ", flow.grfTrashed, flow.TrashedRegisters, w);
+				DataFlow.EmitRegisters(program.Architecture, "\tTrashed:  ", flow.grfTrashed, flow.TrashedRegisters, w);
 				w.WriteLine();
-				DataFlow.EmitRegisters(prog.Architecture, "\tPreserved:", flow.grfPreserved, flow.PreservedRegisters, w);
+				DataFlow.EmitRegisters(program.Architecture, "\tPreserved:", flow.grfPreserved, flow.PreservedRegisters, w);
 				w.WriteLine();
 
 				w.WriteLine("// {0}", proc.Name);
-				proc.Signature.Emit(proc.Name, ProcedureSignature.EmitFlags.None, new TextFormatter(w));
+				proc.Signature.Emit(proc.Name, FunctionType.EmitFlags.None, new TextFormatter(w));
 				w.WriteLine();
 				foreach (Block block in proc.SortBlocksByName())
 				{
                     if (live != null)
                     {
                         var bFlow = dfa.ProgramDataFlow[block];
-                        bFlow.WriteBefore(prog.Architecture, w);
+                        bFlow.WriteBefore(program.Architecture, w);
                         block.Write(w);
-                        bFlow.WriteAfter(prog.Architecture, w);
+                        bFlow.WriteAfter(program.Architecture, w);
                         w.WriteLine();
                     }
                     else
@@ -103,9 +111,9 @@ namespace Reko.UnitTests.Analysis
         {
             var m = new ProgramBuilder();
             m.Add(mock);
-            var prog = m.BuildProgram();
-            prog.CallGraph.AddProcedure(mock.Procedure);
-            return prog;
+            var program = m.BuildProgram();
+            program.CallGraph.AddProcedure(mock.Procedure);
+            return program;
         }
 
         protected Program RewriteFile(string relativePath)
@@ -115,13 +123,26 @@ namespace Reko.UnitTests.Analysis
 
         protected static Program RewriteMsdosAssembler(string relativePath, string configFile)
         {
-            var arch = new IntelArchitecture(ProcessorMode.Real);
+            var arch = new X86ArchitectureReal();
+            var sc = new ServiceContainer();
+            var cfgSvc = MockRepository.GenerateStub<IConfigurationService>();
+            var env = MockRepository.GenerateStub<OperatingEnvironment>();
+            var tlSvc = MockRepository.GenerateStub<ITypeLibraryLoaderService>();
+            cfgSvc.Stub(c => c.GetEnvironment("ms-dos")).Return(env);
+            cfgSvc.Replay();
+            env.Stub(e => e.TypeLibraries).Return(new List<ITypeLibraryElement>());
+            env.Stub(e => e.CharacteristicsLibraries).Return(new List<ITypeLibraryElement>());
+            env.Replay();
+            tlSvc.Replay();
+            sc.AddService<IFileSystemService>(new FileSystemServiceImpl());
+            sc.AddService<IConfigurationService>(cfgSvc);
+            sc.AddService<ITypeLibraryLoaderService>(tlSvc);
             Program program;
-            Assembler asm = new X86TextAssembler(arch);
+            Assembler asm = new X86TextAssembler(sc, arch);
             using (var rdr = new StreamReader(FileUnitTester.MapTestPath(relativePath)))
             {
                 program = asm.Assemble(Address.SegPtr(0xC00, 0), rdr);
-                program.Platform = new MsdosPlatform(null, arch);
+                program.Platform = new MsdosPlatform(sc, program.Architecture);
             }
             Rewrite(program, asm, configFile);
             return program;
@@ -135,12 +156,12 @@ namespace Reko.UnitTests.Analysis
         private Program RewriteFile32(string relativePath, string configFile)
         {
             Program program;
-            var asm = new X86TextAssembler(new X86ArchitectureReal());
+            var asm = new X86TextAssembler(sc, new X86ArchitectureReal());
             using (var rdr = new StreamReader(FileUnitTester.MapTestPath(relativePath)))
             {
                 if (this.platform == null)
                 {
-                    this.platform = new Reko.Environments.Win32.Win32Platform(null, new X86ArchitectureFlat32());
+                    this.platform = new Reko.Environments.Windows.Win32Platform(sc, new X86ArchitectureFlat32());
                 }
                 asm.Platform = this.platform;
                 program = asm.Assemble(Address.Ptr32(0x10000000), rdr);
@@ -155,7 +176,7 @@ namespace Reko.UnitTests.Analysis
 
         protected Program RewriteCodeFragment(string s)
         {
-            Assembler asm = new X86TextAssembler(new X86ArchitectureReal());
+            Assembler asm = new X86TextAssembler(sc, new X86ArchitectureReal());
             var program = asm.AssembleFragment(Address.SegPtr(0xC00, 0), s);
             program.Platform = new DefaultPlatform(null, program.Architecture);
             Rewrite(program, asm, null);
@@ -165,34 +186,36 @@ namespace Reko.UnitTests.Analysis
 
         protected Program RewriteCodeFragment32(string s)
         {
-            Assembler asm = new X86TextAssembler(new X86ArchitectureFlat32());
+            Assembler asm = new X86TextAssembler(sc, new X86ArchitectureFlat32());
             var program = asm.AssembleFragment(Address.Ptr32(0x00400000), s);
             program.Platform = new DefaultPlatform(null, program.Architecture);
             Rewrite(program, asm, null);
             return program;
         }
 
-        private static void Rewrite(Program prog, Assembler asm, string configFile)
+        private static void Rewrite(Program program, Assembler asm, string configFile)
         {
             var fakeDiagnosticsService = new FakeDiagnosticsService();
             var fakeConfigService = new FakeDecompilerConfiguration();
+            var eventListener = new FakeDecompilerEventListener();
             var sc = new ServiceContainer();
             sc.AddService(typeof(IDiagnosticsService), fakeDiagnosticsService);
             sc.AddService(typeof(IConfigurationService), fakeConfigService);
+            sc.AddService<DecompilerEventListener>(eventListener);
+            sc.AddService<DecompilerHost>(new FakeDecompilerHost());
             var loader = new Loader(sc);
             var project = string.IsNullOrEmpty(configFile)
                 ? new Project()
-                : new ProjectLoader(loader).LoadProject(FileUnitTester.MapTestPath(configFile));
+                : new ProjectLoader(sc, loader).LoadProject(FileUnitTester.MapTestPath(configFile));
             var scan = new Scanner(
-                prog,
-                new Dictionary<Address, ProcedureSignature>(),
-                new ImportResolver(project),
-                new FakeDecompilerEventListener());
-            
-            scan.EnqueueEntryPoint(new EntryPoint(asm.StartAddress, prog.Architecture.CreateProcessorState()));
+                program,
+                new ImportResolver(project, program, eventListener),
+                sc);
+
+            scan.EnqueueImageSymbol(new ImageSymbol(asm.StartAddress), true);
             foreach (var f in project.Programs)
             {
-                foreach (var sp in f.UserProcedures.Values)
+                foreach (var sp in f.User.Procedures.Values)
                 {
                     scan.EnqueueUserProcedure(sp);
                 }
@@ -274,14 +297,14 @@ namespace Reko.UnitTests.Analysis
             }
         }
 
-        protected void Given_Platform(Platform platform)
+        protected void Given_Platform(IPlatform platform)
         {
             this.platform = platform;
         }
 
         protected void Given_FakeWin32Platform(MockRepository mr)
         {
-            var platform = mr.StrictMock<Platform>(null, null);
+            var platform = mr.StrictMock<IPlatform>();
             var tHglobal = new TypeReference("HGLOBAL", PrimitiveType.Pointer32);
             var tLpvoid = new TypeReference("LPVOID", PrimitiveType.Pointer32);
             var tBool = new TypeReference("BOOL", PrimitiveType.Int32);
@@ -291,9 +314,11 @@ namespace Reko.UnitTests.Analysis
                 .Return(
                     new ExternalProcedure(
                         "GlobalHandle",
-                        new ProcedureSignature(
+                        new FunctionType(
                             new Identifier("eax", tHglobal, Reko.Arch.X86.Registers.eax),
-                            new Identifier("pv",  tLpvoid, new StackArgumentStorage(0, PrimitiveType.Word32)))
+                            new Identifier[] {
+                                new Identifier("pv",  tLpvoid, new StackArgumentStorage(4, PrimitiveType.Word32))
+                            })
                         {
                             StackDelta = 4,
                         }));
@@ -302,9 +327,11 @@ namespace Reko.UnitTests.Analysis
                 Arg<string>.Is.Equal("GlobalUnlock")))
                 .Return(new ExternalProcedure(
                     "GlobalUnlock",
-                    new ProcedureSignature(
+                    new FunctionType(
                         new Identifier("eax",  tBool, Reko.Arch.X86.Registers.eax),
-                        new Identifier("hMem", tHglobal, new StackArgumentStorage(0, PrimitiveType.Word32)))
+                        new Identifier[] {
+                            new Identifier("hMem", tHglobal, new StackArgumentStorage(4, PrimitiveType.Word32))
+                        })
                     {
                         StackDelta = 4,
                     }));
@@ -314,12 +341,14 @@ namespace Reko.UnitTests.Analysis
              Arg<string>.Is.Equal("GlobalFree")))
              .Return(new ExternalProcedure(
                  "GlobalFree",
-                 new ProcedureSignature(
+                 new FunctionType(
                      new Identifier("eax",  tBool, Reko.Arch.X86.Registers.eax),
-                     new Identifier("hMem", tHglobal, new StackArgumentStorage(0, PrimitiveType.Word32)))
-                 {
-                     StackDelta = 4,
-                 }));
+                     new[] {
+                        new Identifier("hMem", tHglobal, new StackArgumentStorage(4, PrimitiveType.Word32))
+                     })
+                     {
+                         StackDelta = 4,
+                     }));
             platform.Stub(p => p.GetTrampolineDestination(
                 Arg<ImageReader>.Is.NotNull,
                 Arg<IRewriterHost>.Is.NotNull))
@@ -327,7 +356,7 @@ namespace Reko.UnitTests.Analysis
 
             platform.Stub(p => p.PointerType).Return(PrimitiveType.Pointer32);
             platform.Stub(p => p.CreateImplicitArgumentRegisters()).Return(
-                new Reko.Arch.X86.X86ArchitectureFlat32().CreateRegisterBitset());
+                new HashSet<RegisterStorage>());
             Given_Platform(platform);
         }
 	}

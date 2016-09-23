@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -213,6 +213,7 @@ namespace Reko.Assemblers.x86
 				return new ParsedOperand(new ImmediateOperand(X86Assembler.IntegralConstant(totalInt, defaultWordWidth)));
 			}
 		}
+
 		public ParsedOperand ParseOperand()
 		{
 			sym = null;
@@ -239,7 +240,7 @@ namespace Reko.Assemblers.x86
 				switch (lexer.PeekToken())
 				{
 				case Token.COLON:		// Segment override of the form "es:" usually precedes a memory operand.
-					if (!(reg is SegmentRegister))
+					if (!X86Assembler.IsSegmentRegister(reg))
 						throw new ApplicationException(reg.ToString() + " is not a segment register.");
 					Expect(Token.COLON);			// Discard ':'
 					Expect(Token.BRA);
@@ -255,18 +256,8 @@ namespace Reko.Assemblers.x86
 					symtab.CreateSymbol(lexer.StringLiteral));
 				
 			case Token.ID:
-			{
-                int v;
-                if (symtab.Equates.TryGetValue(lexer.StringLiteral.ToLower(), out v))
-                {
-					totalInt += lexer.Integer;
-					return IntegerCommon();
-				}
-				return new ParsedOperand(
-							   new MemoryOperand(addrWidth, Constant.Create(defaultWordWidth, addrBase.Offset)),
-							   symtab.CreateSymbol(lexer.StringLiteral));
-			}
-			case Token.WORD:
+                return ParseIdOperand(lexer.StringLiteral);
+            case Token.WORD:
 				return ParsePtrOperand(PrimitiveType.Word16);
 			case Token.BYTE:
 				return ParsePtrOperand(PrimitiveType.Byte);
@@ -279,7 +270,27 @@ namespace Reko.Assemblers.x86
 			}
 		}
 
-		private void OnError(string msg )
+        public ParsedOperand ParseIdOperand(string symStr)
+        {
+            int v;
+            if (symtab.Equates.TryGetValue(symStr.ToLower(), out v))
+            {
+                totalInt += lexer.Integer;
+                return IntegerCommon();
+            }
+            if (lexer.PeekToken() == Token.BRA)
+            {
+                lexer.GetToken();
+                var memOp = ParseMemoryOperand(RegisterStorage.None);
+                memOp.Symbol = symtab.CreateSymbol(symStr);
+                return memOp;
+            }
+            return new ParsedOperand(
+                           new MemoryOperand(addrWidth, Constant.Create(defaultWordWidth, addrBase.Offset)),
+                           symtab.CreateSymbol(symStr));
+        }
+
+        private void OnError(string msg )
 		{
 			if (Error != null)
 			{

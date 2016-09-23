@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,6 +21,7 @@
 using Reko.Core;
 using Reko.Core.Code;
 using Reko.Core.Expressions;
+using Reko.Core.Types;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -65,7 +66,7 @@ namespace Reko.Arch.Mos6502
                 return Constant.Invalid;
         }
 
-        public override void SetRegister(RegisterStorage r, Core.Expressions.Constant v)
+        public override void SetRegister(RegisterStorage r, Constant v)
         {
             if (v != null && v.IsValid)
             {
@@ -87,18 +88,17 @@ namespace Reko.Arch.Mos6502
         {
         }
 
-        public override void OnProcedureLeft(ProcedureSignature procedureSignature)
+        public override void OnProcedureLeft(FunctionType procedureSignature)
         {
         }
 
         public override CallSite OnBeforeCall(Identifier stackReg, int returnAddressSize)
         {
-            throw new NotImplementedException();
+            return new CallSite(returnAddressSize, 0);
         }
 
-        public override void OnAfterCall(Identifier stackReg, ProcedureSignature sigCallee, ExpressionVisitor<Core.Expressions.Expression> eval)
+        public override void OnAfterCall(FunctionType sigCallee)
         {
-            throw new NotImplementedException();
         }
     }
 }

@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,6 +29,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Windows.Forms;
+using Reko.Core.Output;
 
 namespace Reko.Gui.Windows
 {
@@ -38,6 +39,33 @@ namespace Reko.Gui.Windows
         private Program program;
         private TextBox txtDisassembly;
         private IServiceProvider sp;
+
+        public DisassemblyViewInteractor()
+        {
+
+        }
+
+        public IWindowFrame Frame { get; set; }
+
+        public Program Program
+        {
+            get { return program; }
+            set
+            {
+                program = value;
+                DumpAssembler();
+            }
+        }
+
+        public Address StartAddress
+        {
+            get { return startAddress; }
+            set
+            {
+                startAddress = value;
+                DumpAssembler();
+            }
+        }
 
         public void DumpAssembler()
         {
@@ -60,38 +88,22 @@ namespace Reko.Gui.Windows
                     var dumper = new Dumper(arch);
                     dumper.ShowAddresses = true;
                     dumper.ShowCodeBytes = true;
-                    var image = program.Image;
-                    var dasm = program.CreateDisassembler(StartAddress).GetEnumerator();
-                    while (dasm.MoveNext())
+                    ImageSegment segment;
+                    if (program.SegmentMap.TryFindSegment(StartAddress, out segment))
                     {
-                        var instr = dasm.Current;
-                        if (lines <= 0)
-                            break;
-                        dumper.DumpAssemblerLine(image, instr, writer);
-                        --lines;
+                        var formatter = new Dumper.InstrWriter(new TextFormatter(writer));
+                        var dasm = program.CreateDisassembler(StartAddress).GetEnumerator();
+                        while (dasm.MoveNext())
+                        {
+                            var instr = dasm.Current;
+                            if (lines <= 0)
+                                break;
+                            dumper.DumpAssemblerLine(segment.MemoryArea, instr, formatter);
+                            --lines;
+                        }
                     }
                     txtDisassembly.Text = writer.ToString();
                 }
-            }
-        }
-
-        public Program Program
-        {
-            get { return program; }
-            set
-            {
-                program = value;
-                DumpAssembler();
-            }
-        }
-
-        public Address StartAddress
-        {
-            get { return startAddress; }
-            set
-            {
-                startAddress = value;
-                DumpAssembler();
             }
         }
 
@@ -110,7 +122,7 @@ namespace Reko.Gui.Windows
             return
                 program != null &&
                 program.Architecture != null &&
-                program.Image != null &&
+                program.ImageMap != null &&
                 StartAddress != null;
         }
 

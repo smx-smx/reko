@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,8 +34,8 @@ namespace Reko.ImageLoaders.BinHex
     public class BinHexImageLoader : ImageLoader
     {
         private ResourceFork rsrcFork;
-        private LoadedImage image;
-        private ImageMap imageMap;
+        private MemoryArea mem;
+        private SegmentMap segmentMap;
 
         public BinHexImageLoader(IServiceProvider services, string filename, byte [] imgRaw) : base(services, filename, imgRaw)
         {
@@ -63,15 +63,20 @@ namespace Reko.ImageLoaders.BinHex
                     {
                         var image = selectedFile.GetBytes();
                         this.rsrcFork = new ResourceFork(image, arch);
-                        this.image = new LoadedImage(addrLoad, image);
-                        this.imageMap = new ImageMap(addrLoad, image.Length);
-                        return new Program(this.image, this.imageMap, arch, platform);
+                        this.mem = new MemoryArea(addrLoad, image);
+                        this.segmentMap = new SegmentMap(addrLoad,
+                            new ImageSegment("", mem, AccessMode.ReadWriteExecute)); 
+                        return new Program(this.segmentMap, arch, platform);
                     }
                 }
             }
 
-            var li = new LoadedImage(addrLoad, dataFork);
-            return new Program(li, li.CreateImageMap(), arch, platform);
+            this.mem = new MemoryArea(addrLoad, dataFork);
+            return new Program(
+                new SegmentMap(mem.BaseAddress,
+                    new ImageSegment("", mem, AccessMode.ReadWriteExecute)),
+                arch,
+                platform);
         }
 
         private byte[] LoadFork(int size, IEnumerator<byte> stm)
@@ -95,14 +100,13 @@ namespace Reko.ImageLoaders.BinHex
 
         public override RelocationResults Relocate(Program program, Address addrLoad)
         {
-            var entryPoints = new List<EntryPoint>();
-            var relocations = new RelocationDictionary();
+            var entryPoints = new List<ImageSymbol>();
             if (rsrcFork != null)
             {
                 rsrcFork.Dump();
-                rsrcFork.AddResourcesToImageMap(addrLoad, imageMap, entryPoints);
+                rsrcFork.AddResourcesToImageMap(addrLoad, mem, segmentMap, entryPoints);
             }
-            return new RelocationResults(entryPoints, relocations);
+            return new RelocationResults(entryPoints, new SortedList<Address, ImageSymbol>());
         }
 
         public BinHexHeader LoadBinHexHeader(IEnumerator<byte> stm)

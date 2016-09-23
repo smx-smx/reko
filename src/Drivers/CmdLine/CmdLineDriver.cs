@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,23 +37,25 @@ namespace Reko.CmdLine
     public class CmdLineDriver
     {
         private IServiceProvider services;
-        private DecompilerConfiguration config;
+        private RekoConfigurationService config;
 
         public static void Main(string[] args)
         {
             var services = new ServiceContainer();
             var listener = new CmdLineListener();
-            var config = new DecompilerConfiguration();
+            var config = RekoConfigurationService.Load();
             var diagnosticSvc = new CmdLineDiagnosticsService(Console.Out);
-            services.AddService(typeof(DecompilerEventListener), listener);
-            services.AddService(typeof(IConfigurationService), config);
-            services.AddService(typeof(ITypeLibraryLoaderService), new TypeLibraryLoaderServiceImpl());
-            services.AddService(typeof(IDiagnosticsService), diagnosticSvc);
+            services.AddService<DecompilerEventListener>(listener);
+            services.AddService<IConfigurationService>(config);
+            services.AddService<ITypeLibraryLoaderService>(new TypeLibraryLoaderServiceImpl(services));
+            services.AddService<IDiagnosticsService>(diagnosticSvc);
+            services.AddService<IFileSystemService>(new FileSystemServiceImpl());
+            services.AddService<DecompilerHost>(new CmdLineHost());
             var driver = new CmdLineDriver(services, config);
             driver.Execute(args);
         }
 
-        public CmdLineDriver(IServiceProvider services, DecompilerConfiguration config)
+        public CmdLineDriver(IServiceProvider services, RekoConfigurationService config)
         {
             this.services = services;
             this.config = config;
@@ -65,14 +67,13 @@ namespace Reko.CmdLine
             if (pArgs == null)
                 return;
 
-            var host = new CmdLineHost();
             var ldr = new Loader(services);
             object defaultTo;
             if (pArgs.TryGetValue("--default-to", out defaultTo))
             {
                 ldr.DefaultToFormat = (string)defaultTo;
             }
-            var dec = new DecompilerDriver(ldr, host, services);
+            var dec = new DecompilerDriver(ldr, services);
 
             if (OverridesRequested(pArgs))
             {
@@ -119,18 +120,7 @@ namespace Reko.CmdLine
                 throw new ApplicationException(string.Format("Unknown architecture {0}", pArgs["--arch"]));
 
             object sEnv;
-            Platform platform;
-            if (pArgs.TryGetValue("--env", out sEnv))
-            {
-                var opEnv = config.GetEnvironment((string)sEnv);
-                if (opEnv == null)
-                    throw new ApplicationException(string.Format("Unknown operating environment {0}", sEnv));
-                platform = opEnv.Load(services, arch);
-            }
-            else
-            {
-                platform = new DefaultPlatform(services, arch);
-            }
+            pArgs.TryGetValue("--env", out sEnv);
 
             Address addrBase;
             Address addrEntry;
@@ -146,8 +136,18 @@ namespace Reko.CmdLine
 
 
             var state = CreateInitialState(arch, pArgs);
-            dec.LoadRawImage((string)pArgs["filename"], arch, platform, addrBase);
-            dec.Project.Programs[0].EntryPoints.Add(new EntryPoint(addrEntry, state));
+            dec.LoadRawImage((string)pArgs["filename"], (string)pArgs["--arch"], (string) sEnv, addrBase);
+            dec.Project.Programs[0].EntryPoints.Add(
+                addrEntry,
+                new ImageSymbol(addrEntry)
+                {
+                    ProcessorState = state
+                });
+            object oHeur;
+            if (pArgs.TryGetValue("heuristics", out oHeur))
+            {
+                dec.Project.Programs[0].User.Heuristics = ((string[])oHeur).ToSortedSet();
+            }
             dec.ScanPrograms();
             dec.AnalyzeDataFlow();
             dec.ReconstructTypes();
@@ -238,6 +238,13 @@ namespace Reko.CmdLine
                         regs.Add(args[++i]);
                     }
                 }
+                else if (args[i] == "--heuristic")
+                {
+                    if (!string.IsNullOrEmpty(args[i]))
+                    {
+                        parsedArgs["heuristics"] = args[i].Split(',');
+                    }
+                }
                 else if (arg.StartsWith("-"))
                 {
                     w.WriteLine("error: uncrecognized option {0}", arg);
@@ -266,22 +273,24 @@ namespace Reko.CmdLine
             w.WriteLine("    <filename> can be either an executable file or a project file.");
             w.WriteLine();
             w.WriteLine("Options:");
-            w.WriteLine(" --version               Show version number and exit");
-            w.WriteLine(" -h, --help              Show this message and exit");
-            w.WriteLine(" --arch <architecture>   Use an architecture from the following:");
-            DumpArchitectures(config, w, "    {0,-24} {1}");
-            w.WriteLine(" --env <environment>     Use an operating environment from the following:");
-            DumpEnvironments(config, w, "    {0,-24} {1}");
-            w.WriteLine(" --base <address>        Use <address> as the base address of the program");
-            w.WriteLine(" --default-to <format>   If no executable format can be recognized, default");
-            w.WriteLine("                         to one of the following formats:");
-            DumpRawFiles(config, w, "    {0,-24} {1}");
-            w.WriteLine(" --entry <address>       Use <address> as an entry point to the program");
-            w.WriteLine(" --reg <regInit>         Set register to value, where regInit is formatted as");
+            w.WriteLine(" --version                Show version number and exit");
+            w.WriteLine(" -h, --help               Show this message and exit");
+            w.WriteLine(" --arch <architecture>    Use an architecture from the following:");
+            DumpArchitectures(config, w, "    {0,-25} {1}");
+            w.WriteLine(" --env <environment>      Use an operating environment from the following:");
+            DumpEnvironments(config, w, "    {0,-25} {1}");
+            w.WriteLine(" --base <address>         Use <address> as the base address of the program");
+            w.WriteLine(" --default-to <format>    If no executable format can be recognized, default");
+            w.WriteLine("                          to one of the following formats:");
+            DumpRawFiles(config, w, "    {0,-25} {1}");
+            w.WriteLine(" --entry <address>        Use <address> as an entry point to the program");
+            w.WriteLine(" --reg <regInit>          Set register to value, where regInit is formatted as");
             w.WriteLine("                          reg_name:value, e.g. sp:FF00");
+            w.WriteLine(" --heuristic <h1>[,<h2>...] Use one of the following heuristics to examine binary:");
+            w.WriteLine("    shingle               Use shingle assembler to discard data ");
         }
 
-        private static void DumpArchitectures(DecompilerConfiguration config, TextWriter w, string fmtString)
+        private static void DumpArchitectures(RekoConfigurationService config, TextWriter w, string fmtString)
         {
             foreach (var arch in config.GetArchitectures()
                 .OfType<ArchitectureElement>()
@@ -291,7 +300,7 @@ namespace Reko.CmdLine
             }
         }
 
-        private static void DumpEnvironments(DecompilerConfiguration config, TextWriter w, string fmtString)
+        private static void DumpEnvironments(RekoConfigurationService config, TextWriter w, string fmtString)
         {
             foreach (var arch in config.GetEnvironments()
                 .OfType<OperatingEnvironmentElement>()
@@ -301,7 +310,7 @@ namespace Reko.CmdLine
             }
         }
 
-        private static void DumpRawFiles(DecompilerConfiguration config, TextWriter w, string fmtString)
+        private static void DumpRawFiles(RekoConfigurationService config, TextWriter w, string fmtString)
         {
             foreach (var raw in config.GetRawFiles()
                 .OfType<RawFileElement>()

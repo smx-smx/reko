@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,14 +25,19 @@ using System.Collections.Generic;
 
 namespace Reko.Core
 {
+    /// <summary>
+    /// Abstraction of the notion of "address". Some processors have nice 
+    /// linear addresses (z80, PowerPC) and some others have eldritch 
+    /// segmented addresses (x86).
+    /// </summary>
 	public abstract class Address : Expression, IComparable<Address>, IComparable
-	{
+    {
         protected Address(DataType size)
             : base(size)
         {
         }
 
-        public static Address Create(DataType size, ulong bitPattern) 
+        public static Address Create(DataType size, ulong bitPattern)
         {
             switch (size.Size)
             {
@@ -60,9 +65,30 @@ namespace Reko.Core
 
         public static Address SegPtr(ushort seg, uint off)
         {
-            return new SegAddress32(seg, (ushort)off);
+            return new RealSegmentedAddress(seg, (ushort)off);
         }
-        
+
+        public static Address ProtectedSegPtr(ushort seg, uint off)
+        {
+            return new ProtectedSegmentedAddress(seg, (ushort)off);
+        }
+
+        public static Address Max(Address a, Address b)
+        {
+            if (a.ToLinear() >= b.ToLinear())
+                return a;
+            else
+                return b;
+        }
+
+        public static Address Min(Address a, Address b)
+        {
+            if (a.ToLinear() <= b.ToLinear())
+                return a;
+            else
+                return b;
+        }
+
         public static Address FromConstant(Constant value)
         {
             switch (value.DataType.BitSize)
@@ -76,7 +102,8 @@ namespace Reko.Core
 
         public abstract bool IsNull { get; }
         public abstract ulong Offset { get; }
-        public abstract ushort Selector { get; }			// Segment selector.
+        public abstract ushort? Selector { get; }			// Segment selector; return null if the address is linear.
+        public abstract Address NewOffset(ulong offset);    // Creates an address with same selector, different offset; no-op for linear addresses.
 
         public override T Accept<T, C>(ExpressionVisitor<T, C> v, C context)
         {
@@ -93,19 +120,37 @@ namespace Reko.Core
             visit.VisitAddress(this);
         }
 
-		public override bool Equals(object obj)
-		{
-			return CompareTo(obj) == 0;
-		}
+        public override bool Equals(object obj)
+        {
+            return CompareTo(obj) == 0;
+        }
 
-		public override int GetHashCode()
-		{
-			return ToLinear().GetHashCode();
-		}
+        public override int GetHashCode()
+        {
+            return ToLinear().GetHashCode();
+        }
 
         public abstract string GenerateName(string prefix, string suffix);
 
-		public static bool operator < (Address a, Address b)
+        public static bool operator ==(Address a, Address b)
+        {
+            if ((object)a == null)
+                return ((object)b == null);
+            if ((object)b == null)
+                return ((object)a == null);
+            return a.ToLinear() == b.ToLinear();
+        }
+
+        public static bool operator !=(Address a, Address b)
+        {
+            if ((object)a == null)
+                return ((object)b != null);
+            if ((object)b == null)
+                return ((object)a != null);
+            return a.ToLinear() != b.ToLinear();
+        }
+
+        public static bool operator < (Address a, Address b)
 		{
 			return a.ToLinear() < b.ToLinear();
 		}
@@ -120,7 +165,7 @@ namespace Reko.Core
 			return a.ToLinear() > b.ToLinear();
 		}
 
-		public static bool operator >= (Address a, Address b)
+        public static bool operator >= (Address a, Address b)
 		{
 			return a.ToLinear() >= b.ToLinear();
 		}
@@ -137,7 +182,9 @@ namespace Reko.Core
 
         public abstract Address Add(long offset);
 
-		public static Address operator - (Address a, int delta)
+        public abstract Address Align(int alignment);
+
+        public static Address operator - (Address a, int delta)
 		{
 			return a.Add(-delta);
 		}
@@ -147,16 +194,20 @@ namespace Reko.Core
 			return (long) a.ToLinear() - (long) b.ToLinear();
 		}
 
-        public int CompareTo(Address a)
+        public int CompareTo(Address that)
         {
-            return this.ToLinear().CompareTo(a.ToLinear());
+            return this.ToLinear().CompareTo(that.ToLinear());
         }
 
 		public int CompareTo(object a)
 		{
-            return this.ToLinear().CompareTo(((Address)a).ToLinear());
+            var that = a as Address;
+            if (that == null)
+                return 1;
+            return this.ToLinear().CompareTo(that.ToLinear());
 		}
 
+        public abstract Constant ToConstant();
         public abstract ushort ToUInt16();
         public abstract uint ToUInt32();
         public abstract ulong ToLinear();
@@ -167,7 +218,6 @@ namespace Reko.Core
 		/// <param name="s">The string representation of the Address</param>
 		/// <param name="radix">The radix used in the  representation, typically 16 for hexadecimal address representation.</param>
 		/// <returns></returns>
-
         public static bool TryParse16(string s, out Address result)
         {
             if (s != null)
@@ -239,11 +289,16 @@ namespace Reko.Core
 
         public override bool IsNull { get { return uValue == 0; } }
         public override ulong Offset { get { return uValue; } }
-        public override ushort Selector { get { throw new NotSupportedException(); } }
+        public override ushort? Selector { get { return null; } }
         
         public override Address Add(long offset)
         {
             return new Address16((ushort)((int)uValue + (int)offset));
+        }
+
+        public override Address Align(int alignment)
+        {
+            return new Address16((ushort)(alignment * ((uValue + alignment - 1) / alignment)));
         }
 
         public override Expression CloneExpression()
@@ -254,6 +309,16 @@ namespace Reko.Core
         public override string GenerateName(string prefix, string suffix)
         {
             return string.Format("{0}{1:X4}{2}", prefix, uValue, suffix);
+        }
+
+        public override Address NewOffset(ulong offset)
+        {
+            return new Address16((ushort)offset);
+        }
+
+        public override Constant ToConstant()
+        {
+            return Constant.UInt16(uValue);
         }
 
         public override ushort ToUInt16()
@@ -289,12 +354,17 @@ namespace Reko.Core
 
         public override bool IsNull { get { return uValue == 0; } }
         public override ulong Offset { get { return uValue; } }
-        public override ushort Selector { get { throw new NotSupportedException(); } }
+        public override ushort? Selector { get { return null; } }
 
         public override Address Add(long offset)
         {
             var uNew = uValue + offset;
             return new Address32((uint)uNew);
+        }
+
+        public override Address Align(int alignment)
+        {
+            return new Address32((uint)(alignment * ((uValue + alignment - 1) / alignment)));
         }
 
         public override Expression CloneExpression()
@@ -305,6 +375,16 @@ namespace Reko.Core
         public override string GenerateName(string prefix, string suffix)
         {
             return string.Format("{0}{1:X8}{2}", prefix, uValue, suffix);
+        }
+
+        public override Address NewOffset(ulong offset)
+        {
+            return new Address32((uint) offset);
+        }
+
+        public override Constant ToConstant()
+        {
+            return Constant.UInt32(uValue);
         }
 
         public override ushort ToUInt16()
@@ -328,12 +408,12 @@ namespace Reko.Core
         }
     }
 
-    public class SegAddress32 : Address
+    public class RealSegmentedAddress : Address
     {
         private ushort uSegment;
         private ushort uOffset;
 
-        public SegAddress32(ushort segment, ushort offset)
+        public RealSegmentedAddress(ushort segment, ushort offset)
             : base(PrimitiveType.SegPtr32)
         {
             this.uSegment = segment;
@@ -342,23 +422,28 @@ namespace Reko.Core
 
         public override bool IsNull { get { return uSegment == 0 && uOffset == 0; } }
         public override ulong Offset { get { return uOffset; } }
-        public override ushort Selector { get { return uSegment; } }
+        public override ushort? Selector { get { return uSegment; } }
 
         public override Address Add(long offset)
         {
-            ushort sel = this.Selector;
+            ushort sel = this.uSegment;
 			uint newOff = (uint) (uOffset + offset);
 			if (newOff > 0xFFFF)
 			{
-				sel += 0x1000;
+                sel += (ushort)((newOff & ~0xFFFFu) >> 4);
 				newOff &= 0xFFFF;
 			}
-			return new SegAddress32(sel, (ushort) newOff);
+			return new RealSegmentedAddress(sel, (ushort) newOff);
 		}
+
+        public override Address Align(int alignment)
+        {
+            return new RealSegmentedAddress(uSegment, ((ushort)(alignment * ((uOffset + alignment - 1) / alignment))));
+        }
 
         public override Expression CloneExpression()
         {
-            return new SegAddress32(uSegment, uOffset);
+            return new RealSegmentedAddress(uSegment, uOffset);
         }
 
         public override string GenerateName(string prefix, string suffix)
@@ -366,9 +451,19 @@ namespace Reko.Core
             return string.Format("{0}{1:X4}_{2:X4}{3}", prefix, uSegment, uOffset, suffix);
         }
 
+        public override Address NewOffset(ulong offset)
+        {
+            return new RealSegmentedAddress(uSegment, (ushort)offset);
+        }
+
         public override ushort ToUInt16()
         {
             throw new InvalidOperationException("Returning UInt16 would lose precision.");
+        }
+
+        public override Constant ToConstant()
+        {
+            return Constant.UInt32(ToUInt32());
         }
 
         public override uint ToUInt32()
@@ -385,7 +480,80 @@ namespace Reko.Core
         {
             return string.Format("{0:X4}:{1:X4}", uSegment, uOffset);
         }
+    }
 
+    public class ProtectedSegmentedAddress : Address
+    {
+        private ushort uSegment;
+        private ushort uOffset;
+
+        public ProtectedSegmentedAddress(ushort segment, ushort offset)
+            : base(PrimitiveType.SegPtr32)
+        {
+            this.uSegment = segment;
+            this.uOffset = offset;
+        }
+
+        public override bool IsNull { get { return uSegment == 0 && uOffset == 0; } }
+        public override ulong Offset { get { return uOffset; } }
+        public override ushort? Selector { get { return uSegment; } }
+
+        public override Address Add(long offset)
+        {
+            ushort sel = this.uSegment;
+            uint newOff = (uint)(uOffset + offset);
+            if (newOff > 0xFFFF)
+            {
+                sel += 0x1000;
+                newOff &= 0xFFFF;
+            }
+            return new ProtectedSegmentedAddress(sel, (ushort)newOff);
+        }
+
+        public override Address Align(int alignment)
+        {
+            return new RealSegmentedAddress(uSegment, ((ushort)(alignment * ((uOffset + alignment - 1) / alignment))));
+        }
+
+        public override Expression CloneExpression()
+        {
+            return new ProtectedSegmentedAddress(uSegment, uOffset);
+        }
+
+        public override string GenerateName(string prefix, string suffix)
+        {
+            return string.Format("{0}{1:X4}_{2:X4}{3}", prefix, uSegment, uOffset, suffix);
+        }
+
+        public override Address NewOffset(ulong offset)
+        {
+            return new ProtectedSegmentedAddress(uSegment, (ushort)offset);
+        }
+
+        public override Constant ToConstant()
+        {
+            return Constant.UInt32(ToUInt32());
+        }
+
+        public override ushort ToUInt16()
+        {
+            throw new InvalidOperationException("Returning UInt16 would lose precision.");
+        }
+
+        public override uint ToUInt32()
+        {
+            return (((uint)(uSegment & ~7)) << 9) + uOffset;
+        }
+
+        public override ulong ToLinear()
+        {
+            return (((ulong)(uSegment & ~7)) << 9) + uOffset;
+        }
+
+        public override string ToString()
+        {
+            return string.Format("{0:X4}:{1:X4}", uSegment, uOffset);
+        }
     }
 
     public class Address64 : Address
@@ -400,11 +568,19 @@ namespace Reko.Core
 
         public override bool IsNull { get { return uValue == 0; } }
         public override ulong Offset { get { return uValue; } }
-        public override ushort Selector { get { throw new NotSupportedException(); } }
+        public override ushort? Selector { get { return null; } }
 
         public override Address Add(long offset)
         {
             return new Address64(uValue + (ulong)offset);
+        }
+
+        public override Address Align(int alignment)
+        {
+            if (alignment <= 0)
+                throw new ArgumentOutOfRangeException("alignment");
+            var uAl = (uint)alignment;
+            return new Address64(uAl * ((uValue + uAl - 1) / uAl));
         }
 
         public override Expression CloneExpression()
@@ -415,6 +591,16 @@ namespace Reko.Core
         public override string GenerateName(string prefix, string suffix)
         {
             return string.Format("{0}{1:X16}{2}", prefix, uValue, suffix);
+        }
+
+        public override Address NewOffset(ulong offset)
+        {
+            return new Address64(offset);
+        }
+
+        public override Constant ToConstant()
+        {
+            return Constant.UInt64(uValue);
         }
 
         public override ushort ToUInt16()

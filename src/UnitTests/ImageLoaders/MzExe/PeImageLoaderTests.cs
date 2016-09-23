@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,7 +30,9 @@ using System.ComponentModel.Design;
 using System.Linq;
 using System.Text;
 using Reko.Core.Types;
-using Reko.Environments.Win32;
+using Reko.Environments.Windows;
+using System.Diagnostics;
+using Reko.Core.Services;
 
 namespace Reko.UnitTests.ImageLoaders.MzExe
 {
@@ -61,6 +63,7 @@ namespace Reko.UnitTests.ImageLoaders.MzExe
         private const int RvaImportDescriptor = 0x2000;
         private const int RvaData = 0x3000;
         private IProcessorArchitecture arch_386;
+        private Win32Platform win32;
 
         [SetUp]
         public void Setup()
@@ -71,13 +74,17 @@ namespace Reko.UnitTests.ImageLoaders.MzExe
             fileImage = new byte[0x4000];
             writer = new LeImageWriter(fileImage);
             var cfgSvc = mr.StrictMock<IConfigurationService>();
+            var dcSvc = mr.Stub<DecompilerEventListener>();
             Given_i386_Architecture();
-            var win32 = new Win32Platform(sc, arch_386);
+            this.win32 = mr.PartialMock<Win32Platform>(sc, arch_386);
+            // Avoid complications with the FindMainProcedure call.
+            this.win32.Stub(w => w.FindMainProcedure(null, null)).IgnoreArguments().Return(null);
             var win32Env = mr.Stub<OperatingEnvironment>();
             cfgSvc.Stub(c => c.GetArchitecture("x86-protected-32")).Return(arch_386);
             cfgSvc.Stub(c => c.GetEnvironment("win32")).Return(win32Env);
             win32Env.Stub(w => w.Load(null, null)).IgnoreArguments().Return(win32);
             sc.AddService<IConfigurationService>(cfgSvc);
+            sc.AddService<DecompilerEventListener>(dcSvc);
         }
 
         private void Given_i386_Architecture()
@@ -85,6 +92,7 @@ namespace Reko.UnitTests.ImageLoaders.MzExe
             this.arch_386 = mr.StrictMock<IProcessorArchitecture>();
             arch_386.Stub(a => a.CreateFrame()).Return(new Frame(PrimitiveType.Pointer32));
             arch_386.Stub(a => a.WordWidth).Return(PrimitiveType.Word32);
+            arch_386.Stub(a => a.PointerType).Return(PrimitiveType.Pointer32);
             var state = mr.Stub<ProcessorState>();
             arch_386.Stub(a => a.CreateProcessorState()).Return(state);
             arch_386.Replay();
@@ -106,8 +114,8 @@ namespace Reko.UnitTests.ImageLoaders.MzExe
             writer.WriteLeInt32(0);         // characteristics
 
             // Increment the section count in the optional header.
-            short sections = LoadedImage.ReadLeInt16(fileImage, RvaPeHdr + 6);
-            LoadedImage.WriteLeInt16(fileImage, RvaPeHdr + 6, (short)(sections + 1));
+            short sections = MemoryArea.ReadLeInt16(fileImage, RvaPeHdr + 6);
+            MemoryArea.WriteLeInt16(fileImage, RvaPeHdr + 6, (short)(sections + 1));
         }
 
         private void Given_DelayLoadDirectories(params DelayLoadDirectoryEntry [] delayLoadDirectory)
@@ -222,7 +230,7 @@ namespace Reko.UnitTests.ImageLoaders.MzExe
             writer.WriteLeUInt32(2);        // number of data directory entries
 
             rvaDirectories = writer.Position;
-            writer.Position = rvaDirectories + 2 * 8;
+            writer.Position = rvaDirectories + 2 * 12;
             var optHdrSize = writer.Position - rvaOptHdr;
             var rvaSections = writer.Position;
             writer.Position = rvaOptionalHeaderSize;
@@ -381,12 +389,13 @@ namespace Reko.UnitTests.ImageLoaders.MzExe
                         "GetFocus"
                     }
                 });
+            sc.AddService<IDiagnosticsService>(mr.Stub<IDiagnosticsService>());
             mr.ReplayAll();
 
             Given_PeLoader();
 
             var program = peldr.Load(addrLoad);
-            var rel = peldr.Relocate(program, addrLoad);
+            peldr.Relocate(program, addrLoad);
 
             Assert.AreEqual(2, program.ImportReferences.Count);
             Assert.AreEqual("user32.dll!GetDesktopWindow", program.ImportReferences[Address.Ptr32(0x0010183C)].ToString());
@@ -418,6 +427,24 @@ namespace Reko.UnitTests.ImageLoaders.MzExe
             Assert.AreEqual("msvcrt.dll!realloc", program.ImportReferences[Address.Ptr32(0x00102032)].ToString());
         }
 
+        private void AssertImageSymbols(string sExp)
+        {
+            var sb = new StringBuilder();
+            foreach (var item in this.peldr.ImageSymbols.Values)
+            {
+                sb.AppendFormat("{0:X} {1:X4} {2} {3}",
+                    item.Address,
+                    item.Size,
+                    item.Type,
+                    item.DataType);
+                sb.AppendLine();
+            }
+            var sActual = sb.ToString();
+            if (sActual != sExp)
+                Debug.Print(sActual);
+            Assert.AreEqual(sExp, sActual);
+        }
+
         [Test]
         public void Pil32_BlankIat()
         {
@@ -442,6 +469,59 @@ namespace Reko.UnitTests.ImageLoaders.MzExe
             Assert.AreEqual("msvcrt.dll!malloc", program.ImportReferences[Address.Ptr32(0x0010202A)].ToString());
             Assert.AreEqual("msvcrt.dll!free", program.ImportReferences[Address.Ptr32(0x0010202E)].ToString());
             Assert.AreEqual("msvcrt.dll!realloc", program.ImportReferences[Address.Ptr32(0x00102032)].ToString());
+            var sExp =
+@"00102000 0004 Data word32
+00102004 0004 Data word32
+00102008 0004 Data word32
+0010202A 0004 Data (ptr code)
+0010202E 0004 Data (ptr code)
+00102032 0004 Data (ptr code)
+";
+            AssertImageSymbols(sExp);
+        }
+
+        [Test]
+        public void Pil32_DllMain()
+        {
+            Given_Pe32Header(0x00100000);
+
+            mr.ReplayAll();
+
+            Given_PeLoader();
+            var ep = peldr.CreateMainEntryPoint(true, Address.Ptr32(0x10000000), this.win32);
+
+            Assert.AreEqual("DllMain", ep.Name);
+            Assert.AreEqual("fn(stdapi,arg(BOOL),(arg(hModule,HANDLE),arg(dwReason,DWORD),arg(lpReserved,LPVOID))", ep.Signature.ToString());
+        }
+
+        [Test]
+        public void Pil32_Win32CrtStartup()
+        {
+            Given_Pe32Header(0x00100000);
+
+            mr.ReplayAll();
+
+            Given_PeLoader();
+            var ep = peldr.CreateMainEntryPoint(false, Address.Ptr32(0x10000000), this.win32);
+
+            Assert.AreEqual("Win32CrtStartup", ep.Name);
+            Assert.AreEqual("fn(__cdecl,arg(DWORD),()", ep.Signature.ToString());
+        }
+
+        [Test]
+        public void Pil32_IdenticallyNamedSections()
+        {
+            Given_Pe32Header(0x00100000);
+            Given_Section("hehe", 0x1000, 0x1000);
+            Given_Section("hehe", 0x2000, 0x2000);
+
+            mr.ReplayAll();
+
+            Given_PeLoader();
+            var program = peldr.Load(addrLoad);
+            Assert.AreEqual(2, program.SegmentMap.Segments.Count);
+            Assert.AreEqual("hehe", program.SegmentMap.Segments[Address.Ptr32(0x00101000)].Name);
+            Assert.AreEqual("hehe", program.SegmentMap.Segments[Address.Ptr32(0x00102000)].Name);
         }
     }
 }

@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,6 +29,7 @@ using System.Windows.Forms;
 
 namespace Reko.ImageLoaders.OdbgScript
 {
+    using Core.Services;
     using rulong = System.UInt64;
 
     public partial class OllyLang
@@ -851,7 +852,8 @@ rulong hwnd;
                     filename = Host.TE_GetTargetDirectory() + filename;
 
                 // Truncate existing file
-                using (FileStream hfile = new FileStream(filename, FileMode.Create))
+                var fsSvc = services.RequireService<IFileSystemService>();
+                using (Stream hfile =  fsSvc.CreateFileStream(filename, FileMode.Create, FileAccess.Write))
                 {
                 }
                 return DoDMA(args);
@@ -1193,8 +1195,12 @@ string filename;
                 if (maxsize != 0 && (int)maxsize < memlen)
                     memlen = (int)maxsize;
 
+                var ea = Address.Ptr32((uint)addr);
+                ImageSegment segment;
+                if (!Host.SegmentMap.TryFindSegment(ea, out segment))
+                    throw new AccessViolationException();
                 byte[] membuf = new byte[memlen];
-                if (Host.Image.TryReadBytes(Address.Ptr32((uint)addr), memlen, membuf))
+                if (segment.MemoryArea.TryReadBytes(ea, memlen, membuf))
                 {
                     int bytecount = finddata.Length / 2;
 
@@ -1895,8 +1901,6 @@ rulong addr;
         private bool DoGMEXP(string[] args)
         {
             rulong addr, num = 0;
-            string str;
-
             if (args.Length >= 2 && args.Length <= 3 && GetRulong(args[0], out addr))
             {
                 if (args.Length == 3 && !GetRulong(args[2], out num))
@@ -1965,8 +1969,8 @@ rulong addr;
                     errorstr = "Second operand bad";
                     return false;
                 }
-                */
                 return true;
+                */
             }
             return false;
         }
@@ -2264,8 +2268,8 @@ string str;
                     errorstr = "Second operand bad";
                     return false;
                 }
-                */
                 return true;
+                */
             }
             return false;
         }
@@ -2889,14 +2893,13 @@ string filename;
                 errorstr = "Unsupported command!";
                 return false;
 
-                if (Remote.LoadLibrary(Host.TE_GetProcessHandle(), str, false))
-                {
+                /*
+
                     // $RESULT EAX!!!
                     resumeDebuggee = true;
                     return true;
                 }
 
-                /*
                 ulong fnload;
 
                 SaveRegisters(true);
@@ -2943,8 +2946,8 @@ string filename;
                     // Free memory block after next ollyloop
                     regBlockToFree(block);
                  */
-                    require_addonaction = true;
-                    back_to_debugloop = true;
+                    //require_addonaction = true;
+                    //back_to_debugloop = true;
                     return true;
                 }
 
@@ -3118,14 +3121,14 @@ string filename;
                     {
                         if (maxsize == 0)
                             maxsize = reg.size;
-                        dw = Helper.resize(dw, Math.Min((int)maxsize, (int)reg.size));
+                        dw = Helper.resize(dw, Math.Min((int)maxsize, reg.size));
                         if (reg.size < sizeof(rulong))
                         {
-                            rulong oldval, newval;
-                            oldval = Debugger.GetContextData(reg.id);
+                            //rulong oldval, newval;
+                            rulong oldval = Debugger.GetContextData(reg.id);
                             throw new NotImplementedException("oldval &= ~(((1 << (reg.size * 8)) - 1) << (reg.offset * 8));");
                             //newval = resize(dw, reg.size) << (reg.offset * 8);
-                            dw = oldval | newval;
+                            //dw = oldval | newval;
                         }
                         return Debugger.SetContextData(reg.id, dw);
                     }
@@ -3448,7 +3451,11 @@ string param;
                 Debugger.SetContextData(eContextData.UE_CSP, CSP + sizeof(rulong));
                 if (args.Length == 1)
                 {
-                    dw = Host.Image.ReadLeUInt32(Address.Ptr32((uint)CSP));
+                    var ea = Address.Ptr32((uint)CSP);
+                    ImageSegment segment;
+                    if (!Host.SegmentMap.TryFindSegment(ea, out segment))
+                        throw new AccessViolationException();
+                    dw = segment.MemoryArea.ReadLeUInt32(ea);
                     return SetRulong(args[0], dw);
                 }
                 return true;
@@ -3540,20 +3547,16 @@ string param;
         //        : rbp STRICT
         private bool DoRBP(string[] args)
         {
-            bool strict = false;
-
             if (args.Length >= 0 && args.Length <= 1)
             {
                 if (args.Length == 1)
                 {
-                    if (Helper.toupper(args[0]) != "STRICT")
+                    if (args[0].ToUpperInvariant() != "STRICT")
                         return false;
-                    strict = true;
                 }
 
                 return true;
             }
-            return false;
             /*
             t_table* bpt = 0;
             t_bpoint* bpoint = 0;
@@ -3563,9 +3566,10 @@ string param;
             CreateOperands ( args, ops, 1 );
 	
             variables["$RESULT"] = Var.Create(0);
-
-            if ( saved_bp )
+            */
+            if ( saved_bp != 0)
             {
+                /*
                 bpt = ( t_table * ) Plugingetvalue ( VAL_BREAKPOINTS );
                 if ( bpt != null )
                 {
@@ -3588,10 +3592,11 @@ string param;
 
                     Broadcast ( WM_USER_CHALL, 0, 0 );
                 }
-
+                */
             }
 
             //Hardware Bps
+            /*
             for ( n=0; n < 4; n++ ) {
                 if (hwbp_t[n].addr) {
                     Sethardwarebreakpoint ( hwbp_t[n].addr, hwbp_t[n].size, hwbp_t[n].type );
@@ -3600,8 +3605,7 @@ string param;
             }
             variables["$RESULT_1"] = ( DWORD ) i;
             */
-
-            return true;
+            return false;
         }
 
 
@@ -4189,9 +4193,9 @@ rulong dw1, dw2;
                 }
                 Settracecondition(buffer, 0, 0, 0, 0, 0);
                 Sendshortcut(PM_MAIN, 0, WM_KEYDOWN, 1, 0, VK_F12); 
-                */
-                back_to_debugloop = true;
+                //back_to_debugloop = true;
                 return true;
+                */
             }
             return false;
         }
@@ -4296,7 +4300,8 @@ string filename, data;
                 if (!Helper.IsFullPath(filename))
                     filename = Host.TE_GetTargetDirectory() + filename;
 
-                using (FileStream hFile = new FileStream(filename, FileMode.OpenOrCreate, FileAccess.Write))
+                var fsSvc = services.RequireService<IFileSystemService>();
+                using (var hFile = fsSvc.CreateFileStream(filename, FileMode.OpenOrCreate, FileAccess.Write))
                 {
                     @out += data;
                     hFile.Seek(0, SeekOrigin.End);

@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -76,15 +76,15 @@ namespace Reko.Arch.Arm
                         "Invalid opcode cannot be rewritten to IR.");
                 }
                 this.ops = instr.ArchitectureDetail.Operands;
-
                 this.ric = new RtlInstructionCluster(instrs.Current.Address, instr.Bytes.Length);
+                this.ric.Class = RtlClass.Linear;
                 this.emitter = new RtlEmitter(ric.Instructions);
                 switch (instr.Id)
                 {
                 default:
                     throw new AddressCorrelatedException(
                       instrs.Current.Address,
-                      "Rewriting ARM opcode '{0}' ({1}) is not supported yet.",
+                      "Rewriting ARM Thumb opcode '{0}' ({1}) is not supported yet.",
                       instr.Mnemonic, instr.Id);
                 case ArmInstruction.ADD: RewriteBinop((a, b) => emitter.IAdd(a, b)); break;
                 case ArmInstruction.ADDW: RewriteAddw(); break;
@@ -224,26 +224,7 @@ namespace Reko.Arch.Arm
 
         private Identifier FlagGroup(FlagM bits, string name, PrimitiveType type)
         {
-            return frame.EnsureFlagGroup((uint)bits, name, type);
-        }
-
-        //$REVIEW: push PseudoProc into the RewriterHost interface"
-        public Expression PseudoProc(string name, DataType retType, params Expression[] args)
-        {
-            var ppp = host.EnsurePseudoProcedure(name, retType, args.Length);
-            return PseudoProc(ppp, retType, args);
-        }
-
-        public Expression PseudoProc(PseudoProcedure ppp, DataType retType, params Expression[] args)
-        {
-            if (args.Length != ppp.Arity)
-                throw new ArgumentOutOfRangeException(
-                    string.Format("Pseudoprocedure {0} expected {1} arguments, but was passed {2}.",
-                    ppp.Name,
-                    ppp.Arity,
-                    args.Length));
-
-            return emitter.Fn(new ProcedureConstant(arch.PointerType, ppp), retType, args);
+            return frame.EnsureFlagGroup(A32Registers.cpsr, (uint)bits, name, type);
         }
 
         private void Predicate(ArmCodeCondition cond, RtlInstruction instr)
@@ -260,6 +241,7 @@ namespace Reko.Arch.Arm
             Identifier id;
             if (dst.As<Identifier>(out id) && id.Storage == A32Registers.pc)
             {
+                ric.Class = RtlClass.Transfer;
                 instr = new RtlGoto(src, RtlClass.Transfer);
             }
             else

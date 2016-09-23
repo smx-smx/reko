@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -46,7 +46,13 @@ namespace Reko.Gui.Windows.Controls
             SetStyle(ControlStyles.UserPaint, true);
             StartAddressChanged += DisassemblyControl_StateChange;
             TopAddressChanged += DisassemblyControl_StateChange;
+            ProgramChanged += DisassemblyControl_StateChange;
         }
+
+        [Browsable(false)]
+        public Program Program { get { return program; } set { program = value; ProgramChanged.Fire(this); } }
+        public event EventHandler ProgramChanged;
+        private Program program;
 
         [Browsable(false)]
         public Address StartAddress { get { return startAddress; } set { startAddress = value; StartAddressChanged.Fire(this); } }
@@ -74,16 +80,43 @@ namespace Reko.Gui.Windows.Controls
 
         void DisassemblyControl_StateChange(object sender, EventArgs e)
         {
-            Model.MoveTo(topAddress, 0);
+            if (program == null || topAddress == null)
+            {
+                Model = new EmptyEditorModel();
+            }
+            else
+            {
+                ImageSegment segment;
+                if (!program.SegmentMap.TryFindSegment(topAddress, out segment) ||
+                    segment.MemoryArea == null)
+                {
+                    Model = new EmptyEditorModel();
+                }
+                else
+                {
+                    var addr = topAddress;
+                    Model = new DisassemblyTextModel(program, segment);
+                    Model.MoveToLine(addr, 0);
+                }
+            }
             RecomputeLayout();
             base.UpdateScrollbar();
-            Invalidate();
         }
+
+        /*
+          n = number of segments
+          c = constant width
+          b = per-segment constant width
+          cb[i] = per-segment size in bytes
+          Width = c + sum(b + cb[i] * scale)
+          Width - c - n * b = scale * sum(cb[i])
+          scale = ceil((width - c - n * b) / sum(cb[i]))
+        */
 
         protected override void OnScroll()
         {
             base.OnScroll();
-            topAddress = (Address)Model.CurrentPosition;
+            topAddress = Model.CurrentPosition as Address;
         }
 
         protected override bool IsInputKey(Keys keyData)
@@ -102,14 +135,14 @@ namespace Reko.Gui.Windows.Controls
 
         protected override void OnKeyDown(KeyEventArgs e)
         {
-            Debug.Print("Disassembly control: Down:  c:{0} d:{1} v:{2}", e.KeyCode, e.KeyData, e.KeyValue);
+            //Debug.Print("Disassembly control: Down:  c:{0} d:{1} v:{2}", e.KeyCode, e.KeyData, e.KeyValue);
             switch (e.KeyCode)
             {
             case Keys.Down:
-                Model.MoveTo(Model.CurrentPosition, 1);
+                Model.MoveToLine(Model.CurrentPosition, 1);
                 break;
             case Keys.Up:
-                Model.MoveTo(Model.CurrentPosition, -1);
+                Model.MoveToLine(Model.CurrentPosition, -1);
                 break;
             default:
                 base.OnKeyDown(e);

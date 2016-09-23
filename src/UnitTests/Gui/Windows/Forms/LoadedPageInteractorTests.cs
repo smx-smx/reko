@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,16 +37,17 @@ using System.Windows.Forms;
 namespace Reko.UnitTests.Gui.Windows.Forms
 {
     [TestFixture]
+    [Category(Categories.UserInterface)]
     public class LoadedPageInteractorTests
     {
         private IMainForm form;
-        private Program prog;
+        private Program program;
         private LoadedPageInteractor interactor;
         private IDecompilerService decSvc;
         private ServiceContainer sc;
         private MockRepository mr;
-        private ImageMapSegment mapSegment1;
-        private ImageMapSegment mapSegment2;
+        private ImageSegment mapSegment1;
+        private ImageSegment mapSegment2;
         private IDecompilerShellUiService uiSvc;
         private ILowLevelViewService memSvc;
 
@@ -54,26 +55,31 @@ namespace Reko.UnitTests.Gui.Windows.Forms
         public void Setup()
         {
             mr = new MockRepository();
+            sc = new ServiceContainer();
 
             form = new MainForm();
 
-            prog = new Program();
-            prog.Architecture = new IntelArchitecture(ProcessorMode.Real);
-            prog.Image = new LoadedImage(Address.SegPtr(0xC00, 0), new byte[10000]);
-            prog.ImageMap = prog.Image.CreateImageMap();
+            var platform = mr.Stub<IPlatform>();
+            program = new Program();
+            program.Architecture = new X86ArchitectureReal();
+            program.Platform = platform;
+            var mem = new MemoryArea(Address.SegPtr(0xC00, 0), new byte[10000]);
+            program.SegmentMap = new SegmentMap(
+                mem.BaseAddress,
+                new ImageSegment("0C00", mem, AccessMode.ReadWriteExecute));
 
-            prog.ImageMap.AddSegment(Address.SegPtr(0x0C10, 0), "0C10", AccessMode.ReadWrite);
-            prog.ImageMap.AddSegment(Address.SegPtr(0x0C20, 0), "0C20", AccessMode.ReadWrite);
-            mapSegment1 = prog.ImageMap.Segments.Values[0];
-            mapSegment2 = prog.ImageMap.Segments.Values[1];
+            program.SegmentMap.AddSegment(Address.SegPtr(0x0C10, 0), "0C10", AccessMode.ReadWrite, 0);
+            program.SegmentMap.AddSegment(Address.SegPtr(0x0C20, 0), "0C20", AccessMode.ReadWrite, 0);
+            mapSegment1 = program.SegmentMap.Segments.Values[0];
+            mapSegment2 = program.SegmentMap.Segments.Values[1];
 
-            sc = new ServiceContainer();
             decSvc = new DecompilerService();
 
-            sc.AddService(typeof(IDecompilerService), decSvc);
-            sc.AddService(typeof(IWorkerDialogService), new FakeWorkerDialogService());
-            sc.AddService(typeof(DecompilerEventListener), new FakeDecompilerEventListener());
-            sc.AddService(typeof(IStatusBarService), new FakeStatusBarService());
+            sc.AddService<IDecompilerService>(decSvc);
+            sc.AddService<IWorkerDialogService>(new FakeWorkerDialogService());
+            sc.AddService<DecompilerEventListener>(new FakeDecompilerEventListener());
+            sc.AddService<IStatusBarService>(new FakeStatusBarService());
+            sc.AddService<DecompilerHost>(new FakeDecompilerHost());
             uiSvc = AddService<IDecompilerShellUiService>();
             memSvc = AddService<ILowLevelViewService>();
 
@@ -82,9 +88,9 @@ namespace Reko.UnitTests.Gui.Windows.Forms
             ldr.Stub(l => l.LoadExecutable(
                 Arg<string>.Is.NotNull,
                 Arg<byte[]>.Is.NotNull,
-                Arg<Address>.Is.Null)).Return(prog);
+                Arg<Address>.Is.Null)).Return(program);
             ldr.Replay();
-            decSvc.Decompiler = new DecompilerDriver(ldr, new FakeDecompilerHost(), sc);
+            decSvc.Decompiler = new DecompilerDriver(ldr, sc);
             decSvc.Decompiler.Load("test.exe");
 
             interactor = new LoadedPageInteractor(sc);
@@ -107,51 +113,24 @@ namespace Reko.UnitTests.Gui.Windows.Forms
         }
 
         [Test]
-        [Ignore]
         public void LpiPopulateBrowserWithScannedProcedures()
         {
+            var brSvc = AddService<IProjectBrowserService>();
+            brSvc.Expect(b => b.Reload());
+            mr.ReplayAll();
+
             // Instead write expectations for the two added items.
 
             AddProcedure(Address.SegPtr(0xC20, 0x0000), "Test1");
             AddProcedure(Address.SegPtr(0xC20, 0x0002), "Test2");
             interactor.EnterPage();
-            //Assert.AreEqual(3, form.BrowserList.Items.Count);
-            //Assert.AreEqual("0C20", form.BrowserList.Items[2].Text);
         }
 
         private void AddProcedure(Address addr, string procName)
         {
-            prog.Procedures.Add(addr,
-                new Procedure(procName, prog.Architecture.CreateFrame()));
+            program.Procedures.Add(addr,
+                new Procedure(procName, program.Architecture.CreateFrame()));
         }
-
-        [Test]
-        [Ignore("Move this to low-level? Or Decompiler?")]
-        public void LpiMarkingProceduresShouldAddToUserProceduresList()
-        {
-            var disSvc = AddService<IDisassemblyViewService>();
-            Assert.AreEqual(0, decSvc.Decompiler.Project.Programs[0].UserProcedures.Count);
-            var addr = Address.SegPtr(0x0C20, 0);
-            memSvc.Expect(s => s.GetSelectedAddressRange()).Return(new AddressRange(addr, addr));
-            memSvc.Expect(s => s.InvalidateWindow()).IgnoreArguments();
-            mr.ReplayAll();
-
-            //interactor.MarkAndScanProcedure(prog);
-
-            mr.VerifyAll();
-            //$REVIEW: Need to pass InputFile into the SelectedProcedureEntry piece.
-            var program = decSvc.Decompiler.Project.Programs[0];
-            Assert.AreEqual(1, program.UserProcedures.Count);
-            Procedure_v1 uproc = (Procedure_v1)program.UserProcedures.Values[0];
-            Assert.AreEqual("0C20:0000", uproc.Address);
-        }
-
-        [Test]
-        public void Lpi_QueryStatus()
-        {
-            Assert.AreEqual(MenuStatus.Enabled | MenuStatus.Visible, QueryStatus(CmdIds.ViewFindFragments));
-        }
-
 
         [Test]
         public void Lpi_SetBrowserCaptionWhenEnteringPage()
@@ -173,8 +152,10 @@ namespace Reko.UnitTests.Gui.Windows.Forms
             var decSvc = AddService<IDecompilerService>();
             var decompiler = mr.Stub<IDecompiler>();
             var prog = new Program();
-            prog.Image = new LoadedImage(Address.Ptr32(0x3000), new byte[10]);
-            prog.ImageMap = prog.Image.CreateImageMap();
+            var mem = new MemoryArea(Address.Ptr32(0x3000), new byte[10]);
+            prog.SegmentMap = new SegmentMap(
+                mem.BaseAddress,
+                new ImageSegment(".text", mem, AccessMode.ReadWriteExecute));
             var project = new Project { Programs = { prog } };
             decompiler.Stub(x => x.Project).Return(project);
             decSvc.Stub(x => x.Decompiler).Return(decompiler);

@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,7 +34,7 @@ namespace Reko.UnitTests.Core
 	{
 		private void EmitSignature(TypeLibrary lib, string fnName, System.IO.TextWriter tw)
 		{
-			lib.Lookup(fnName).Emit(fnName, ProcedureSignature.EmitFlags.ArgumentKind|ProcedureSignature.EmitFlags.LowLevelInfo, tw);
+			lib.Lookup(fnName).Emit(fnName, FunctionType.EmitFlags.ArgumentKind|FunctionType.EmitFlags.LowLevelInfo, tw);
 		}
 
         [Test]
@@ -50,9 +50,10 @@ namespace Reko.UnitTests.Core
                     }
                 }
             };
-            var arch = new IntelArchitecture(ProcessorMode.Protected32);
+            var arch = new X86ArchitectureFlat32();
             var platform = new SysVPlatform(null, arch);
-            var lib = TypeLibrary.Load(platform, slib);
+            var tldser = new TypeLibraryDeserializer(platform, true, new TypeLibrary());
+            var lib = tldser.Load(slib);
             Assert.AreEqual(PrimitiveType.Int32, lib.LookupType("int"));
         }
 	}

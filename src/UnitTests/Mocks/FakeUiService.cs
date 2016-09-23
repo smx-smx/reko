@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -138,7 +138,7 @@ namespace Reko.UnitTests.Mocks
             throw new NotImplementedException();
         }
 
-        public IWindowFrame CreateDocumentWindow(string documentType, string documentTitle, object docItem, IWindowPane pane)
+        public IWindowFrame CreateDocumentWindow(string documentType, object docItem, string documentTitle, IWindowPane pane)
         {
             throw new NotImplementedException();
         }

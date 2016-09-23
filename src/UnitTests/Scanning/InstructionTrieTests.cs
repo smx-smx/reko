@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -35,19 +35,12 @@ namespace Reko.UnitTests.Scanning
 		{
 		}
 
-		[Test]
-		public void Creation()
-		{
-			X86InstructionComparer cmp = new X86InstructionComparer(Normalize.Nothing);
-			var trie = new Trie<MachineInstruction>(cmp);
-		}
-
-		[Test]
+	    [Test]
 		public void Trie_AddInstructions()
 		{
             X86InstructionComparer cmp = new X86InstructionComparer(Normalize.Nothing);
             var trie = new Trie<MachineInstruction>(cmp);
-			IntelInstruction inst = CreatePush(Registers.bp);
+			X86Instruction inst = CreatePush(Registers.bp);
 			
 			trie.Add(new [] { inst });
 			Assert.AreEqual(trie.Count, 1);
@@ -65,7 +58,7 @@ namespace Reko.UnitTests.Scanning
 		public void Trie_ScoreInstructions()
 		{
 			X86InstructionComparer cmp = new X86InstructionComparer(Normalize.Nothing);
-			var trie = new Trie<IntelInstruction>(cmp);
+			var trie = new Trie<X86Instruction>(cmp);
 			trie.Add(new [] {
 				CreatePush(Registers.bp),
 				CreateMov(Registers.bp, Registers.sp) });
@@ -108,9 +101,9 @@ namespace Reko.UnitTests.Scanning
 			Assert.AreEqual(0, score);
 		}
 
-		private IntelInstruction CreateMov(IntelRegister regDst, IntelRegister regSrc)
+		private X86Instruction CreateMov(RegisterStorage regDst, RegisterStorage regSrc)
 		{
-            IntelInstruction inst = new IntelInstruction(
+            X86Instruction inst = new X86Instruction(
                 Opcode.mov,
                 PrimitiveType.Word16,
                 PrimitiveType.Word16,
@@ -119,9 +112,9 @@ namespace Reko.UnitTests.Scanning
 			return inst;
 		}
 
-		private IntelInstruction CreatePush(IntelRegister reg)
+		private X86Instruction CreatePush(RegisterStorage reg)
 		{
-            IntelInstruction inst = new IntelInstruction(
+            X86Instruction inst = new X86Instruction(
                 Opcode.push,
                 reg.DataType,
                 reg.DataType,

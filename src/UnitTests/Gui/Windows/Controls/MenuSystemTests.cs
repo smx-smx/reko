@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -123,8 +123,7 @@ namespace Reko.UnitTests.Gui.Windows.Controls
 			if (mpCmdIdToStatus.Contains(cmdId.ID))
 			{
 				status.Status = (MenuStatus) mpCmdIdToStatus[cmdId.ID];
-				Console.WriteLine("Testring cmd {0}: status {1}", cmdId.ID, status.Status);
-
+				//Console.WriteLine("Testing cmd {0}: status {1}", cmdId.ID, status.Status);
 				return true;
 			}
 			return false;

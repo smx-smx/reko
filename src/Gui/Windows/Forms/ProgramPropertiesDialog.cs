@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -50,7 +50,7 @@ namespace Reko.Gui.Windows.Forms
 
         public TextBox LoadScript { get { return txtScript; } }
         public CheckBox EnableScript { get { return chkRunScript; } }
-        public CheckBox HeuristicScanning { get { return chkHeuristicScanning; } }
+        public ListBox Heuristics { get { return listHeuristics; } }
         public Button OkButton { get { return btnOk; } }
     }
 }

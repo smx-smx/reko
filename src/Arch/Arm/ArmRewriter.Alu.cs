@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -40,7 +40,7 @@ namespace Reko.Arch.Arm
             ConditionalAssign(opDst, new BinaryExpression(op, PrimitiveType.Word32, opSrc1, opSrc2));
             if (setflags)
             {
-                ConditionalAssign(frame.EnsureFlagGroup(0x1111, "SZCO", PrimitiveType.Byte), emitter.Cond(opDst));
+                ConditionalAssign(frame.EnsureFlagGroup(A32Registers.cpsr, 0x1111, "SZCO", PrimitiveType.Byte), emitter.Cond(opDst));
             }
         }
 
@@ -53,7 +53,7 @@ namespace Reko.Arch.Arm
             ConditionalAssign(opDst, new BinaryExpression(op, PrimitiveType.Word32, opSrc1, opSrc2));
             if (setflags)
             {
-                ConditionalAssign(frame.EnsureFlagGroup(0x1111, "SZCO", PrimitiveType.Byte), emitter.Cond(opDst));
+                ConditionalAssign(frame.EnsureFlagGroup(A32Registers.cpsr, 0x1111, "SZCO", PrimitiveType.Byte), emitter.Cond(opDst));
             }
         }
 
@@ -64,7 +64,7 @@ namespace Reko.Arch.Arm
             ConditionalAssign(opDst, new UnaryExpression(op,  PrimitiveType.Word32, opSrc));
             if (instr.ArchitectureDetail.UpdateFlags)
             {
-                ConditionalAssign(frame.EnsureFlagGroup(0x1111, "SZCO", PrimitiveType.Byte), emitter.Cond(opDst));
+                ConditionalAssign(frame.EnsureFlagGroup(A32Registers.cpsr, 0x1111, "SZCO", PrimitiveType.Byte), emitter.Cond(opDst));
             }
         }
 
@@ -81,7 +81,7 @@ namespace Reko.Arch.Arm
             var opDst = this.Operand(Dst);
             var opSrc = this.Operand(Src1);
             ConditionalAssign(
-                frame.EnsureFlagGroup(0x1111, "SZCO", PrimitiveType.Byte),
+                frame.EnsureFlagGroup(A32Registers.cpsr, 0x1111, "NZCV", PrimitiveType.Byte),
                 emitter.Cond(
                     emitter.IAdd(opDst, opSrc)));
         }
@@ -91,7 +91,7 @@ namespace Reko.Arch.Arm
             var opDst = this.Operand(Dst);
             var opSrc = this.Operand(Src1);
             ConditionalAssign(
-                frame.EnsureFlagGroup(0x1111, "SZCO", PrimitiveType.Byte),
+                frame.EnsureFlagGroup(A32Registers.cpsr, 0x1111, "NZCV", PrimitiveType.Byte),
                 emitter.Cond(
                     emitter.ISub(opDst, opSrc)));
         }
@@ -101,7 +101,7 @@ namespace Reko.Arch.Arm
             var opDst = this.Operand(Dst);
             var opSrc = this.Operand(Src1);
             emitter.Assign(
-                frame.EnsureFlagGroup(0x1111, "NZCV", PrimitiveType.Byte),
+                frame.EnsureFlagGroup(A32Registers.cpsr, 0x1111, "NZCV", PrimitiveType.Byte),
                 emitter.Cond(emitter.Xor(opDst, opSrc)));
         }
 
@@ -110,7 +110,7 @@ namespace Reko.Arch.Arm
             var opDst = this.Operand(Dst);
             var opSrc = this.Operand(Src1);
             emitter.Assign(
-                frame.EnsureFlagGroup(0x1111, "NZCV", PrimitiveType.Byte),
+                frame.EnsureFlagGroup(A32Registers.cpsr, 0x1111, "NZCV", PrimitiveType.Byte),
                 emitter.Cond(emitter.And(opDst, opSrc)));
         }
 
@@ -123,6 +123,7 @@ namespace Reko.Arch.Arm
             if (rDst == A32Registers.pc)
             {
                 // Assignment to PC is the same as a jump
+                ric.Class = RtlClass.Transfer;
                 emitter.Goto(opSrc);
                 return;
             }
@@ -142,6 +143,7 @@ namespace Reko.Arch.Arm
         {
             if (Dst.Type == ArmInstructionOperandType.Register && Dst.RegisterValue.Value == ArmRegister.PC)
             {
+                ric.Class = RtlClass.Transfer;
                 if (Src1.Type == ArmInstructionOperandType.Register && Src1.RegisterValue.Value == ArmRegister.LR)
                 {
                     AddConditional(new RtlReturn(0, 0, RtlClass.Transfer));
@@ -185,6 +187,22 @@ namespace Reko.Arch.Arm
             if (pcRestored)
                 emitter.Return(0, 0);
 #endif
+        }
+
+        private void RewritePush()
+        {
+            int offset = 0;
+            var dst = frame.EnsureRegister(A32Registers.sp);
+            foreach (var op in instr.ArchitectureDetail.Operands)
+            {
+                Expression ea = offset != 0
+                    ? emitter.ISub(dst, offset)
+                    : (Expression)dst;
+                var reg = frame.EnsureRegister(A32Registers.RegisterByCapstoneID[op.RegisterValue.Value]);
+                emitter.Assign(emitter.LoadDw(ea), reg);
+                offset += reg.DataType.Size;
+            }
+            emitter.Assign(dst, emitter.ISub(dst, offset));
         }
 
         private void RewriteStm()

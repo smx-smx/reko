@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  .
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -412,7 +412,6 @@ namespace Reko.Scanning
             /// <returns>First occurrence of any keyword (or StringSearchResult.Empty if text doesn't contain any keyword)</returns>
             public StringSearchResult<TSymbol> FindFirst(TSymbol[] text)
             {
-                ArrayList ret = new ArrayList();
                 TreeNode ptr = _root;
                 int index = 0;
 

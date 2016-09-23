@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -41,7 +41,7 @@ namespace Reko.UnitTests.Analysis
     public class TrashRegisterFinderUpdateCodeTests
     {
         private ProgramBuilder p;
-        private Program prog;
+        private Program program;
         private ProgramDataFlow flow;
         private IntelArchitecture arch;
         private TrashedRegisterFinder trf;
@@ -49,17 +49,24 @@ namespace Reko.UnitTests.Analysis
         [SetUp]
         public void Setup()
         {
-            arch = new IntelArchitecture(ProcessorMode.Protected32);
+            arch = new X86ArchitectureFlat32();
             p = new ProgramBuilder();
         }
 
         private void RunTest(string sExp)
         {
             var sw = new StringWriter();
-            prog = p.BuildProgram(arch);
-            RunTest(prog, sw);
-            Console.WriteLine(sw);
-            Assert.AreEqual(sExp, sw.ToString());
+            program = p.BuildProgram(arch);
+            RunTest(program, sw);
+            try
+            {
+                Assert.AreEqual(sExp, sw.ToString());
+            }
+            catch
+            {
+                Console.WriteLine(sw);
+                throw;
+            }
         }
 
         private void RunTest(Program prog, TextWriter writer)
@@ -307,7 +314,7 @@ l1:
 	dwLoc08 = 0x00000037
 	esp = fp - 0x0000000C
 	dwLoc0C = 0x0000002D
-	eax = add(dwLoc0C, dwLoc08)
+	eax = add(0x0000002D, 0x00000037)
 	esp = fp - 0x00000004
 	ebp = dwLoc04
 	esp = fp
@@ -329,8 +336,8 @@ main_exit:
                 var edx = m.Frame.EnsureRegister(Registers.edx);
                 var ebx = m.Frame.EnsureRegister(Registers.ebx);
                 var ecx = m.Frame.EnsureRegister(Registers.ecx);
-                var SCZO = m.Frame.EnsureFlagGroup((uint) (FlagM.ZF | FlagM.CF | FlagM.SF | FlagM.OF), "SCZO", PrimitiveType.Byte);
-                var C = m.Frame.EnsureFlagGroup((uint) (FlagM.CF), "SCZO", PrimitiveType.Bool);
+                var SCZO = m.Frame.EnsureFlagGroup(Registers.eflags, (uint) (FlagM.ZF | FlagM.CF | FlagM.SF | FlagM.OF), "SCZO", PrimitiveType.Byte);
+                var C = m.Frame.EnsureFlagGroup(Registers.eflags, (uint) (FlagM.CF), "SCZO", PrimitiveType.Bool);
 
                 m.Assign(eax, m.IAdd(eax, ecx));
                 m.Assign(SCZO, m.Cond(eax));

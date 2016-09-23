@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,7 +27,8 @@ namespace Reko.Core.Assemblers
 	public interface Assembler
 	{
         Address StartAddress { get; }
-        ICollection<EntryPoint> EntryPoints { get; }
+        ICollection<ImageSymbol> EntryPoints { get; }
+        ICollection<ImageSymbol> ImageSymbols { get; }
         Dictionary<Address, ImportReference> ImportReferences { get; }
 
         Program Assemble(Address baseAddress, TextReader reader);

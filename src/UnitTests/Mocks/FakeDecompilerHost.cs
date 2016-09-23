@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,10 +20,12 @@
 
 using Reko.Core;
 using Reko.Core.Configuration;
+using Reko.Core.Output;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Threading;
 
 namespace Reko.UnitTests.Mocks
 {
@@ -36,6 +38,10 @@ namespace Reko.UnitTests.Mocks
         private StringWriter globalsWriter = new StringWriter();
         private IConfigurationService config = new FakeDecompilerConfiguration();
 
+        public FakeDecompilerHost()
+        {
+        }
+
         public TextWriter CreateDecompiledCodeWriter(string file)
         {
             return decompiled;
@@ -46,9 +52,9 @@ namespace Reko.UnitTests.Mocks
             get { return config; }
         }
 
-        public void WriteDisassembly(Program program, Action<TextWriter> writer)
+        public void WriteDisassembly(Program program, Action<Formatter> writer)
         {
-            writer(disassembly);
+            writer(new TextFormatter(disassembly));
         }
 
         public void WriteIntermediateCode(Program program, Action<TextWriter> writer)
@@ -87,5 +93,6 @@ namespace Reko.UnitTests.Mocks
         {
             get { return globalsWriter; }
         }
+
     }
 }

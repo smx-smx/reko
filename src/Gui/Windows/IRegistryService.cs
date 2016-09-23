@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  .
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -36,6 +36,7 @@ namespace Reko.Gui.Windows
 
     public interface IRegistryKey : IDisposable
     {
+        void DeleteValue(string name);
         object GetValue(string name, object defaultValue);
         IRegistryKey OpenSubKey(string keyName, bool writeable);
         void SetValue(string name, object value);

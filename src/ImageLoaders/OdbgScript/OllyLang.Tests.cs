@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,7 +37,8 @@ namespace Reko.ImageLoaders.OdbgScript
         private MockRepository mr;
         private IHost host;
         private OllyLang engine;
-        private LoadedImage image;
+        private MemoryArea mem;
+        private SegmentMap imageMap;
 
         [SetUp]
         public void Setup()
@@ -66,22 +67,25 @@ namespace Reko.ImageLoaders.OdbgScript
         private void Given_Engine()
         {
             this.host = mr.Stub<IHost>();
-            engine = new OllyLang();
+            engine = new OllyLang(null);
             engine.Host = host;
             engine.Debugger = new Debugger(null);
         }
 
         private void Given_Image(uint addr, params byte[] bytes)
         {
-            image = new LoadedImage(Address.Ptr32(addr), bytes);
-            host.Stub(h => h.Image).Return(image);
+            mem = new MemoryArea(Address.Ptr32(addr), bytes);
+            imageMap = new SegmentMap(
+                mem.BaseAddress,
+                new ImageSegment(".text", mem, AccessMode.ReadExecute));
+            host.Stub(h => h.SegmentMap).Return(imageMap);
             host.Stub(h => h.TE_GetMemoryInfo(
                 Arg<ulong>.Is.Anything,
                 out Arg<MEMORY_BASIC_INFORMATION>.Out(new MEMORY_BASIC_INFORMATION
                 {
-                    BaseAddress = image.BaseAddress.ToLinear(),
-                    RegionSize = (uint)image.Length,
-                    AllocationBase = image.BaseAddress.ToLinear()
+                    BaseAddress = mem.BaseAddress.ToLinear(),
+                    RegionSize = (uint)mem.Length,
+                    AllocationBase = mem.BaseAddress.ToLinear()
                 }).Dummy)).Return(true);
         }
 
@@ -124,7 +128,7 @@ namespace Reko.ImageLoaders.OdbgScript
                 Arg<int>.Is.Equal(3),
                 Arg<byte[]>.Is.NotNull)).Do(new Func<ulong,int,byte[],bool>((a, l, b) =>
             {
-                LoadedImage.WriteBytes(b, a - image.BaseAddress.ToLinear(), l,image.Bytes);
+                MemoryArea.WriteBytes(b, (long)a - (long)mem.BaseAddress.ToLinear(), l,mem.Bytes);
                 return true;
             }));
 
@@ -139,7 +143,7 @@ namespace Reko.ImageLoaders.OdbgScript
 
             engine.Run();
 
-            Assert.AreEqual("***---#", Encoding.ASCII.GetString(image.Bytes));
+            Assert.AreEqual("***---#", Encoding.ASCII.GetString(mem.Bytes));
         }
         
         [Test]

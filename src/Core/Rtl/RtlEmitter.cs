@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -110,6 +110,12 @@ namespace Reko.Core.Rtl
             return this;
         }
 
+        public RtlEmitter Goto(Expression target, RtlClass rtlClass)
+        {
+            instrs.Add(new RtlGoto(target, rtlClass));
+            return this;
+        }
+
         /// <summary>
         /// Delayed goto (for RISC architectures with delay slots)
         /// </summary>
@@ -118,6 +124,18 @@ namespace Reko.Core.Rtl
         public RtlEmitter GotoD(Expression target)
         {
             instrs.Add(new RtlGoto(target, RtlClass.Transfer|RtlClass.Delay));
+            return this;
+        }
+
+        public RtlEmitter Invalid()
+        {
+            instrs.Add(new RtlInvalid());
+            return this;
+        }
+
+        public RtlEmitter Nop()
+        {
+            instrs.Add(new RtlNop { Class = RtlClass.Linear });
             return this;
         }
 
@@ -147,7 +165,9 @@ namespace Reko.Core.Rtl
 
         public RtlEmitter SideEffect(Expression sideEffect)
         {
-            instrs.Add(new RtlSideEffect(sideEffect));
+            var se = new RtlSideEffect(sideEffect);
+            se.Class = RtlClass.Linear;
+            instrs.Add(se);
             return this;
         }
 

@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,7 +30,9 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using ProcedureCharacteristics  = Reko.Core.Serialization.ProcedureCharacteristics;
+using ProcedureCharacteristics = Reko.Core.Serialization.ProcedureCharacteristics;
+using Reko.Analysis;
+using Reko.Core.Services;
 
 namespace Reko.Scanning
 {
@@ -38,7 +40,8 @@ namespace Reko.Scanning
     /// Scanner work item for processing a basic block.
     /// </summary>
     /// <remarks>
-    /// The block work item will disassemble and rewrite instructions linearly until it reaches:
+    /// The block work item will disassemble and rewrite instructions linearly
+    /// until it reaches:
     /// <list type="">
     /// <item>An condition or unconditional branch</item>
     /// <item>A call to a procedure that is known to terminate.</item>
@@ -58,12 +61,13 @@ namespace Reko.Scanning
         private ExpressionSimplifier eval;
         private int extraLabels;
         private Identifier stackReg;
+        private VarargsFormatScanner vaScanner;
 
         public BlockWorkitem(
             IScanner scanner,
             Program program,
             ProcessorState state,
-            Address addr)
+            Address addr) : base(addr)
         {
             this.scanner = scanner;
             this.program = program;
@@ -83,53 +87,63 @@ namespace Reko.Scanning
         /// </summary>
         public override void Process()
         {
-            try
-            {
-                ProcessInternal();
-            }
-            catch (AddressCorrelatedException aex)
-            {
-                scanner.Error(aex.Address, aex.Message);
-            }
-            catch (Exception ex)
-            {
-                if (ric == null)
-                    throw;
-                scanner.Error(ric.Address, ex.Message);
-            }
-        }
-
-        public void ProcessInternal()
-        {
             state.ErrorListener = (message) => { scanner.Warn(ric.Address, message); };
             blockCur = scanner.FindContainingBlock(addrStart);
             if (BlockHasBeenScanned(blockCur))
                 return;
+
             frame = blockCur.Procedure.Frame;
             this.stackReg = frame.EnsureRegister(arch.StackRegister);
+            this.vaScanner = new VarargsFormatScanner(program, frame, state, scanner.Services);
             rtlStream = scanner.GetTrace(addrStart, state, frame)
                 .GetEnumerator();
 
             while (rtlStream.MoveNext())
             {
-                ric = rtlStream.Current;
+                this.ric = rtlStream.Current;
                 if (blockCur != scanner.FindContainingBlock(ric.Address))
+                    break;  // Fell off the end of this block.
+                if (!ProcessRtlCluster(ric))
                     break;
-                state.SetInstructionPointer(ric.Address);
-                foreach (var rtlInstr in ric.Instructions)
-                {
-                    ri = rtlInstr;
-                    if (!ri.Accept(this))
-                    {
-                        return;
-                    }
-                }
                 var blNext = FallenThroughNextBlock(ric.Address + ric.Length);
                 if (blNext != null)
                 {
                     EnsureEdge(blockCur.Procedure, blockCur, blNext);
                     return;
                 }
+            }
+        }
+
+        private bool ProcessRtlCluster(RtlInstructionCluster ric)
+        {
+            state.SetInstructionPointer(ric.Address);
+            SetAssumedRegisterValues(ric.Address);
+            foreach (var rtlInstr in ric.Instructions)
+            {
+                ri = rtlInstr;
+                if (!ri.Accept(this))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// If a user has requested register values to be hard wired at a
+        /// particular address, do so by emitting assignments that set
+        /// the relevant registers to the right values.
+        /// </summary>
+        /// <param name="addr"></param>
+        public void SetAssumedRegisterValues(Address addr)
+        {
+            List<UserRegisterValue> regValues;
+            if (!program.User.RegisterValues.TryGetValue(addr, out regValues))
+                return;
+            foreach (var rv in regValues)
+            {
+                var reg = frame.EnsureRegister(rv.Register);
+                new RtlAssignment(reg, rv.Value).Accept(this);
             }
         }
 
@@ -153,13 +167,13 @@ namespace Reko.Scanning
             return block.Statements.Count > 0;
         }
 
-        private Instruction BuildApplication(Expression fn, ProcedureSignature sig, CallSite site)
+        private Instruction BuildApplication(Expression fn, FunctionType sig, CallSite site)
         {
             var ab = CreateApplicationBuilder(fn, sig, site);
             return ab.CreateInstruction();
         }
 
-        private ApplicationBuilder CreateApplicationBuilder(Expression callee, ProcedureSignature sig, CallSite site)
+        private ApplicationBuilder CreateApplicationBuilder(Expression callee, FunctionType sig, CallSite site)
         {
             var ab = new ApplicationBuilder(
                 arch,
@@ -176,7 +190,7 @@ namespace Reko.Scanning
             return op.Accept<Expression>(eval);
         }
 
-        public void SetValue(Expression dst, Expression  value)
+        public void SetValue(Expression dst, Expression value)
         {
             var id = dst as Identifier;
             if (id != null)
@@ -226,19 +240,64 @@ namespace Reko.Scanning
             // We don't know the 'then' block yet, as the following statements may chop up the block
             // we're presently in. Back-patch in when the block target is obtained.
             var branch = new Branch(b.Condition, new Block(blockCur.Procedure, "TMP!"));
-            Emit(branch);
+            Emit(branch, blockCur);
 
             // The following statements may chop up the blockCur, so hang on to the essentials.
             var proc = blockCur.Procedure;
+            RtlInstructionCluster ricDelayed = null;
+            if ((b.Class & RtlClass.Delay) != 0)
+            {
+                rtlStream.MoveNext();
+                ricDelayed = rtlStream.Current;
+                ric = ricDelayed;
+            }
             var fallthruAddress = ric.Address + ric.Length;
 
             var blockThen = BlockFromAddress(ric.Address, b.Target, proc, state.Clone());
 
             var blockElse = FallthroughBlock(ric.Address, proc, fallthruAddress);
-            var branchingBlock = scanner.FindContainingBlock(ric.Address);
-            branch.Target = blockThen;      // The back-patch referred to above.
-            EnsureEdge(proc, branchingBlock, blockElse);
-            EnsureEdge(proc, branchingBlock, blockThen);
+            var branchingBlock = blockCur.IsSynthesized
+                ? blockCur
+                : scanner.FindContainingBlock(ric.Address);
+
+            if ((b.Class & RtlClass.Delay) != 0 &&
+                ricDelayed.Instructions.Count > 0)
+            {
+                // Introduce stubs for the delay slot, but only
+                // if the delay slot isn't empty.
+
+                if ((b.Class & RtlClass.Annul) != 0)
+                {
+                    EnsureEdge(proc, branchingBlock, blockElse);
+                }
+                else
+                {
+                    Block blockDsF = null;
+                    blockDsF = proc.AddBlock(branchingBlock.Name + "_ds_f");
+                    blockDsF.IsSynthesized = true;
+                    blockCur = blockDsF;
+                    ProcessRtlCluster(ricDelayed);
+                    EnsureEdge(proc, blockDsF, blockElse);
+                    EnsureEdge(proc, branchingBlock, blockDsF);
+                }
+
+                Block blockDsT = proc.AddBlock(branchingBlock.Name + "_ds_t");
+                blockDsT.IsSynthesized = true;
+                blockCur = blockDsT;
+                ProcessRtlCluster(ricDelayed);
+                EnsureEdge(proc, blockDsT, blockThen);
+                branch.Target = blockDsT;
+                EnsureEdge(proc, branchingBlock, blockDsT);
+            }
+            else
+            {
+                branch.Target = blockThen;      // The back-patch referred to above.
+                EnsureEdge(proc, branchingBlock, blockElse);
+                if (blockElse != blockThen)
+                    EnsureEdge(proc, branchingBlock, blockThen);
+                else
+                    proc.ControlGraph.AddEdge(branchingBlock, blockThen);
+            }
 
             // Now, switch to the fallthru block and keep rewriting.
             blockCur = blockElse;
@@ -274,6 +333,21 @@ namespace Reko.Scanning
             return true;
         }
 
+        /// <summary>
+        /// Encountering invalid instructions is unexpected.
+        /// </summary>
+        /// <param name="invalid"></param>
+        /// <returns></returns>
+        public bool VisitInvalid(RtlInvalid invalid)
+        {
+            return false;
+        }
+
+        public bool VisitNop(RtlNop nop)
+        {
+            return true;
+        }
+       
         private Block BlockFromAddress(Address addrSrc, Address addrDst, Procedure proc, ProcessorState state)
         {
             return scanner.EnqueueJumpTarget(addrSrc, addrDst, proc, state);
@@ -293,22 +367,37 @@ namespace Reko.Scanning
         /// <returns></returns>
         public bool VisitGoto(RtlGoto g)
         {
-            scanner.TerminateBlock(blockCur, ric.Address + ric.Length);
+            var blockFrom = blockCur;
+            if ((g.Class & RtlClass.Delay) != 0)
+            {
+                // Get next instruction cluster.
+                rtlStream.MoveNext();
+                ProcessRtlCluster(rtlStream.Current);
+            }
+            scanner.TerminateBlock(blockCur, rtlStream.Current.Address + ric.Length);
             var addrTarget = g.Target as Address;
             if (addrTarget != null)
             {
                 var blockTarget = BlockFromAddress(ric.Address, addrTarget, blockCur.Procedure, state);
-                var blockSource = scanner.FindContainingBlock(ric.Address);
+                var blockSource = blockCur.IsSynthesized
+                    ? blockCur
+                    : scanner.FindContainingBlock(ric.Address);
                 EnsureEdge(blockSource.Procedure, blockSource, blockTarget);
+                if (ric.Address == addrTarget)
+                {
+                    var bt = BlockFromAddress(ric.Address, addrTarget, blockCur.Procedure, state);
+                    EnsureEdge(blockSource.Procedure, blockFrom, bt);
+                }
                 return false;
             }
+            CallSite site;
             var mem = g.Target as MemoryAccess;
             if (mem != null)
             {
                 if (mem.EffectiveAddress is Constant)
                 {
                     // jmp [address]
-                    var site = state.OnBeforeCall(this.stackReg, 4);            //$BUGBUG: hard coded.
+                    site = state.OnBeforeCall(this.stackReg, 4);            //$BUGBUG: hard coded.
                     Emit(new CallInstruction(g.Target, site));
                     Emit(new ReturnInstruction());
                     blockCur.Procedure.ControlGraph.AddEdge(blockCur, blockCur.Procedure.ExitBlock);
@@ -317,7 +406,10 @@ namespace Reko.Scanning
             }
             if (ProcessIndirectControlTransfer(ric.Address, g))
                 return false;
-            Emit(new GotoInstruction(g.Target));
+            site = state.OnBeforeCall(this.stackReg, 4);    //$BUGBUG: hard coded
+            Emit(new CallInstruction(g.Target, site));
+            Emit(new ReturnInstruction());
+            blockCur.Procedure.ControlGraph.AddEdge(blockCur, blockCur.Procedure.ExitBlock);
             return false;
         }
 
@@ -328,71 +420,61 @@ namespace Reko.Scanning
 
         public bool VisitCall(RtlCall call)
         {
-            var site = state.OnBeforeCall(stackReg, call.ReturnAddressSize);
-            ProcedureSignature sig;
+            if ((call.Class & RtlClass.Delay) != 0)
+            {
+                // Get delay slot instruction cluster.
+                rtlStream.MoveNext();
+                ProcessRtlCluster(rtlStream.Current);
+            }
+            var site = OnBeforeCall(stackReg, call.ReturnAddressSize);
+            FunctionType sig;
+            ProcedureCharacteristics chr = null;
             Address addr = call.Target as Address;
             if (addr != null)
             {
+                if (!program.SegmentMap.IsValidAddress(addr))
+                {
+                    scanner.Warn(ric.Address, "Target address {0} is invalid.", addr);
+                    sig = new FunctionType();
+                    EmitCall(
+                        CreateProcedureConstant(
+                            new ExternalProcedure(Procedure.GenerateName(addr), sig)),
+                        sig,
+                        chr,
+                        site);
+                    return OnAfterCall(sig, chr);
+                }
+
                 var impProc = scanner.GetImportedProcedure(addr, this.ric.Address);
                 if (impProc != null && impProc.Characteristics.IsAlloca)
                     return ProcessAlloca(site, impProc);
 
                 var callee = scanner.ScanProcedure(addr, null, state);
                 var pcCallee = CreateProcedureConstant(callee);
-                sig = callee.Signature; 
-                if (sig != null && sig.ParametersValid)
-                {
-                    Emit(BuildApplication(pcCallee, sig, site));
-                }
-                else 
-                {
-                    Emit(new CallInstruction(pcCallee, site));
-                }
+                sig = callee.Signature;
+                chr = callee.Characteristics;
+                EmitCall(pcCallee, sig, chr, site);
                 var pCallee = callee as Procedure;
                 if (pCallee != null)
                 {
                     program.CallGraph.AddEdge(blockCur.Statements.Last, pCallee);
                 }
-                return OnAfterCall(sig, callee.Characteristics);
+                return OnAfterCall(sig, chr);
             }
 
             var procCallee = call.Target as ProcedureConstant;
             if (procCallee != null)
             {
-                var ppp = procCallee.Procedure as PseudoProcedure;
-                if (ppp != null)
-                {
-                    sig = ppp.Signature;
-                    if (sig != null && sig.ParametersValid)
-                    {
-                        Emit(BuildApplication(procCallee, sig, site));
-                    }
-                    else
-                    {
-                        Emit(new CallInstruction(procCallee, site));
-                    }
-                    return OnAfterCall(ppp.Signature, ppp.Characteristics);
-                } 
-                var ep = procCallee.Procedure as ExternalProcedure;
-                if (ep != null)
-                {
-                    sig = ep.Signature;
-                    if (sig != null && sig.ParametersValid)
-                    {
-                        Emit(BuildApplication(procCallee, sig, site));
-                    }
-                    else
-                    {
-                        Emit(new CallInstruction(procCallee, site));
-                    }
-                    return OnAfterCall(ep.Signature, ep.Characteristics);
-                }
+                sig = procCallee.Procedure.Signature;
+                chr = procCallee.Procedure.Characteristics;
+                EmitCall(procCallee, sig, chr, site);
+                return OnAfterCall(sig, chr);
             }
             sig = scanner.GetCallSignatureAtAddress(ric.Address);
             if (sig != null)
             {
-                Emit(BuildApplication(call.Target, sig, site));
-                return OnAfterCall(sig, null);  //$TODO: make characteristics available
+                EmitCall(call.Target, sig, chr, site);
+                return OnAfterCall(sig, chr);  //$TODO: make characteristics available
             }
 
             Identifier id; 
@@ -402,21 +484,21 @@ namespace Reko.Scanning
                 if (ppp != null)
                 {
                     var e = CreateProcedureConstant(ppp);
-                    if (ppp.Signature != null && ppp.Signature.ParametersValid)
-                    {
-                        Emit(BuildApplication(e, ppp.Signature, site));
-                    }
-                    else
-                        Emit(new CallInstruction(e, site));
-                    return OnAfterCall(ppp.Signature, ppp.Characteristics);
+                    sig = ppp.Signature;
+                    chr = ppp.Characteristics;
+                    EmitCall(e, sig, chr, site);
+                    return OnAfterCall(sig, chr);
                 }
             }
 
             var imp = ImportedProcedureName(call.Target);
             if (imp != null)
             {
-                Emit(BuildApplication(CreateProcedureConstant(imp), imp.Signature, site));
-                return OnAfterCall(imp.Signature, imp.Characteristics);
+                sig = imp.Signature;
+                chr = imp.Characteristics;
+                EmitCall(CreateProcedureConstant(imp), sig, chr, site);
+                //Emit(BuildApplication(CreateProcedureConstant(imp), sig, site));
+                return OnAfterCall(sig, chr);
             }
 
             var syscall = program.Platform.FindService(call, state);
@@ -430,32 +512,106 @@ namespace Reko.Scanning
             var ic = new CallInstruction(call.Target, site);
             Emit(ic);
             sig = GuessProcedureSignature(ic);
-            return OnAfterCall(sig, null);
+            return OnAfterCall(sig, chr);
         }
 
-        private bool OnAfterCall(ProcedureSignature sigCallee, ProcedureCharacteristics characteristics)
+        private void EmitCall(
+            Expression callee,
+            FunctionType sig,
+            ProcedureCharacteristics chr,
+            CallSite site)
         {
-            if (sigCallee == null)
-                return true;
-            state.OnAfterCall(stackReg, sigCallee, eval);
-            if (characteristics != null && characteristics.Terminates)
+            if (vaScanner.TryScan(ric.Address, sig, chr))
+            {
+                Emit(vaScanner.BuildInstruction(callee, site));
+            }
+            else if (sig != null && sig.ParametersValid)
+            {
+                Emit(BuildApplication(callee, sig, site));
+            }
+            else
+            {
+                Emit(new CallInstruction(callee, site));
+            }
+        }
+
+        private CallSite OnBeforeCall(Identifier stackReg, int sizeOfRetAddrOnStack)
+        {
+            if (sizeOfRetAddrOnStack > 0)
+            {
+                //$BUG: stack grows negative here; some stacks might grow
+                // positive?
+                Expression newVal = new BinaryExpression(
+                        Operator.ISub,
+                        stackReg.DataType,
+                        stackReg,
+                        Constant.Create(
+                            PrimitiveType.CreateWord(sizeOfRetAddrOnStack),
+                            sizeOfRetAddrOnStack));
+                newVal = newVal.Accept(eval);
+                SetValue(stackReg, newVal);
+            }
+            return state.OnBeforeCall(stackReg, sizeOfRetAddrOnStack);
+        }
+
+        private bool OnAfterCall(FunctionType sigCallee, ProcedureCharacteristics characteristics)
+        {
+            UserCallData userCall = null;
+            if (program.User.Calls.TryGetUpperBound(ric.Address, out userCall))
+            {
+                var linStart = ric.Address.ToLinear();
+                var linEnd = linStart + ric.Length;
+                var linUserCall = userCall.Address.ToLinear();
+                if (linStart > linUserCall || linUserCall >= linEnd)
+                    userCall = null;
+            }
+            if ((characteristics != null && characteristics.Terminates) ||
+                (userCall != null && userCall.NoReturn))
             {
                 scanner.TerminateBlock(blockCur, ric.Address + ric.Length);
                 return false;
             }
-            int delta = sigCallee.StackDelta - sigCallee.ReturnAddressOnStack;
-            if (delta != 0)
+
+            if (sigCallee != null)
             {
-                var d = Constant.Create(stackReg.DataType, delta);
-                this.Emit(new Assignment(
-                    stackReg,
-                    new BinaryExpression(Operator.IAdd, stackReg.DataType, stackReg, d)));
+                if (sigCallee.StackDelta != 0)
+                {
+                    Expression newVal = new BinaryExpression(
+                            Operator.IAdd,
+                            stackReg.DataType,
+                            stackReg,
+                            Constant.Create(
+                                PrimitiveType.CreateWord(stackReg.DataType.Size),
+                                sigCallee.StackDelta));
+                    newVal = newVal.Accept(eval);
+                    SetValue(stackReg, newVal);
+                }
+            }
+            state.OnAfterCall(sigCallee);
+
+            // Adjust stack after call
+            if (sigCallee != null)
+            {
+                int delta = sigCallee.StackDelta - sigCallee.ReturnAddressOnStack;
+                if (delta != 0)
+                {
+                    var d = Constant.Create(stackReg.DataType, delta);
+                    this.Emit(new Assignment(
+                        stackReg,
+                        new BinaryExpression(Operator.IAdd, stackReg.DataType, stackReg, d)));
+                }
             }
             return true;
         }
 
         public bool VisitReturn(RtlReturn ret)
         {
+            if ((ret.Class & RtlClass.Delay) != 0)
+            {
+                // Get next instruction cluster from the delay slot.
+                rtlStream.MoveNext();
+                ProcessRtlCluster(rtlStream.Current);
+            }
             var proc = blockCur.Procedure;
             Emit(new ReturnInstruction());
             proc.ControlGraph.AddEdge(blockCur, proc.ExitBlock);
@@ -478,7 +634,7 @@ namespace Reko.Scanning
                 proc.Signature.StackDelta = stackDelta;
             }
             state.OnProcedureLeft(proc.Signature);
-            scanner.TerminateBlock(blockCur, ric.Address + ric.Length);
+            scanner.TerminateBlock(blockCur, rtlStream.Current.Address + ric.Length);
             return false;
         }
 
@@ -525,7 +681,7 @@ namespace Reko.Scanning
                 if (svc.Characteristics.Terminates)
                 {
                     scanner.TerminateBlock(blockCur, ric.Address + ric.Length);
-                    blockCur.Procedure.ControlGraph.AddEdge(blockCur, blockCur.Procedure.ExitBlock);
+                    //blockCur.Procedure.ControlGraph.AddEdge(blockCur, blockCur.Procedure.ExitBlock);
                     return true;
                 }
                 AffectProcessorState(svc.Signature);
@@ -538,9 +694,9 @@ namespace Reko.Scanning
             return false;
         }
 
-        private ProcedureSignature GuessProcedureSignature(CallInstruction call)
+        private FunctionType GuessProcedureSignature(CallInstruction call)
         {
-            return new ProcedureSignature(); //$TODO: attempt to detect parameters of procedure?
+            return new FunctionType(); //$TODO: attempt to detect parameters of procedure?
             // This would have to be arch-dependent + platform-dependent as some arch pass
             // on stack, while others pass in registers, or a combination or both
             // ("thiscall" in x86 µsoft world).
@@ -569,45 +725,68 @@ namespace Reko.Scanning
             return true;
         }
 
-        #endregion
+#endregion
 
         public bool ProcessIndirectControlTransfer(Address addrSwitch, RtlTransfer xfer)
         {
-            var bw = new Backwalker(new BackwalkerHost(this), xfer, eval);
-            if (!bw.CanBackwalk())
+            List<Address> vector;
+            ImageMapVectorTable imgVector;
+            Expression swExp;
+            UserIndirectJump indJump;
+
+            var listener = scanner.Services.RequireService<DecompilerEventListener>();
+            if (program.User.IndirectJumps.TryGetValue(addrSwitch, out indJump))
             {
-                return false;
+                vector = indJump.Table.Addresses;
+                swExp = this.frame.EnsureIdentifier(indJump.IndexRegister);
+                imgVector = indJump.Table;
             }
-            var bwops = bw.BackWalk(blockCur);
-            if (bwops == null || bwops.Count == 0)
-                return false;     //$REVIEW: warn?
-            var idIndex = blockCur.Procedure.Frame.EnsureRegister(bw.Index);
-
-            VectorBuilder builder = new VectorBuilder(scanner, program, new DirectedGraphImpl<object>());
-            if (bw.VectorAddress == null)
-                return false;
-
-            List<Address> vector = builder.BuildAux(bw, addrSwitch, state);
-            if (vector.Count == 0)
+            else
             {
-                var addrNext = bw.VectorAddress + bw.Stride;
-                var rdr = scanner.CreateReader(bw.VectorAddress);
-                if (!rdr.IsValid)
+                var bw = new Backwalker(new BackwalkerHost(this), xfer, eval);
+                if (!bw.CanBackwalk())
                     return false;
-                // Can't determine the size of the table, but surely it has one entry?
-                var addrEntry = arch.ReadCodeAddress(bw.Stride, rdr, state);
-                if (this.program.Image.IsValidAddress(addrEntry))
-                {
-                    vector.Add(addrEntry);
-                    scanner.Warn(addrSwitch, "Can't determine size of jump vector; probing only one entry.");
-                }
-                else
-                {
-                    // Nope, not even that.
-                    scanner.Warn(addrSwitch, "No valid entries could be found in jump vector.");
-                }
-            }
+                var bwops = bw.BackWalk(blockCur);
+                if (bwops == null || bwops.Count == 0)
+                    return false;     //$REVIEW: warn?
+                Identifier idIndex = bw.Index != null
+                    ? blockCur.Procedure.Frame.EnsureRegister(bw.Index)
+                    : null;
 
+                VectorBuilder builder = new VectorBuilder(scanner.Services, program, new DirectedGraphImpl<object>());
+                if (bw.VectorAddress == null)
+                    return false;
+
+                vector = builder.BuildAux(bw, addrSwitch, state);
+                if (vector.Count == 0)
+                {
+                    var rdr = scanner.CreateReader(bw.VectorAddress);
+                    if (!rdr.IsValid)
+                        return false;
+                    // Can't determine the size of the table, but surely it has one entry?
+                    var addrEntry = arch.ReadCodeAddress(bw.Stride, rdr, state);
+                    string msg;
+                    if (this.program.SegmentMap.IsValidAddress(addrEntry))
+                    {
+                        vector.Add(addrEntry);
+                        msg = "Can't determine size of jump vector; probing only one entry.";
+                    }
+                    else
+                    {
+                        // Nope, not even that.
+                        msg = "No valid entries could be found in jump vector.";
+                    }
+                    var nav = listener.CreateJumpTableNavigator(program, addrSwitch, bw.VectorAddress, bw.Stride);
+                    listener.Warn(nav, msg);
+                }
+                imgVector = new ImageMapVectorTable(
+                    bw.VectorAddress,
+                    vector.ToArray(),
+                    builder.TableByteSize);
+                swExp = idIndex;
+                if (idIndex == null || idIndex.Name == "None")
+                    swExp = bw.IndexExpression;
+            }
             ScanVectorTargets(xfer, vector);
 
             if (xfer is RtlGoto)
@@ -620,20 +799,28 @@ namespace Reko.Scanning
                     Debug.Assert(dest != null, "The block at address " + addr + "should have been enqueued.");
                     blockSource.Procedure.ControlGraph.AddEdge(blockSource, dest);
                 }
-                Expression swExp = idIndex;
-                if (idIndex.Name == "None")
-                    swExp = bw.IndexExpression;
+              
                 if (swExp == null)
-                    throw new NotImplementedException();
-                Emit(new SwitchInstruction(swExp, blockCur.Procedure.ControlGraph.Successors(blockCur).ToArray()));
+                {
+                    scanner.Warn(addrSwitch, "Unable to determine index variable for indirect jump.");
+                    Emit(new ReturnInstruction());
+                    blockSource.Procedure.ControlGraph.AddEdge(
+                        blockSource, 
+                        blockSource.Procedure.ExitBlock);
+                }
+                else
+                {
+                    Emit(new SwitchInstruction(swExp, blockCur.Procedure.ControlGraph.Successors(blockCur).ToArray()));
+                }
             }
-            //vectorUses[wi.addrFrom] = new VectorUse(wi.Address, builder.IndexRegister);
-            program.ImageMap.AddItem(
-                bw.VectorAddress,
-                new ImageMapVectorTable(
-                    xfer is RtlCall,
-                    vector.ToArray(),
-                    builder.TableByteSize));
+            if (imgVector.Size > 0)
+            {
+                program.ImageMap.AddItemWithSize(imgVector.Address, imgVector);
+            }
+            else
+            {
+                program.ImageMap.AddItem(imgVector.Address, imgVector);
+            }
             return true;
         }
 
@@ -653,7 +840,7 @@ namespace Reko.Scanning
                 }
                 else
                 {
-                    if (!program.Image.IsValidAddress(addr))
+                    if (!program.SegmentMap.IsValidAddress(addr))
                         break;
                     BlockFromAddress(ric.Address, addr, blockCur.Procedure, state);
                 }
@@ -665,13 +852,19 @@ namespace Reko.Scanning
             blockCur.Statements.Add(ric.Address.ToLinear(), instruction);
         }
 
+        private void Emit(Instruction instruction, Block block)
+        {
+            block.Statements.Add(ric.Address.ToLinear(), instruction);
+        }
+
         private Block FallthroughBlock(Address addrSrc, Procedure proc, Address fallthruAddress)
         {
             if (ri.NextStatementRequiresLabel)
             {
-                // Some machine instructions, like the X86 'rep cmps' instruction, force the need to generate 
-                // a label where there wouldn't be one normally, in the middle of the rtl sequence corresponding to
-                // the machine instruction.
+                // Some machine instructions, like the X86 'rep cmps' 
+                // instruction, force the need to generate a label where
+                // there wouldn't be one normally, in the middle of the rtl
+                // sequence corresponding to the machine instruction.
                 return AddIntraStatementBlock(proc);
             }
             else
@@ -683,6 +876,7 @@ namespace Reko.Scanning
         private Block AddIntraStatementBlock(Procedure proc)
         {
             var fallthru = new Block(proc, ric.Address.GenerateName("l", string.Format("_{0}", ++extraLabels)));
+            fallthru.IsSynthesized = true;
             proc.ControlGraph.Blocks.Add(fallthru);
             return fallthru;
         }
@@ -736,6 +930,7 @@ namespace Reko.Scanning
             return null;
         }
 
+        [Conditional("DEBUG")]
         private void DumpCfg()
         {
             foreach (Block block in blockCur.Procedure.ControlGraph.Blocks)
@@ -778,31 +973,32 @@ namespace Reko.Scanning
         }
 
         //$TODO: merge the followng two procedures?
-        private void AffectProcessorState(ProcedureSignature sig)
+        private void AffectProcessorState(FunctionType sig)
         {
             if (sig == null)
                 return;
-            TrashVariable(sig.ReturnValue);
+            if (!sig.HasVoidReturn)
+                TrashVariable(sig.ReturnValue.Storage);
             for (int i = 0; i < sig.Parameters.Length; ++i)
             {
                 var os = sig.Parameters[i].Storage as OutArgumentStorage;
                 if (os != null)
                 {
-                    TrashVariable(os.OriginalIdentifier);
+                    TrashVariable(os.OriginalIdentifier.Storage);
                 }
             }
         }
 
-        public void TrashVariable(Identifier id)
+        public void TrashVariable(Storage id)
         {
             if (id == null)
                 return;
-            var reg = id.Storage as RegisterStorage;
+            var reg = id as RegisterStorage;
             if (reg != null)
             {
-                state.SetValue(id, Constant.Invalid);
+                state.SetValue(reg, Constant.Invalid);
             }
-            SequenceStorage seq = id.Storage as SequenceStorage;
+            SequenceStorage seq = id as SequenceStorage;
             if (seq != null)
             {
                 TrashVariable(seq.Head);
@@ -838,13 +1034,15 @@ namespace Reko.Scanning
         private class BackwalkerHost : IBackWalkHost
         {
             private IScanner scanner;
-            private LoadedImage image;
-            private Platform platform;
+            private SegmentMap segmentMap;
+            private IPlatform platform;
+            private IProcessorArchitecture arch;
 
             public BackwalkerHost(BlockWorkitem item)
             {
                 this.scanner = item.scanner;
-                this.image = item.program.Image;
+                this.segmentMap = item.program.SegmentMap;
+                this.arch = item.program.Architecture;
                 this.platform = item.program.Platform;
             }
 
@@ -863,14 +1061,24 @@ namespace Reko.Scanning
                 return block.Procedure.ControlGraph.Predecessors(block).FirstOrDefault();
             }
 
+            public RegisterStorage GetSubregister(RegisterStorage reg, int offset, int width)
+            {
+                return arch.GetSubregister(reg, offset, width);
+            }
+
             public bool IsValidAddress(Address addr)
             {
-                return image.IsValidAddress(addr);
+                return segmentMap.IsValidAddress(addr);
             }
 
             public Address MakeAddressFromConstant(Constant c)
             {
                 return platform.MakeAddressFromConstant(c);
+            }
+
+            public Address MakeSegmentedAddress(Constant seg, Constant off)
+            {
+                return arch.MakeSegmentedAddress(seg, off);
             }
         }
     }

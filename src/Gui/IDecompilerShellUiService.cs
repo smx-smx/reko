@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -33,7 +33,7 @@ namespace Reko.Gui
         IEnumerable<IWindowFrame> ToolWindows { get; }
 
         IWindowFrame CreateWindow(string windowType, string windowTitle, IWindowPane pane);
-        IWindowFrame CreateDocumentWindow(string documentType, string documentTitle, object docItem, IWindowPane pane);
+        IWindowFrame CreateDocumentWindow(string documentType, object docItem, string documentTitle, IWindowPane pane);
         IWindowFrame FindWindow(string windowType);
         IWindowFrame FindDocumentWindow(string documentType, object docItem);
         ContextMenu GetContextMenu(int menuID);

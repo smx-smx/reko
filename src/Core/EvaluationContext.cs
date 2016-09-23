@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,12 +26,13 @@ using System.Text;
 namespace Reko.Core
 {
     /// <summary>
-    /// An EvaluationContext is used by the SymbolicEvaluator to provide a statement context for the
-    /// evaluation.
+    /// An EvaluationContext is used by the SymbolicEvaluator to provide a 
+    /// statement context for the evaluation.
     /// </summary>
     /// <remarks>
-    /// For instance, it might be interesting to find the expression currently bound to 
-    /// an identifier, to see if a simplification could be made. The statements
+    /// For instance, it might be interesting to find the expression currently
+    /// bound to an identifier, to see if a simplification could be made. The
+    /// statements
     /// <code>
     ///     a = constant
     ///     b = a + 3
@@ -61,5 +62,6 @@ namespace Reko.Core
         void SetValueEa(Expression basePointer, Expression ea, Expression value);
 
         bool IsUsedInPhi(Identifier id);
+        Expression MakeSegmentedAddress(Constant c1, Constant c2);
     }
 }

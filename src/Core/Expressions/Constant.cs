@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -232,7 +232,7 @@ namespace Reko.Core.Expressions
 			get { return !Object.ReferenceEquals(this, Constant.Invalid); }
 		}
 
-		public Constant Negate()
+		public virtual Constant Negate()
 		{
 			PrimitiveType p = (PrimitiveType) DataType;
             var c = GetValue();
@@ -247,14 +247,6 @@ namespace Reko.Core.Expressions
                     return Constant.Create(p, -Convert.ToInt32(c));
                 return Constant.Create(p, -Convert.ToInt64(c));
 			}
-			else if (p == PrimitiveType.Real32)
-			{
-                return Constant.Real32(-ToFloat());
-			}
-			else if (p == PrimitiveType.Real64)
-			{
-                return Constant.Real64(-ToDouble());
-			}
 			else 
 				throw new InvalidOperationException(string.Format("Type {0} doesn't support negation.", p));
 		}
@@ -263,6 +255,12 @@ namespace Reko.Core.Expressions
 		{
             return Constant.Real64(Math.PI);
 		}
+
+        public static Constant Lg10()
+        {
+            // log(2) of 10.
+            return Constant.Real64(3.3219280948873623478703194294894);
+        }
 
         public static Constant Ln2()
         {
@@ -289,7 +287,7 @@ namespace Reko.Core.Expressions
 			return Convert.ToDouble(GetValue());
 		}
 
-		public float ToFloat()
+		public virtual float ToFloat()
 		{
 			return Convert.ToSingle(GetValue());
 		}
@@ -333,15 +331,25 @@ namespace Reko.Core.Expressions
         {
             return new ConstantReal32(PrimitiveType.Real32, f);
         }
-
+   
         public static Constant Real64(double d)
         {
             return new ConstantReal64(PrimitiveType.Real64, d);
         }
 
+        public static Constant UInt16(ushort u)
+        {
+            return new ConstantUInt16(PrimitiveType.UInt16, u);
+        }
+
         public static Constant UInt32(uint w)
         {
             return new ConstantUInt32(PrimitiveType.UInt32, w);
+        }
+
+        public static Constant UInt64(ulong ul)
+        {
+            return new ConstantUInt64(PrimitiveType.UInt64, ul);
         }
 
         public static Constant Word16(ushort n)
@@ -1069,7 +1077,7 @@ namespace Reko.Core.Expressions
         }
     }
 
-    internal abstract class ConstantReal : Constant
+    public abstract class ConstantReal : Constant
     {
         public ConstantReal(DataType dt) : base(dt)
         {
@@ -1077,10 +1085,11 @@ namespace Reko.Core.Expressions
 
         public static ConstantReal Create(DataType dt, double value)
         {
+            var pt = PrimitiveType.Create(Domain.Real, dt.Size);
             switch (dt.BitSize)
             {
-            case 32: return new ConstantReal32(dt, (float)value);
-            case 64: return new ConstantReal64(dt, value);
+            case 32: return new ConstantReal32(pt, (float)value);
+            case 64: return new ConstantReal64(pt, value);
             }
             throw new NotSupportedException(string.Format("Data type {0} not supported.", dt));
         }
@@ -1104,6 +1113,11 @@ namespace Reko.Core.Expressions
         public override object GetValue()
         {
             return value;
+        }
+
+        public override Constant Negate()
+        {
+            return new ConstantReal32(DataType, -value);
         }
 
         public override byte ToByte()
@@ -1140,6 +1154,11 @@ namespace Reko.Core.Expressions
         {
             return Convert.ToInt64(value);
         }
+
+        public override float ToFloat()
+        {
+            return value;
+        }
     }
 
     internal class ConstantReal64 : ConstantReal
@@ -1160,6 +1179,11 @@ namespace Reko.Core.Expressions
         public override object GetValue()
         {
             return value;
+        }
+
+        public override Constant Negate()
+        {
+            return new ConstantReal64(DataType, -value);
         }
 
         public override byte ToByte()

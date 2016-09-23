@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,11 +28,43 @@ namespace Reko.Core.Operators
 	{
 	}
 
-	public class RltOperator : RealConditionalOperator
+    public class ReqOperator : RealConditionalOperator
+    {
+        public override Constant ApplyConstants(Constant c1, Constant c2)
+        {
+            if (!ValidArgs(c1, c2))
+                return Constant.Invalid;
+            return Constant.Bool(c1.ToReal64() == c2.ToReal64());
+        }
+
+        public override string ToString()
+        {
+            return " = ";
+        }
+    }
+
+    public class RneOperator : RealConditionalOperator
+    {
+        public override Constant ApplyConstants(Constant c1, Constant c2)
+        {
+            if (!ValidArgs(c1, c2))
+                return Constant.Invalid;
+            return Constant.Bool(c1.ToReal64() != c2.ToReal64());
+        }
+
+        public override string ToString()
+        {
+            return " != ";
+        }
+    }
+
+    public class RltOperator : RealConditionalOperator
 	{
 		public override Constant ApplyConstants(Constant c1, Constant c2)
 		{
-			return Constant.Bool(c1.ToInt32() < c2.ToInt32());
+            if (!ValidArgs(c1, c2))
+                return Constant.Invalid;
+            return Constant.Bool(c1.ToReal64() < c2.ToReal64());
 		}
 
 		public override string ToString()
@@ -45,10 +77,12 @@ namespace Reko.Core.Operators
 	{
 		public override Constant ApplyConstants(Constant c1, Constant c2)
 		{
-			throw new NotImplementedException();
-		}
+            if (!ValidArgs(c1, c2))
+                return Constant.Invalid;
+            return Constant.Bool(c1.ToReal64() > c2.ToReal64());
+        }
 
-		public override string ToString()
+        public override string ToString()
 		{
 			return " > ";
 		}
@@ -58,10 +92,12 @@ namespace Reko.Core.Operators
 	{
 		public override Constant ApplyConstants(Constant c1, Constant c2)
 		{
-			throw new NotImplementedException();
-		}
+            if (!ValidArgs(c1, c2))
+                return Constant.Invalid;
+            return Constant.Bool(c1.ToReal64() <= c2.ToReal64());
+        }
 
-		public override string ToString()
+        public override string ToString()
 		{
 			return " <= ";
 		}
@@ -71,10 +107,12 @@ namespace Reko.Core.Operators
 	{
 		public override Constant ApplyConstants(Constant c1, Constant c2)
 		{
-			throw new NotImplementedException();
-		}
+            if (!ValidArgs(c1, c2))
+                return Constant.Invalid;
+            return Constant.Bool(c1.ToReal64() >= c2.ToReal64());
+        }
 
-		public override string ToString()
+        public override string ToString()
 		{
 			return " >= ";
 		}

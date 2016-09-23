@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,6 +20,7 @@
 
 using Reko.Core;
 using Reko.Core.Assemblers;
+using Reko.Core.Configuration;
 using Reko.Gui;
 using Reko.Gui.Windows.Forms;
 using System;
@@ -46,6 +47,8 @@ namespace Reko.UnitTests.Gui.Windows.Forms
             get { return canAdvance; }
             set { canAdvance = value; }
         }
+
+        public virtual string NextPhaseCaption { get { return "Hehe"; } }
 
         public virtual void PerformWork(IWorkerDialogService svc)
         {
@@ -107,18 +110,19 @@ namespace Reko.UnitTests.Gui.Windows.Forms
         {
         }
 
-        public bool OpenBinary(string file, DecompilerHost host)
+        public bool OpenBinary(string file)
         {
             OpenBinaryCalled = true;
             return false;
         }
-        public bool OpenBinaryAs(string file, IProcessorArchitecture arch, Platform platform, Address addrBase, DecompilerHost host)
+
+        public bool OpenBinaryAs(string file, string arch, string platform, Address addrBase, RawFileElement raw)
         {
             throw new NotImplementedException();
         }
 
 
-        public bool Assemble(string file, Assembler asm, DecompilerHost host)
+        public bool Assemble(string file, Assembler asm)
         {
             throw new NotImplementedException();
         }

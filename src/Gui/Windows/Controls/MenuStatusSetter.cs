@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -66,7 +66,13 @@ namespace Reko.Gui.Windows.Controls
                 {
                     var cmdId = menu.GetCommandID(i);
                     cmdStatus.Status = 0;
-                    if (cmdId != null && ct.QueryStatus(cmdId, cmdStatus, cmdText))
+                    if (cmdId == null)
+                    {
+                        cmdStatus.Status = MenuStatus.Enabled|MenuStatus.Visible;
+                        ++visibleItemsInGroup;
+                        ++totalVisible;
+                    }
+                    else if (ct.QueryStatus(cmdId, cmdStatus, cmdText))
                     {
                         if (menu.IsDynamic(i))
                         {

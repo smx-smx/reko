@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -43,39 +43,19 @@ namespace Reko.UnitTests.Gui
         {
             mr = new MockRepository();
             sc = new ServiceContainer();
-            var image = new LoadedImage(Address.SegPtr(0xC00, 0), Enumerable.Range(0x0, 0x100).Select(b => (byte)b).ToArray());
-            var imageMap = image.CreateImageMap();
+            var mem = new MemoryArea(Address.SegPtr(0xC00, 0), Enumerable.Range(0x0, 0x100).Select(b => (byte)b).ToArray());
+            var imageMap = new SegmentMap(
+                    mem.BaseAddress,
+                    new ImageSegment(
+                        "code", mem, AccessMode.ReadWriteExecute));
             var arch = new Mocks.FakeArchitecture();
-            this.program = new Program(image, imageMap, arch, new DefaultPlatform(sc, arch));
+            this.program = new Program(imageMap, arch, new DefaultPlatform(sc, arch));
         }
 
         [Test]
         public void Asr_Create()
         {
-            var results = new AddressSearchResult(sc, new List<AddressSearchHit>());
+            var results = new AddressSearchResult(sc, new List<ProgramAddress>(), AddressSearchDetails.Code);
         }
     }
-
-    /// SearchService - provides generic search services.
-    ///  StartSearch(newsearcher, searchResult)
-    ///  {
-    ///      if searchWorker.Active()
-    ///          stoplistening(searcher)
-    ///          searchWorker.Deactivate()
-    ///      clear.searchResults()
-    ///      startlistenning(newsearcher);
-    ///      searcher = searcher.Observe()
-    ///      searchWorker.Start(searcher)
-    ///  }
-    ///  
-    ///  public searcher
-    ///  {
-    ///     Notify() {
-    ///         foreach listener() {
-    ///             listener.OnNext();
-    ///         }
-    ///     }
-    ///  }
-    ///    
-
 }

@@ -14,6 +14,7 @@ using System.Windows.Forms;
 namespace Reko.UnitTests.Gui.Windows
 {
     [TestFixture]
+    [Category(Categories.UserInterface)]
     public class DecompilerShellUiTests
     {
         Form form;
@@ -43,8 +44,6 @@ namespace Reko.UnitTests.Gui.Windows
         [Test]
         public void DSU_CreateWindow()
         {
-            Form mdiForm = new Form();
-
             var pane = mr.StrictMock<IWindowPane>();
             pane.Expect(p => p.SetSite(sc));
             pane.Expect(p => p.CreateControl()).Return(new Control());

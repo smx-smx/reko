@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -35,13 +35,13 @@ namespace Reko.Core.Rtl
             this.Class = RtlClass.Linear;
         }
 
+        public Expression Dst { get; private set; }
+        public Expression Src { get; private set; }
+
         public override T Accept<T>(RtlInstructionVisitor<T> visitor)
         {
             return visitor.VisitAssignment(this);
         }
-
-        public Expression Dst { get; private set; }
-        public Expression Src { get; private set; }
 
         protected override void WriteInner(TextWriter writer)
         {

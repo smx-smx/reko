@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,9 +18,12 @@
  */
 #endregion
 
+using Reko.Core.Serialization;
 using System;
 using System.Collections.Generic;
 using System.Configuration;
+using System.Diagnostics;
+using System.Linq;
 using System.Text;
 
 namespace Reko.Core.Configuration
@@ -30,66 +33,173 @@ namespace Reko.Core.Configuration
         string Name { get; }
         string Description { get; }
         string TypeName { get; }
-        TypeLibraryElementCollection TypeLibraries { get; }
-        TypeLibraryElementCollection CharacteristicsLibraries { get; set; }
+        string MemoryMapFile { get; }
+        Dictionary<string, object> Options { get; }
 
-        Platform Load(IServiceProvider services, IProcessorArchitecture arch);
+        PlatformHeuristics_v1 Heuristics { get; }
+        List<ITypeLibraryElement> TypeLibraries { get; }
+        List<ITypeLibraryElement> CharacteristicsLibraries { get; }
+        List<SignatureFile> SignatureFiles { get; }
 
+        IPlatform Load(IServiceProvider services, IProcessorArchitecture arch);
     }
 
-    public class OperatingEnvironmentElement : ConfigurationElement, OperatingEnvironment
+    public class OperatingEnvironmentElement : OperatingEnvironment
     {
         public OperatingEnvironmentElement()
         {
-            this["TypeLibraries"] = new TypeLibraryElementCollection();
+            this.TypeLibraries = new List<ITypeLibraryElement>();
+            this.CharacteristicsLibraries = new List<ITypeLibraryElement>();
+            this.SignatureFiles = new List<SignatureFile>();
         }
 
-        [ConfigurationProperty("Name", IsRequired = true)]
-        public string Name
-        {
-            get { return (string) this["Name"]; }
-            set { this["Name"] = value; }
-        }
+        public string Name { get; set; }
 
-        [ConfigurationProperty("Description", IsRequired = true)]
-        public string Description
-        {
-            get { return (string) this["Description"]; }
-            set { this["Description"] = value; }
-        }
+        public string Description { get; set; }
 
-        [ConfigurationProperty("Type", IsRequired = false)]
-        public string TypeName
-        {
-            get { return (string) this["Type"]; }
-            set { this["Type"] = value; }
-        }
+        public PlatformHeuristics_v1 Heuristics { get; set; }
 
-        [ConfigurationProperty("TypeLibraries", IsDefaultCollection = false, IsRequired = false)]
-        [ConfigurationCollection(typeof(TypeLibraryElement))]
-        public TypeLibraryElementCollection TypeLibraries
-        {
-            get { return (TypeLibraryElementCollection) this["TypeLibraries"]; }
-            set { this["TypeLibraries"] = value; }
-        }
+        public string TypeName { get; set; }
 
-        [ConfigurationProperty("Characteristics", IsDefaultCollection = false, IsRequired = false)]
-        [ConfigurationCollection(typeof(TypeLibraryElement))]
-        public TypeLibraryElementCollection CharacteristicsLibraries
-        {
-            get { return (TypeLibraryElementCollection)this["Characteristics"]; }
-            set { this["Characteristics"] = value; }
-        }
+        public string MemoryMapFile { get; set; }
 
-        public Platform Load(IServiceProvider services, IProcessorArchitecture arch)
+        public List<ITypeLibraryElement> TypeLibraries { get; internal set; }
+        public List<ITypeLibraryElement> CharacteristicsLibraries { get; internal set; }
+        public List<SignatureFile> SignatureFiles { get; internal set; }
+        public Dictionary<string, object> Options { get; internal set; }
+
+        public IPlatform Load(IServiceProvider services, IProcessorArchitecture arch)
         {
             var type = Type.GetType(TypeName);
             if (type == null)
                 throw new TypeLoadException(
                     string.Format("Unable to load {0} environment.", Description));
-            var platform = (Platform) Activator.CreateInstance(type, services, arch);
-            platform.Description = this.Description;
+            var platform = (Platform)Activator.CreateInstance(type, services, arch);
+            LoadSettingsFromConfiguration(services, platform);
             return platform;
+        }
+
+        public void LoadSettingsFromConfiguration(IServiceProvider services, Platform platform)
+        {
+            platform.Name = this.Name;
+            if (!string.IsNullOrEmpty(MemoryMapFile))
+            {
+                platform.MemoryMap = MemoryMap_v1.LoadMemoryMapFromFile(services, MemoryMapFile, platform);
+            }
+            platform.Description = this.Description;
+            platform.Heuristics = LoadHeuristics(this.Heuristics);
+        }
+
+        private PlatformHeuristics LoadHeuristics(PlatformHeuristics_v1 heuristics)
+        {
+            if (heuristics == null)
+            {
+                return new PlatformHeuristics
+                {
+                    ProcedurePrologs = new BytePattern[0],
+                };
+            }
+            BytePattern[] prologs;
+            if (heuristics.ProcedurePrologs == null)
+            {
+                prologs = new BytePattern[0];
+            }
+            else
+            {
+                prologs = heuristics.ProcedurePrologs
+                    .Select(p => LoadBytePattern(p))
+                    .Where(p => p.Bytes != null)
+                    .ToArray();
+            }
+
+            return new PlatformHeuristics
+            {
+                ProcedurePrologs = prologs
+            };
+        }
+
+        public BytePattern LoadBytePattern(BytePattern_v1 sPattern)
+        {
+            List<byte> bytes = null;
+            List<byte> mask = null;
+            if (sPattern.Bytes == null)
+                return null;
+            if (sPattern.Mask == null)
+            {
+                bytes = new List<byte>();
+                mask = new List<byte>();
+                int shift = 4;
+                int bb = 0;
+                int mm = 0;
+                for (int i = 0; i < sPattern.Bytes.Length; ++i)
+                {
+                    char c = sPattern.Bytes[i];
+                    byte b;
+                    if (BytePattern.TryParseHexDigit(c, out b))
+                    {
+                        bb = bb | (b << shift);
+                        mm = mm | (0x0F << shift);
+                        shift -= 4;
+                        if (shift < 0)
+                        {
+                            bytes.Add((byte)bb);
+                            mask.Add((byte)mm);
+                            shift = 4;
+                            bb = mm = 0;
+                        }
+                    }
+                    else if (c == '?' || c == '.')
+                    {
+                        shift -= 4;
+                        if (shift < 0)
+                        {
+                            bytes.Add((byte)bb);
+                            mask.Add((byte)mm);
+                            shift = 4;
+                            bb = mm = 0;
+                        }
+                    }
+                }
+                Debug.Assert(bytes.Count == mask.Count);
+            }
+            else
+            {
+                bytes = LoadHexPattern(sPattern.Bytes);
+                mask = LoadHexPattern(sPattern.Mask);
+            }
+            if (bytes.Count == 0)
+                return null;
+            else
+                return new BytePattern
+                {
+                    Bytes = bytes.ToArray(),
+                    Mask = mask.ToArray()
+                };
+
+        }
+
+        private List<byte> LoadHexPattern(string sBytes)
+        {
+            int shift = 4;
+            int bb = 0;
+            var bytes = new List<byte>();
+            for (int i = 0; i < sBytes.Length; ++i)
+            {
+                char c = sBytes[i];
+                byte b;
+                if (BytePattern.TryParseHexDigit(c, out b))
+                {
+                    bb = bb | (b << shift);
+                    shift -= 4;
+                    if (shift < 0)
+                    {
+                        bytes.Add((byte)bb);
+                        shift = 4;
+                        bb = 0;
+                    }
+                }
+            }
+            return bytes;
         }
 
         public override string ToString()

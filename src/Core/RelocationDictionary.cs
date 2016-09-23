@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,9 +19,11 @@
 #endregion
 
 using Reko.Core.Expressions;
+using Reko.Core.Lib;
 using Reko.Core.Types;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace Reko.Core
 {
@@ -30,7 +32,7 @@ namespace Reko.Core
 	/// </summary>
 	public class RelocationDictionary 
     {
-        private Dictionary<ulong, Constant> map = new Dictionary<ulong, Constant>();
+        private SortedList<ulong, Constant> map = new SortedList<ulong, Constant>();
 
         /// <summary>
         /// Retrieves a relocated value at the <paramref name="imageOffset"/>.
@@ -49,22 +51,56 @@ namespace Reko.Core
             }
         }
 
-		public void AddPointerReference(ulong imageOffset, uint pointer)
+        public void AddPointerReference(ulong linAddress, uint pointer)
 		{
 			var c = Constant.Create(PrimitiveType.Pointer32, pointer);
-			map.Add(imageOffset, c);
+			map.Add(linAddress, c);
 		}
 
-		public void AddSegmentReference(ulong imageOffset, ushort segmentSelector)
+		public void AddSegmentReference(ulong linAddress, ushort segmentSelector)
 		{
             var c = Constant.Create(PrimitiveType.SegmentSelector, segmentSelector);
-			map.Add(imageOffset, c);
+			map.Add(linAddress, c);
 		}
 
 		public bool Contains(uint imageOffset)
 		{
 			return map.ContainsKey(imageOffset);
 		}
+
+        /// <summary>
+        /// Returns true if the specified address + length partially overlaps
+        /// a relocation. 
+        /// </summary>
+        /// <returns></returns>
+        public bool Overlaps(Address addr, uint length)
+        {
+            ulong linAddr = addr.ToLinear();
+            ulong linAddrEnd = linAddr + length;
+            ulong linReloc;
+            if (map.TryGetLowerBoundKey(linAddr, out linReloc))
+            {
+                // |-reloc----|
+                //      |-addr----|
+                var linRelocEnd = linReloc + (uint)map[linReloc].DataType.Size;
+                if (linReloc < linAddr && linAddr < linRelocEnd)
+                {
+                    return true;
+                }
+            }
+            if (map.TryGetUpperBoundKey(linAddr, out linReloc))
+            {
+                //     |-reloc----|
+                // |-addr----|
+                var linRelocEnd = linReloc + (uint)map[linReloc].DataType.Size;
+                if (linReloc < linAddrEnd)
+                {
+                    if (linAddrEnd < linRelocEnd)
+                        return true;
+                }
+            }
+            return false;
+        }
 
         public int Count
         {

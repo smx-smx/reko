@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -122,6 +122,9 @@ namespace Reko.Arch.Sparc
                     case 'f':       // FPU register
                         ops.Add(GetFpuRegisterOperand(wInstr, ref i));
                         break;
+                    case 'A':
+                        ops.Add(GetAlternateSpaceOperand(wInstr, GetOperandSize(ref i)));
+                        break;
                     case 'I':       // 22-bit immediate value
                         ops.Add(GetImmOperand(wInstr, 22));
                         break;
@@ -132,7 +135,7 @@ namespace Reko.Arch.Sparc
                         ops.Add(GetMemoryOperand(wInstr, GetOperandSize(ref i)));
                         break;
                     case 'R':       // Register or simm13.
-                                   // if 's', return a signed immediate operand where relevant.
+                                    // if 's', return a signed immediate operand where relevant.
                         ops.Add(GetRegImmOperand(wInstr, fmt[i++] == 's', 13));
                         break;
                     case 'S':       // Register or uimm5
@@ -166,6 +169,7 @@ namespace Reko.Arch.Sparc
                 case 'b': return signed ? PrimitiveType.SByte : PrimitiveType.Byte;
                 case 'h': return signed ? PrimitiveType.Int16 : PrimitiveType.UInt16;
                 case 'w': return signed ? PrimitiveType.Int32 : PrimitiveType.UInt32;
+                case 'd': return signed ? PrimitiveType.Int64 : PrimitiveType.UInt64;
                 }
                 throw new NotImplementedException(string.Format("Unknown format character {0}.", fmt[i-1]));
             }
@@ -181,6 +185,14 @@ namespace Reko.Arch.Sparc
             {
                 int offset = SignExtend(wInstr, 22) << 2;
                 return new AddressOperand(addr + (offset - 4));
+            }
+
+            private MachineOperand GetAlternateSpaceOperand(uint wInstr, PrimitiveType type)
+            {
+                RegisterStorage b = Registers.GetRegister(wInstr >> 14);
+                RegisterStorage idx = Registers.GetRegister(wInstr);
+                var asi = (wInstr >> 4) & 0xFF;
+                return new MemoryOperand(b, Constant.Int32((int)asi), type);
             }
 
             private MachineOperand GetMemoryOperand(uint wInstr, PrimitiveType type)
@@ -461,7 +473,7 @@ namespace Reko.Arch.Sparc
             new OpRec { code=Opcode.illegal, },
             new OpRec { code=Opcode.ldstub,  },
             new OpRec { code=Opcode.illegal, },
-            new OpRec { code=Opcode.swap,    fmt="Ew,r25" },
+            new OpRec { code=Opcode.swap,    fmt="Mw,r25" },
 
             // 10
             new OpRec { code=Opcode.lda,  fmt="Aw,r25" },
@@ -474,23 +486,23 @@ namespace Reko.Arch.Sparc
             new OpRec { code=Opcode.stda, fmt="r25,Ad" },
 
             new OpRec { code=Opcode.illegal, },
-            new OpRec { code=Opcode.ldsba,   fmt="r25,Eb" },
-            new OpRec { code=Opcode.ldsha,   fmt="r25,Eh" },
+            new OpRec { code=Opcode.ldsba,   fmt="r25,Ab" },
+            new OpRec { code=Opcode.ldsha,   fmt="r25,Ah" },
             new OpRec { code=Opcode.illegal  },
             new OpRec { code=Opcode.illegal, },
-            new OpRec { code=Opcode.ldstuba, fmt="Eb,r25"},
+            new OpRec { code=Opcode.ldstuba, fmt="Ab,r25"},
             new OpRec { code=Opcode.illegal, },
-            new OpRec { code=Opcode.swapa,  fmt="Ew,r25" },
+            new OpRec { code=Opcode.swapa,  fmt="Aw,r25" },
 
             // 20
-            new OpRec { code=Opcode.ldf,   fmt="Fw,f24", },
-            new OpRec { code=Opcode.ldfsr, fmt="Ew,%fsr" },
+            new OpRec { code=Opcode.ldf,   fmt="Mw,f24", },
+            new OpRec { code=Opcode.ldfsr, fmt="Mw,%fsr" },
             new OpRec { code=Opcode.illegal, },
-            new OpRec { code=Opcode.lddf,  fmt="Fd,f24" },
-            new OpRec { code=Opcode.stf,   fmt ="f24,Fw" },
-            new OpRec { code=Opcode.stfsr, fmt="%fsr,Ew" },
+            new OpRec { code=Opcode.lddf,  fmt="Md,f24" },
+            new OpRec { code=Opcode.stf,   fmt ="f24,Mw" },
+            new OpRec { code=Opcode.stfsr, fmt="%fsr,Mw" },
             new OpRec { code=Opcode.stdfq, },
-            new OpRec { code=Opcode.stdf, },
+            new OpRec { code=Opcode.stdf, fmt= "f24,Md" },
 
             new OpRec { code=Opcode.illegal, },
             new OpRec { code=Opcode.illegal, },
@@ -533,7 +545,7 @@ namespace Reko.Arch.Sparc
         {
             public override SparcInstruction Decode(SparcDisassembler dasm, uint wInstr)
             {
-                return fpOprecs[(wInstr >> 4) & 0x1FF].Decode(dasm, wInstr);
+                return fpOprecs[(wInstr >> 5) & 0x1FF].Decode(dasm, wInstr);
             }
         }
 

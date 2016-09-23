@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,10 +24,13 @@ using Reko.Assemblers.x86;
 using Reko.Core;
 using Reko.Core.Assemblers;
 using Reko.Core.Code;
+using Reko.Core.Configuration;
 using Reko.Core.Serialization;
+using Reko.Core.Services;
 using Reko.Loading;
 using Reko.Scanning;
 using Reko.UnitTests.Mocks;
+using Rhino.Mocks;
 using System.Collections.Generic;
 using System.ComponentModel.Design;
 using System.IO;
@@ -36,9 +39,10 @@ namespace Reko.UnitTests.Arch.Intel
 {
 	public class RewriterTestBase
 	{
-		private string configFile;
+        private ServiceContainer sc;
+        private string configFile;
 		protected Assembler asm; 
-		protected Program prog;
+		protected Program program;
 		protected Scanner scanner;
 		protected Address baseAddress;
 
@@ -50,9 +54,11 @@ namespace Reko.UnitTests.Arch.Intel
 		[SetUp]
 		public void SetUp()
 		{
-            var arch = new IntelArchitecture(ProcessorMode.Real);
-            prog = new Program() { Architecture = arch };
-            asm = new X86TextAssembler(arch);
+            var arch = new X86ArchitectureReal();
+            program = new Program() { Architecture = arch };
+            sc = new ServiceContainer();
+            sc.AddService<IFileSystemService>(new FileSystemServiceImpl());
+            asm = new X86TextAssembler(sc, arch);
 			configFile = null;
 		}
 
@@ -64,22 +70,38 @@ namespace Reko.UnitTests.Arch.Intel
 
 		protected Procedure DoRewrite(string code)
 		{
-            prog = asm.AssembleFragment(baseAddress, code);
+            program = asm.AssembleFragment(baseAddress, code);
 			DoRewriteCore();
-			return prog.Procedures.Values[0];
+			return program.Procedures.Values[0];
 		}
 
         private void DoRewriteCore()
         {
+            var cfgSvc = MockRepository.GenerateStub<IConfigurationService>();
+            var env = MockRepository.GenerateStub<OperatingEnvironment>();
+            var tlSvc = MockRepository.GenerateStub<ITypeLibraryLoaderService>();
+            var eventListener = new FakeDecompilerEventListener();
+            cfgSvc.Stub(c => c.GetEnvironment("ms-dos")).Return(env);
+            cfgSvc.Replay();
+            env.Stub(e => e.TypeLibraries).Return(new List<ITypeLibraryElement>());
+            env.Stub(e => e.CharacteristicsLibraries).Return(new List<ITypeLibraryElement>());
+            env.Replay();
+            tlSvc.Replay();
+            sc.AddService<DecompilerHost>(new FakeDecompilerHost());
+            sc.AddService<DecompilerEventListener>(eventListener);
+            sc.AddService<IConfigurationService>(cfgSvc);
+            sc.AddService<ITypeLibraryLoaderService>(tlSvc);
+
             Project project = LoadProject();
-            project.Programs.Add(prog);
-            scanner = new Scanner(prog, new Dictionary<Address, ProcedureSignature>(),
-                new ImportResolver(project),
-                new FakeDecompilerEventListener());
-            EntryPoint ep = new EntryPoint(baseAddress, prog.Architecture.CreateProcessorState());
-            scanner.EnqueueEntryPoint(ep);
+            project.Programs.Add(this.program);
+            scanner = new Scanner(
+                this.program, 
+                new ImportResolver(project, this.program, eventListener),
+                sc);
+            ImageSymbol ep = new ImageSymbol(baseAddress);
+            scanner.EnqueueImageSymbol(ep, true);
             var program =  project.Programs[0];
-            foreach (Procedure_v1 sp in program.UserProcedures.Values)
+            foreach (Procedure_v1 sp in program.User.Procedures.Values)
             {
                 scanner.EnqueueUserProcedure(sp);
             }
@@ -92,9 +114,10 @@ namespace Reko.UnitTests.Arch.Intel
             if (configFile != null)
             {
                 var absFile = FileUnitTester.MapTestPath(configFile);
-                using (Stream stm = new FileStream(absFile, FileMode.Open, FileAccess.Read, FileShare.Read))
+                var fsSvc = sc.RequireService<IFileSystemService>();
+                using (Stream stm = fsSvc.CreateFileStream(absFile, FileMode.Open, FileAccess.Read, FileShare.Read))
                 {
-                    project = new ProjectLoader(new Loader(new ServiceContainer())).LoadProject(stm);
+                    project = new ProjectLoader(null, new Loader(sc)).LoadProject(absFile, stm);
                 }
             }
             else
@@ -109,9 +132,9 @@ namespace Reko.UnitTests.Arch.Intel
             using (var stm = new StreamReader(FileUnitTester.MapTestPath(relativePath)))
             {
                 var lr = asm.Assemble(baseAddress, stm);
-                prog.Image = lr.Image;
-                prog.ImageMap = lr.ImageMap;
-                prog.Platform = lr.Platform ?? new DefaultPlatform(null, lr.Architecture);
+                program.SegmentMap = lr.SegmentMap;
+                program.ImageMap = lr.ImageMap;
+                program.Platform = lr.Platform ?? new DefaultPlatform(null, lr.Architecture);
             }
 			DoRewriteCore();
 		}
@@ -135,8 +158,8 @@ namespace Reko.UnitTests.Arch.Intel
 	ret
 ");
 
-			Assert.AreEqual(1, prog.Procedures.Count );
-			Procedure proc = prog.Procedures.Values[0];
+			Assert.AreEqual(1, program.Procedures.Count );
+			Procedure proc = program.Procedures.Values[0];
 			Assert.AreEqual(3, proc.ControlGraph.Blocks.Count);		// Entry, code, Exit
 
             Block block = new List<Block>(proc.ControlGraph.Successors(proc.EntryBlock))[0];
@@ -171,7 +194,7 @@ join:
 		public void RwDeadConditionals()
 		{
 			DoRewriteFile("Fragments/small_loop.asm");
-			Procedure proc = prog.Procedures.Values[0];
+			Procedure proc = program.Procedures.Values[0];
 			using (FileUnitTester fut = new FileUnitTester("Intel/RwDeadConditionals.txt"))
 			{
 				proc.Write(true, fut.TextWriter);
@@ -184,7 +207,7 @@ join:
 		public void RwPseudoProcs()
 		{
 			DoRewriteFile("Fragments/pseudoprocs.asm");
-			Procedure proc = prog.Procedures.Values[0];
+			Procedure proc = program.Procedures.Values[0];
 			using (FileUnitTester fut = new FileUnitTester("Intel/RwPseudoProcs.txt"))
 			{
 				proc.Write(true, fut.TextWriter);
@@ -263,7 +286,7 @@ join:
 			DoRewriteFile(sourceFile);
 			using (FileUnitTester fut = new FileUnitTester(outputFile))
 			{
-				foreach (Procedure proc in prog.Procedures.Values)
+				foreach (Procedure proc in program.Procedures.Values)
 				{
 					proc.Write(true, fut.TextWriter);
 					fut.TextWriter.WriteLine();

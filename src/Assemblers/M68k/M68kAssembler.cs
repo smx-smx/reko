@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -41,14 +41,14 @@ namespace Reko.Assemblers.M68k
     public class M68kAssembler
     {
         private M68kArchitecture arch;
-        private List<EntryPoint> entryPoints;
+        private List<ImageSymbol> entryPoints;
         private List<ushort> constants;
 
-        public M68kAssembler(M68kArchitecture arch, Address addrBase, List<EntryPoint> entryPoints)
+        public M68kAssembler(M68kArchitecture arch, Address addrBase, List<ImageSymbol> entryPoints)
         {
             this.arch = arch;
             this.BaseAddress = addrBase;
-            this.entryPoints = new List<EntryPoint>();
+            this.entryPoints = new List<ImageSymbol>();
             this.Emitter = new Emitter();
             this.constants = new List<ushort>();
             this.Symbols = new SymbolTable();
@@ -78,10 +78,11 @@ namespace Reko.Assemblers.M68k
 
         public Program GetImage()
         {
-            var image = new LoadedImage(BaseAddress, Emitter.GetBytes());
+            var mem = new MemoryArea(BaseAddress, Emitter.GetBytes());
             return new Program(
-                image,
-                image.CreateImageMap(),
+                new SegmentMap(
+                    mem.BaseAddress,
+                    new ImageSegment("code", mem, AccessMode.ReadWriteExecute)),
                 arch, 
                 new DefaultPlatform(null, arch));
         }

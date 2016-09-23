@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,29 +20,35 @@
 
 using Reko.Core;
 using Reko.Core.Types;
+using Reko.Gui.Windows;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.Design;
+using System.Drawing;
 using System.Linq;
 using System.Text;
 
 namespace Reko.Gui
 {
     /// <summary>
-    /// An address search result is the ... well, result of a search of raw memory. Navigable items take you
-    /// to the current memory view (if one is topmost) or opens a new memory view.
+    /// An address search result is the ... well, result of a search of raw memory. 
+    /// Navigable items take you to the current memory view (if one is topmost) 
+    /// opens a new memory view.
     /// </summary>
     public class AddressSearchResult : ISearchResult
     {
         protected readonly IServiceProvider services;
-        private List<AddressSearchHit> addresses;
+        private List<ProgramAddress> addresses;
+        private AddressSearchDetails details;
 
         public AddressSearchResult(
             IServiceProvider services,
-            IEnumerable<AddressSearchHit> addresses)
+            IEnumerable<ProgramAddress> addresses,
+            AddressSearchDetails details)
         {
             this.services = services;
             this.addresses = addresses.ToList();
+            this.details = details;
         }
 
         public ISearchResultView View { get; set; }
@@ -74,7 +80,7 @@ namespace Reko.Gui
             View.AddColumn("Program", 30);
             View.AddColumn("Address", 10);
             View.AddColumn("Type", 10);
-            View.AddColumn("Data", 70);
+            View.AddColumn("Details", 70);
         }
 
         public int GetItemImageIndex(int i)
@@ -88,12 +94,12 @@ namespace Reko.Gui
             var program = hit.Program;
             var addr = addresses[i].Address;
             ImageMapItem item;
-            var type = program.ImageMap.TryFindItem(addr, out item);
+            program.ImageMap.TryFindItem(addr, out item);
             if (program.Architecture == null)
             {
                 return new SearchResultItem
                 {
-                    Items = new string[] { 
+                    Items = new string[] {
                         "",
                         addr.ToString(),
                         ""
@@ -103,43 +109,81 @@ namespace Reko.Gui
                 };
             }
             int bgColor = SelectBgColor(item);
-            var dasm = program.CreateDisassembler(addr);
-            try
+
+            string sData = "";
+            switch (details)
             {
-                var instr = string.Join("; ", dasm.Take(4).Select(inst => inst.ToString().Replace('\t', ' ')));
-                return new SearchResultItem
-                {
-                    Items = new string[] {
+            case AddressSearchDetails.Code: sData = RenderCode(hit); break;
+            case AddressSearchDetails.Strings: sData = RenderString(hit); break;
+            case AddressSearchDetails.Data: sData = RenderData(hit); break;
+            }
+
+            return new SearchResultItem
+            {
+                Items = new string[] {
                         program.Name ?? "<Program>",
                         addr.ToString(),
                         item.DataType.ToString(),
-                        instr,
+                        sData,
                     },
-                    ImageIndex = 0,
-                    BackgroundColor = bgColor,
-                };
+                ImageIndex = 0,
+                BackgroundColor = bgColor,
+            };
+        }
+
+        public string RenderCode(ProgramAddress hit)
+        {
+            try
+            {
+                var dasm = hit.Program.CreateDisassembler(hit.Address);
+                return string.Join("; ", dasm.Take(4).Select(inst => inst.ToString().Replace('\t', ' ')));
             }
             catch
             {
-                return new SearchResultItem
-                {
-                    Items = new string[] {
-                        addr.ToString(),
-                        "<invalid>"
-                    },
-                    ImageIndex = 0,
-                    BackgroundColor = -1,
-                };
+                return "<invalid>";
             }
+        }
+
+        public string RenderString(ProgramAddress hit)
+        {
+            var rdr = hit.Program.CreateImageReader(hit.Address);
+            var sb = new StringBuilder();
+            while (rdr.IsValid)
+            {
+                var ch = rdr.ReadByte();
+                if (ch == 0 || sb.Length > 80)
+                    break;
+                sb.Append(0x20 <= ch && ch < 0x7F
+                    ? (char)ch
+                    : '.');
+            }
+            return sb.ToString();
+        }
+
+        public string RenderData(ProgramAddress hit)
+        {
+            var rdr = hit.Program.CreateImageReader(hit.Address);
+            var sb = new StringBuilder();
+            int cb = 0;
+            while (rdr.IsValid)
+            {
+                var ch = rdr.ReadByte();
+                if (ch == 0 || cb >= 16)
+                    break;
+                sb.AppendFormat("{0:X2} ", (uint)ch);
+                ++cb;
+            }
+            return sb.ToString();
         }
 
         private int SelectBgColor(ImageMapItem item)
         {
             if (item.DataType is UnknownType)
                 return -1;
-            if (item.DataType is CodeType)  //$TODO: colors should come from settings.
+            //$TODO: colors should come from settings.
+            if (item.DataType is CodeType) 
                 return System.Drawing.Color.Pink.ToArgb();
-            throw new NotImplementedException();
+            return 0x00C0C0FF;
         }
 
         public void SortByColumn(int iColumn, SortDirection dir)
@@ -159,9 +203,33 @@ namespace Reko.Gui
             {
                 switch (cmdID.ID)
                 {
-                case CmdIds.ActionMarkProcedure:
                 case CmdIds.ViewFindWhatPointsHere:
-                    status.Status = MenuStatus.Enabled|MenuStatus.Visible;
+                    status.Status = MenuStatus.Enabled | MenuStatus.Visible;
+                    return true;
+                case CmdIds.ViewAsCode:
+                    status.Status = details == AddressSearchDetails.Code
+                        ? MenuStatus.Enabled | MenuStatus.Visible | MenuStatus.Checked
+                        : MenuStatus.Enabled | MenuStatus.Visible;
+                    return true;
+                case CmdIds.ViewAsStrings:
+                    status.Status = details == AddressSearchDetails.Strings
+                        ? MenuStatus.Enabled | MenuStatus.Visible | MenuStatus.Checked
+                        : MenuStatus.Enabled | MenuStatus.Visible;
+                    return true;
+                case CmdIds.ViewAsData:
+                    status.Status = details == AddressSearchDetails.Data
+                        ? MenuStatus.Enabled | MenuStatus.Visible | MenuStatus.Checked
+                        : MenuStatus.Enabled | MenuStatus.Visible;
+                    return true;
+                case CmdIds.ActionMarkProcedure:
+                    status.Status = details == AddressSearchDetails.Code
+                        ? MenuStatus.Enabled | MenuStatus.Visible
+                        : MenuStatus.Visible;
+                    return true;
+                case CmdIds.ActionMarkType:
+                    status.Status = details != AddressSearchDetails.Code
+                        ? MenuStatus.Enabled | MenuStatus.Visible
+                        : MenuStatus.Visible;
                     return true;
                 }
             }
@@ -170,66 +238,69 @@ namespace Reko.Gui
 
         public virtual bool Execute(CommandID cmdID)
         {
+            if (!View.IsFocused)
+                return false;
             switch (cmdID.ID)
             {
-            case CmdIds.ActionMarkProcedure: if (!View.IsFocused) return false; MarkProcedures(); return true;
+            case CmdIds.ViewFindWhatPointsHere: ViewFindWhatPointsHere(); return true;
+            case CmdIds.ViewAsCode: details = AddressSearchDetails.Code; View.Invalidate(); return true;
+            case CmdIds.ViewAsStrings: details = AddressSearchDetails.Strings; View.Invalidate(); return true;
+            case CmdIds.ViewAsData: details = AddressSearchDetails.Data; View.Invalidate(); return true;
+            case CmdIds.ActionMarkProcedure: MarkProcedures(); return true;
+            case CmdIds.ActionMarkType: MarkType(); return true;
             }
             return false;
+        }
+
+        public void MarkProcedures()
+        {
+            services.RequireService<ICommandFactory>().MarkProcedures(SelectedHits()).Do();
+        }
+
+        public void MarkType()
+        {
+            View.ShowTypeMarker(userText =>
+            {
+                var parser = new HungarianParser();
+                var dataType = parser.Parse(userText);
+                if (dataType == null)
+                    return;
+                foreach (var pa in SelectedHits())
+                {
+                    pa.Program.AddUserGlobalItem(pa.Address, dataType);
+                }
+                View.Invalidate();
+            });
         }
 
         /// <summary>
         /// Returns the addresses the user has selected.
         /// </summary>
         /// <returns></returns>
-        public IEnumerable<AddressSearchHit> SelectedHits()
+        public IEnumerable<ProgramAddress> SelectedHits()
         {
             return View.SelectedIndices.Select(i => addresses[i]);
         }
 
-        public void MarkProcedures()
+        public void ViewFindWhatPointsHere()
         {
-            var decSvc = services.RequireService<IDecompilerService>();
-            var userProcs =
+            var cmdFactory = services.RequireService<ICommandFactory>();
+            var grs =
                 from hit in SelectedHits()
-                let proc = decSvc.Decompiler.ScanProcedure(hit.Program, hit.Address)
-                select new
-                {
-                    Program = hit.Program,
-                    Address = hit.Address,
-                    UserProc = new Core.Serialization.Procedure_v1
-                    {
-                        Address = hit.Address.ToString(),
-                        Name = proc.Name
-                    }
-                };
-            foreach (var up in userProcs)
+                group hit by hit.Program into g
+                select new { Program = g.Key, Addresses = g.Select(gg => gg.Address) };
+            foreach (var gr in grs)
             {
-                if (!up.Program.UserProcedures.ContainsKey(up.Address))
-                {
-                    up.Program.UserProcedures.Add(up.Address, up.UserProc);
-                }
+                cmdFactory.ViewWhatPointsHere(gr.Program, gr.Addresses).Do();
             }
         }
     }
 
-    public class AddressSearchHit
+    public enum AddressSearchDetails
     {
-        public Program Program;
-        public Address Address;
-
-        public AddressSearchHit()
-        {
-        }
-
-        public AddressSearchHit(Program program, Address addr)
-        {
-            this.Program = program;
-            this.Address = addr;
-        }
-
-        public Address GetAddress()
-        {
-            return Address;
-        }
+        Code,
+        Strings,
+        Data,
     }
 }
+

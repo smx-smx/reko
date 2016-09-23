@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -112,10 +112,10 @@ namespace Reko.Arch.M68k
             var indidx = operand as IndirectIndexedOperand;
             if (indidx != null)
             {
-                Expression ea = frame.EnsureRegister(indidx.ARegister);
-                if (indidx.Imm8 != 0)
-                    ea = m.IAdd(ea, Constant.Int32(indidx.Imm8));
+                Expression ea = RewriteIndirectBaseRegister(indidx, addrInstr);
                 Expression ix = frame.EnsureRegister(indidx.XRegister);
+                if (indidx.XWidth.Size != 4)
+                    ix = m.Cast(PrimitiveType.Int32, m.Cast(PrimitiveType.Int16, ix));
                 if (indidx.Scale > 1)
                     ix = m.IMul(ix, Constant.Int32(indidx.Scale));
                 return m.Load(DataWidth, m.IAdd(ea, ix));
@@ -143,6 +143,19 @@ namespace Reko.Arch.M68k
                 return m.Load(DataWidth, ea);
             }
             throw new NotImplementedException("Unimplemented RewriteSrc for operand type " + operand.GetType().Name);
+        }
+
+        private Expression RewriteIndirectBaseRegister(IndirectIndexedOperand indidx, Address addrInstr)
+        {
+            if (indidx.ARegister == Registers.pc)
+            {
+                // pc-relative instruction.
+                return addrInstr + (2 + indidx.Imm8);
+            }
+            Expression ea = frame.EnsureRegister(indidx.ARegister);
+            if (indidx.Imm8 != 0)
+                ea = m.IAdd(ea, Constant.Int32(indidx.Imm8));
+            return ea;
         }
 
         Expression Combine(Expression e, RegisterStorage reg)
@@ -189,7 +202,7 @@ namespace Reko.Arch.M68k
                         tmp = frame.CreateTemporary(dataWidth);
                         m.Assign(tmp, srcExp);
                     }
-                    src = m.Dpb(r, tmp, 0, dataWidth.BitSize);
+                    src = m.Dpb(r, tmp, 0);
                 }
                 else
                 {
@@ -203,7 +216,7 @@ namespace Reko.Arch.M68k
             {
                 Identifier h = frame.EnsureRegister(dbl.Register1);
                 Identifier l = frame.EnsureRegister( dbl.Register2);
-                var d = frame.EnsureSequence(h, l, PrimitiveType.Word64);
+                var d = frame.EnsureSequence(h.Storage, l.Storage, PrimitiveType.Word64);
                 var result = opGen(src, l);
                 m.Assign(d, result);
                 return d;
@@ -299,7 +312,7 @@ namespace Reko.Arch.M68k
                 {
                     var tmp = frame.CreateTemporary(dataWidth);
                     m.Assign(tmp, opGen(m.Cast(dataWidth, r)));
-                    m.Assign(r, m.Dpb(r, tmp, 0, dataWidth.BitSize));
+                    m.Assign(r, m.Dpb(r, tmp, 0));
                     return tmp;
                 }
                 else 
@@ -358,7 +371,7 @@ namespace Reko.Arch.M68k
                 if (r.DataType.Size > dataWidth.Size)
                 {
                     var tmp = frame.CreateTemporary(dataWidth);
-                    m.Assign(r, m.Dpb(r, src, 0, dataWidth.BitSize));
+                    m.Assign(r, m.Dpb(r, src, 0));
                     return tmp;
                 }
                 else
@@ -431,7 +444,7 @@ namespace Reko.Arch.M68k
 
         public Identifier FlagGroup(FlagM flags)
         {
-            return frame.EnsureFlagGroup((uint)flags, arch.GrfToString((uint)flags), PrimitiveType.Byte);
+            return frame.EnsureFlagGroup(Registers.ccr, (uint)flags, arch.GrfToString((uint)flags), PrimitiveType.Byte);
         }
     }
 }

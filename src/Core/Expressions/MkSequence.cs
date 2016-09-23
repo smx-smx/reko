@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,6 +31,8 @@ namespace Reko.Core.Expressions
 	{
 		public MkSequence(DataType dt, Expression head, Expression tail) : base(dt)
 		{
+            if (head == null || tail == null)
+                throw new ArgumentNullException();
             if (head == Constant.Invalid || tail == Constant.Invalid)
                 throw new ArgumentException();
 			Head = head;

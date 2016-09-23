@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,9 +20,7 @@
 
 using Reko.Gui.Controls;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+using System.Drawing;
 using System.Windows.Forms;
 
 namespace Reko.Gui.Windows
@@ -30,16 +28,16 @@ namespace Reko.Gui.Windows
     /// <summary>
     /// Wraps the Windows Forms textbox with the ITextBox interface.
     /// </summary>
-    public class TextBoxWrapper : ITextBox
+    public class TextBoxWrapper : ControlWrapper, ITextBox
     {
         private TextBox text;
 
         public TextBoxWrapper(TextBox text)
+            : base(text)
         {
             this.text = text;
         }
 
-        public bool Enabled { get { return text.Enabled; } set { text.Enabled = value; } }
         public string Text { get { return text.Text; } set { text.Text = value;  } }
 
         public void SelectAll() {
@@ -61,6 +59,12 @@ namespace Reko.Gui.Windows
         {
             add { text.TextChanged += value; }
             remove { text.TextChanged -= value; }
+        }
+
+        public event EventHandler LostFocus
+        {
+            add { text.LostFocus += value; }
+            remove { text.LostFocus -= value; }
         }
     }
 }

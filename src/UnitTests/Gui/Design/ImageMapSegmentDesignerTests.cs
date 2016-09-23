@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,28 +34,32 @@ namespace Reko.UnitTests.Gui.Design
     [TestFixture]
     public class ImageMapSegmentDesignerTests
     {
+        private static string nl = Environment.NewLine;
+
         private MockRepository mr;
-        private ImageMapSegment seg1;
-        private ImageMapSegment seg2;
-        private ImageMap map;
+        private ImageSegment seg1;
+        private ImageSegment seg2;
+        private SegmentMap map;
 
         [SetUp]
         public void Setup()
         {
             mr = new MockRepository();
-            seg1 = new ImageMapSegment("seg1", AccessMode.Execute) { Address = Address.Ptr32(0x01000) };
-            seg2 = new ImageMapSegment("seg2", AccessMode.Execute) { Address = Address.Ptr32(0x02000) };
-            map = new ImageMap(seg1.Address, 0x4000);
+            seg1 = new ImageSegment("seg1", new MemoryArea(Address.Ptr32(0x01000), new byte[0x1000]), AccessMode.Execute);
+            seg2 = new ImageSegment("seg2", new MemoryArea(Address.Ptr32(0x02000), new byte[0x1000]), AccessMode.Execute);
+            map = new SegmentMap(seg1.Address,
+                seg1, seg2);
         }
 
         [Test]
+        [Category(Categories.UnitTests)]
         public void Imd_Add_Empty()
         {
             var host = mr.StrictMock<ITreeNodeDesignerHost>();
             var treeNode = mr.StrictMock<ITreeNode>();
             treeNode.Expect(t => t.Text = "seg1");
             treeNode.Expect(t => t.ImageName = "RoSection.ico");
-            treeNode.Expect(t => t.ToolTipText = "seg1\r\nAddress: 00001000\r\nSize: 0\r\n--x");
+            treeNode.Expect(t => t.ToolTipText = "seg1" + nl  + "Address: 00001000" + nl  + "Size: 1000" + nl  + "--x");
             var des = new ImageMapSegmentNodeDesigner();
             des.Host = host;
             des.TreeNode = treeNode;

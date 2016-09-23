@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,10 +20,12 @@
 
 using Reko.Core;
 using Reko.Core.Configuration;
+using Reko.Core.Lib;
 using Reko.Core.Services;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Text;
 
@@ -60,7 +62,7 @@ namespace Reko.Loading
                 try
                 {
                     var ldr = CreateSignatureLoader(sfe);
-                    Signatures.AddRange(ldr.Load(cfgSvc.GetPath(sfe.Filename)));
+                    Signatures.AddRange(ldr.Load(cfgSvc.GetInstallationRelativePath(sfe.Filename)));
                 }
                 catch (Exception ex)
                 {
@@ -80,13 +82,22 @@ namespace Reko.Loading
             return ldr;
         }
 
+        /// <summary>
+        /// Using the image of the program under investigation, find an 
+        /// unpacker capable of unpacking it.
+        /// </summary>
+        /// <param name="filename"></param>
+        /// <param name="image">The image prior to packing it.</param>
+        /// <param name="entryPointOffset"></param>
+        /// <returns></returns>
         public ImageLoader FindUnpackerBySignature(string filename, byte[] image, uint entryPointOffset)
         {
+            EnsureSuffixArray(filename + ".sufa-raw.ubj", image);
             var signature = Signatures.Where(s => Matches(s, image, entryPointOffset)).FirstOrDefault();
             if (signature == null)
                 return null;
             var loaders = Services.RequireService<IConfigurationService>().GetImageLoaders();
-            var le = loaders.Cast<LoaderElement>().Where(l => l.Label == signature.Name).FirstOrDefault();  //$REVIEW: all of themn?
+            var le = loaders.Cast<LoaderConfiguration>().Where(l => l.Label == signature.Name).FirstOrDefault();  //$REVIEW: all of themn?
             if (le == null)
                 return null;
             var loader = Loader.CreateImageLoader<ImageLoader>(Services, le.TypeName, filename, image);
@@ -127,6 +138,40 @@ namespace Reko.Loading
             {
                 Debug.Print("Pattern for '{0}' is unhandled: {1}", sig.Name, sig.EntryPointPattern);
                 return false;
+            }
+        }
+
+        private object EnsureSuffixArray(string filename, byte[] image)
+        {
+            var fsSvc = Services.RequireService<IFileSystemService>();
+            var diagSvc = Services.RequireService<IDiagnosticsService>();
+            Stream stm = null;
+            try
+            {
+                if (fsSvc.FileExists(filename))
+                {
+                    stm = fsSvc.CreateFileStream(filename, FileMode.Open);
+                    try
+                    {
+                        var sSuffix = (int[])new UbjsonReader(stm).Read();
+                        return SuffixArray.Load(image, sSuffix);
+                    }
+                    catch (Exception ex)
+                    {
+                        diagSvc.Warn("Unable to load suffix array {0}. {1}", filename, ex.Message);
+                    } finally
+                    {
+                        stm.Close();
+                    }
+                }
+                var sa = SuffixArray.Create(image);
+                stm = fsSvc.CreateFileStream(filename, FileMode.Create, FileAccess.Write);
+                new UbjsonWriter(stm).Write(sa.Save());
+                return sa;
+            }
+            finally
+            {
+                if (stm != null) stm.Dispose();
             }
         }
     }

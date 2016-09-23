@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -40,10 +40,34 @@ namespace Reko.Core.Machine
         /// </summary>
         public int Length;
 
+        /// <summary>
+        /// The kind of instruction
+        /// </summary>
+        public abstract InstructionClass InstructionClass { get; }
+
+        /// <summary>
+        /// Returns true if the instruction is valid.
+        /// </summary>
+        public abstract bool IsValid { get; }
+
+        public bool Contains(Address addr)
+        {
+            ulong ulInstr = Address.ToLinear();
+            ulong ulAddr = addr.ToLinear();
+            return ulInstr <= ulAddr && ulAddr < ulInstr + (uint)Length;
+        }
+
         public virtual void Render(MachineInstructionWriter writer)
         {
         }
 
+        /// <summary>
+        /// Retrieves the i'th operand, or null if there is none at that position.
+        /// </summary>
+        /// <param name="i"></param>
+        /// <returns></returns>
+        public abstract MachineOperand GetOperand(int i);
+        
         /// <summary>
         /// Each different supported opcode should have a different numerical value, exposed here.
         /// </summary>
@@ -56,12 +80,11 @@ namespace Reko.Core.Machine
             return renderer.ToString();
         }
 
-        public string ToString(Platform platform)
+        public string ToString(IPlatform platform)
         {
             var renderer = new StringRenderer(platform);
             this.Render(renderer);
             return renderer.ToString();
-
         }
     }
 }

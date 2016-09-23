@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -39,23 +39,21 @@ namespace Reko.UnitTests.Core
 		private Identifier arg08;
 		private Identifier arg0C;
 		private Identifier regOut;
-		private ProcedureSignature sig;
+		private FunctionType sig;
         private ApplicationBuilder ab;
 
 		public ApplicationBuilderTests()
 		{
-			arch = new IntelArchitecture(ProcessorMode.Protected32);
+			arch = new X86ArchitectureFlat32();
             frame = arch.CreateFrame();
 			ret = frame.EnsureRegister(Registers.eax);
 			arg04 = new Identifier("arg04",   PrimitiveType.Word32, new StackArgumentStorage(4, PrimitiveType.Word32));
 			arg08 = new Identifier("arg08",   PrimitiveType.Word16, new StackArgumentStorage(8, PrimitiveType.Word16));
 			arg0C = new Identifier("arg0C",   PrimitiveType.Byte, new StackArgumentStorage(0x0C, PrimitiveType.Byte));
 			regOut = new Identifier("edxOut", PrimitiveType.Word32, new OutArgumentStorage(frame.EnsureRegister(Registers.edx)));
-            sig = new ProcedureSignature(ret,
-                new Identifier[] { arg04, arg08, arg0C, regOut })
-                {
-                };
-		
+            sig = new FunctionType(
+                ret,
+                new Identifier[] { arg04, arg08, arg0C, regOut });
         }
 
 		[Test]
@@ -80,7 +78,7 @@ namespace Reko.UnitTests.Core
 			Assert.IsTrue(sig.Parameters[3].Storage is OutArgumentStorage);
             ab = new ApplicationBuilder(arch, frame, new CallSite(4, 0), new Identifier("foo", PrimitiveType.Word32, null), sig, false);
             var instr = ab.CreateInstruction();
-			Assert.AreEqual("eax = foo(Mem0[esp + 4:word32], Mem0[esp + 8:word16], Mem0[esp + 12:byte], out edx)", instr.ToString());
+			Assert.AreEqual("eax = foo(Mem0[esp:word32], Mem0[esp + 4:word16], Mem0[esp + 8:byte], out edx)", instr.ToString());
 		}
 
         [Test]
@@ -93,10 +91,8 @@ namespace Reko.UnitTests.Core
             var callee = new Procedure("callee", new  Frame (PrimitiveType.Word16));
             var wArg = callee.Frame.EnsureStackArgument(0, PrimitiveType.Word16);
             var dwArg = callee.Frame.EnsureStackArgument(2, PrimitiveType.Word32);
-            callee.Signature = new ProcedureSignature(
-                null,
-                wArg,
-                dwArg);
+            callee.Signature = FunctionType.Action(
+                new Identifier[] { wArg, dwArg });
             var cs = new CallSite(0, 0)
             {
                 StackDepthOnEntry = 6
@@ -104,6 +100,21 @@ namespace Reko.UnitTests.Core
             ab = new ApplicationBuilder(arch, caller.Frame, cs, new ProcedureConstant(PrimitiveType.Pointer32, callee), callee.Signature, true); 
             var instr = ab.CreateInstruction();
             Assert.AreEqual("callee(bindToArg02, bindToArg04)", instr.ToString());
+        }
+
+        [Test(Description="The byte is smaller than the target register, so we expect a 'DPB' instruction")]
+        public void AppBld_BindByteToRegister()
+        {
+            var callee = new Procedure("callee", new Frame(PrimitiveType.Pointer32));
+            var ab = new ApplicationBuilder(
+                arch, 
+                callee.Frame,
+                new CallSite(4, 0), 
+                new Identifier("foo", PrimitiveType.Pointer32, null),
+                new FunctionType(new Identifier("bRet", PrimitiveType.Byte, Registers.eax), new Identifier[0]),
+                true);
+            var instr = ab.CreateInstruction();
+            Assert.AreEqual("eax = DPB(eax, foo(), 0)", instr.ToString());
         }
 	}
 }

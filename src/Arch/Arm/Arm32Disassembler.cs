@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,21 +21,12 @@
 using Gee.External.Capstone;
 using Gee.External.Capstone.Arm;
 using Reko.Core;
-using Reko.Core.Expressions;
-using Reko.Core.Machine;
-using Reko.Core.Types;
-using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
-using System.Text;
-using ArmInstruction = Reko.Arch.Arm.Arm32Instruction;
 
-namespace Reko.Arch.Arm 
+namespace Reko.Arch.Arm
 {
     public class Arm32Disassembler : DisassemblerBase<Arm32Instruction> 
     {
-        private CapstoneDisassembler<Gee.External.Capstone.Arm.ArmInstruction, ArmRegister, ArmInstructionGroup, ArmInstructionDetail> dasm;
         private IEnumerator<Instruction<Gee.External.Capstone.Arm.ArmInstruction, ArmRegister, ArmInstructionGroup, ArmInstructionDetail>> stream;
 
         public Arm32Disassembler(Arm32ProcessorArchitecture arch, ImageReader rdr) {
@@ -45,14 +36,13 @@ namespace Reko.Arch.Arm
             this.stream = dasm.DisassembleStream(
                 rdr.Bytes, 
                 (int)rdr.Offset, 
-                (long)(rdr.Address.ToLinear() - rdr.Offset))
+                (long)rdr.Address.ToLinear() - rdr.Offset)
                 .GetEnumerator();
         }
 
         protected override void Dispose(bool disposing) {
             if (disposing) {
                 stream.Dispose();
-                dasm.Dispose();
             }
             base.Dispose(disposing);
         }

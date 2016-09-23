@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -64,6 +64,7 @@ namespace Reko.Arch.Mos6502
             {
                 this.instrCur = dasm.Current;
                 this.ric = new RtlInstructionCluster(instrCur.Address, instrCur.Length);
+                this.ric.Class = RtlClass.Linear;
                 this.emitter = new RtlEmitter(ric.Instructions);
                 switch (instrCur.Code)
                 {
@@ -101,7 +102,7 @@ namespace Reko.Arch.Mos6502
                 case Opcode.ldx: Ld(Registers.x); break;
                 case Opcode.ldy: Ld(Registers.y); break;
                 case Opcode.lsr: Lsr(); break;
-                case Opcode.nop: continue; 
+                case Opcode.nop: emitter.Nop(); break;
                 case Opcode.ora: Ora(); break;
                 case Opcode.pha: Push(Registers.a); break;
                 case Opcode.php: Push(AllRegs()); break;
@@ -145,15 +146,16 @@ namespace Reko.Arch.Mos6502
             emitter.Assign(dst, src);
             emitter.Assign(
                 frame.EnsureFlagGroup(
+                    Registers.p,
                     (uint) (FlagM.NF | FlagM.ZF),
                     "NZ",
                     PrimitiveType.Byte),
                 emitter.Cond(dst));
         }
 
-
         private void Branch(ConditionCode cc, FlagM flags)
         {
+            ric.Class = RtlClass.ConditionalTransfer;
             var f = FlagGroupStorage(flags);
             emitter.Branch(
                 emitter.Test(cc, f),
@@ -170,7 +172,7 @@ namespace Reko.Arch.Mos6502
                 if ((f & 1) != 0)
                     sb.Append(Registers.GetRegister(iReg));
             }
-            return frame.EnsureFlagGroup((uint)flags, sb.ToString(), PrimitiveType.Byte);
+            return frame.EnsureFlagGroup(Registers.p, (uint)flags, sb.ToString(), PrimitiveType.Byte);
         }
 
         private void Asl()
@@ -258,12 +260,14 @@ namespace Reko.Arch.Mos6502
 
         private void Jmp()
         {
-            var mem = (MemoryAccess) RewriteOperand(instrCur.Operand);
+            ric.Class = RtlClass.Transfer;
+            var mem = (MemoryAccess)RewriteOperand(instrCur.Operand);
             emitter.Goto(mem.EffectiveAddress);
         }
 
         private void Jsr()
         {
+            ric.Class = RtlClass.Transfer;
             var mem  = (MemoryAccess) RewriteOperand(instrCur.Operand);
             emitter.Call(mem.EffectiveAddress, 2);
         }
@@ -276,7 +280,6 @@ namespace Reko.Arch.Mos6502
             emitter.Assign(r, mem);
             emitter.Assign(c, emitter.Cond(r));
         }
-
 
         private void And()
         {
@@ -360,6 +363,7 @@ namespace Reko.Arch.Mos6502
 
         private void Rts()
         {
+            ric.Class = RtlClass.Transfer;
             emitter.Return(2, 0);
         }
 
@@ -367,14 +371,14 @@ namespace Reko.Arch.Mos6502
         {
             var mem = RewriteOperand(instrCur.Operand);
             var a = frame.EnsureRegister(Registers.a);
-            var c = frame.EnsureFlagGroup((uint) FlagM.CF, "C", PrimitiveType.Bool);
+            var c = frame.EnsureFlagGroup(Registers.p, (uint) FlagM.CF, "C", PrimitiveType.Bool);
             emitter.Assign(
                 a,
                 emitter.IAdd(
                     emitter.IAdd(a, mem),
                     c));
             emitter.Assign(
-                frame.EnsureFlagGroup((uint) Instruction.DefCc(instrCur.Code), "NVZC", PrimitiveType.Byte),
+                frame.EnsureFlagGroup(Registers.p, (uint) Instruction.DefCc(instrCur.Code), "NVZC", PrimitiveType.Byte),
                 emitter.Cond(a));
         }
 
@@ -382,14 +386,14 @@ namespace Reko.Arch.Mos6502
         {
             var mem = RewriteOperand(instrCur.Operand);
             var a = frame.EnsureRegister(Registers.a);
-            var c = frame.EnsureFlagGroup((uint) FlagM.CF, "C", PrimitiveType.Bool);
+            var c = frame.EnsureFlagGroup(Registers.p, (uint) FlagM.CF, "C", PrimitiveType.Bool);
             emitter.Assign(
                 a,
                 emitter.ISub(
                     emitter.ISub(a, mem),
                     emitter.Not(c)));
             emitter.Assign(
-                frame.EnsureFlagGroup((uint) Instruction.DefCc(instrCur.Code), "NVZC", PrimitiveType.Byte),
+                frame.EnsureFlagGroup(Registers.p, (uint) Instruction.DefCc(instrCur.Code), "NVZC", PrimitiveType.Byte),
                 emitter.Cond(a));
         }
 

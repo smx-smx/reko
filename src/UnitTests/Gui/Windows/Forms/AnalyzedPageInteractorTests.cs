@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -72,19 +72,27 @@ namespace Reko.UnitTests.Gui.Windows.Forms
 
             form.Stub(f => f.Show());
 
-            var loadAddress =  Address.Ptr32(0x100000);
+            var platform = mr.Stub<IPlatform>();
+            var loadAddress = Address.Ptr32(0x100000);
             var bytes = new byte[4711];
-            Program prog = new Program();
-            prog.Image = new LoadedImage(loadAddress, bytes);
-            prog.ImageMap = prog.Image.CreateImageMap();
-            prog.Architecture = new IntelArchitecture(ProcessorMode.Protected32);
+            var arch = new X86ArchitectureFlat32();
+            var mem = new MemoryArea(loadAddress, bytes);
+            Program prog = new Program
+            {
+                SegmentMap = new SegmentMap(
+                    mem.BaseAddress,
+                    new ImageSegment(".text", mem, AccessMode.ReadExecute)),
+                Architecture = arch,
+                Platform = platform,
+            };
             ILoader ldr = mr.StrictMock<ILoader>();
             ldr.Stub(l => l.LoadExecutable(null, null, null)).IgnoreArguments().Return(prog);
             ldr.Stub(l => l.LoadImageBytes(null, 0)).IgnoreArguments().Return(bytes);
             ldr.Replay();
             sc.AddService(typeof(DecompilerEventListener), new FakeDecompilerEventListener());
+            sc.AddService<DecompilerHost>(new FakeDecompilerHost());
             this.decSvc = new DecompilerService();
-            decSvc.Decompiler = new DecompilerDriver(ldr, new FakeDecompilerHost(), sc);
+            decSvc.Decompiler = new DecompilerDriver(ldr, sc);
             decSvc.Decompiler.Load("test.exe");
             program = decSvc.Decompiler.Project.Programs.First();
             decSvc.Decompiler.ScanPrograms();
@@ -113,7 +121,9 @@ namespace Reko.UnitTests.Gui.Windows.Forms
             mr.ReplayAll();
 
             form.Show();
-            program.Procedures.Add(Address.Ptr32(0x12345), new Procedure("foo", program.Architecture.CreateFrame()));
+            program.Procedures.Add(
+                Address.Ptr32(0x12345), 
+                Procedure.Create("foo", Address.Ptr32(0x12345), program.Architecture.CreateFrame()));
             interactor.EnterPage();
 
             mr.VerifyAll();
@@ -128,13 +138,14 @@ namespace Reko.UnitTests.Gui.Windows.Forms
         public void Anpi_SelectProcedure()
         {
             codeViewSvc.Stub(s => s.DisplayProcedure(
+                Arg<Program>.Is.Anything,
                 Arg<Procedure>.Matches(proc => proc.Name == "foo_proc")));
             mr.ReplayAll();
 
             Given_Interactor();
             form.Show();
             Procedure p = new Procedure("foo_proc", program.Architecture.CreateFrame());
-            p.Signature = new ProcedureSignature(
+            p.Signature = new FunctionType(
                 new Identifier("eax", PrimitiveType.Word32, Registers.eax),
                 new Identifier[] {
                     new Identifier("arg04", PrimitiveType.Word32, new StackArgumentStorage(4, PrimitiveType.Word32))

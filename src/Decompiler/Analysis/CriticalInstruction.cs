@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,9 +25,9 @@ using System;
 namespace Reko.Analysis
 {
 	/// <summary>
-	/// Determines whether an instruction is critical or not. Non-critical instructions
-	/// are candidates for dead code elimination, if the decompiler can prove they are
-    /// not used.
+	/// Determines whether an instruction is critical or not. Non-critical
+    /// instructions are candidates for dead code elimination, if the
+    /// decompiler can prove they are not used.
 	/// </summary>
 	public class CriticalInstruction : InstructionVisitorBase
 	{

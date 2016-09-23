@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,21 +20,44 @@
 
 using Reko.Core.Code;
 using Reko.Core.Expressions;
+using Reko.Core.Services;
 using Reko.Core.Types;
 using System;
 
 namespace Reko.Core
 {
+    /// <summary>
+    /// Rewrite call statements to Applications.
+    /// </summary>
+    /// <remarks>
+    /// Call statements are rewritten by consulting the ProcedureSignature
+    /// of the called function (callee). 
+    /// </remarks>
 	public class CallRewriter
 	{
-		public CallRewriter(Program program)
+        private DecompilerEventListener listener;
+
+		public CallRewriter(Program program, DecompilerEventListener listener)
 		{
             this.Program = program;
-		}
+            this.listener = listener;
+        }
+
+        public static void Rewrite(Program program, DecompilerEventListener listener)
+        {
+            var crw = new CallRewriter(program, listener);
+            foreach (Procedure proc in program.Procedures.Values)
+            {
+                if (listener.IsCanceled())
+                    break;
+                crw.RewriteCalls(proc);
+                crw.RewriteReturns(proc);
+            }
+        }
 
         public Program Program { get; private set; }
 
-		public virtual ProcedureSignature GetProcedureSignature(ProcedureBase proc)
+		public virtual FunctionType GetProcedureSignature(ProcedureBase proc)
 		{
 			return proc.Signature;
 		}
@@ -84,7 +107,7 @@ namespace Reko.Core
 		/// </summary>
 		/// <param name="proc"></param>
 		/// <returns>The number of calls that couldn't be converted</returns>
-        public int RewriteCalls(Procedure proc, IProcessorArchitecture arch)
+        public int RewriteCalls(Procedure proc)
         {
             int unConverted = 0;
             foreach (Statement stm in proc.Statements)
@@ -92,12 +115,31 @@ namespace Reko.Core
                 CallInstruction ci = stm.Instruction as CallInstruction;
                 if (ci != null)
                 {
-
                     if (!RewriteCall(proc, stm, ci))
                         ++unConverted;
                 }
             }
             return unConverted;
         }
-	}
+
+        /// <summary>
+        /// Having identified the return variable -- if any, rewrite all 
+        /// return statements to return that variable.
+        /// </summary>
+        /// <param name="proc"></param>
+        public void RewriteReturns(Procedure proc)
+        {
+            Identifier idRet = proc.Signature.ReturnValue;
+            if (idRet == null || idRet.DataType is VoidType)
+                return;
+            foreach (Statement stm in proc.Statements)
+            {
+                var ret = stm.Instruction as ReturnInstruction;
+                if (ret != null)
+                {
+                    ret.Expression = proc.Frame.EnsureIdentifier(idRet.Storage);
+                }
+            }
+        }
+    }
 }

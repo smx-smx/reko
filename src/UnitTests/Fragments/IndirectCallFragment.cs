@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,7 +34,7 @@ namespace Reko.UnitTests.Fragments
         protected override void BuildBody()
         {
             var ds = Local(PrimitiveType.SegmentSelector, "ds");
-            var cx = Local16("cx");
+            Local16("cx");
             var di = Local16("di");
             Call(
                 Seq(

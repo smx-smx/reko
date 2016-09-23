@@ -1,6 +1,6 @@
 #region License
 /* 
-* Copyright (C) 1999-2015 John Källén.
+* Copyright (C) 1999-2016 John Källén.
 *
 * This program is free software; you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -21,6 +21,8 @@
 using Reko.Core;
 using Reko.Gui.Forms;
 using System;
+using Reko.Gui.Windows.Forms;
+using Reko.Core.Machine;
 
 namespace Reko.Gui
 {
@@ -29,10 +31,18 @@ namespace Reko.Gui
         IAssembleFileDialog CreateAssembleFileDialog();
         IAssumedRegisterValuesDialog CreateAssumedRegisterValuesDialog(IProcessorArchitecture arch);
         IAddressPromptDialog CreateAddressPromptDialog();
+        ICallSiteDialog CreateCallSiteDialog(Program program, UserCallData ucd);
+        IFindStringsDialog CreateFindStringDialog();
         IMainForm CreateMainForm();
         IOpenAsDialog CreateOpenAsDialog();
+        IProcedureDialog CreateProcedureDialog(Program program, Core.Serialization.Procedure_v1 sProc);
         IProgramPropertiesDialog CreateProgramPropertiesDialog(Program program);
+        IResourceEditor CreateResourceEditor();
         ISearchDialog CreateSearchDialog();
         IUserPreferencesDialog CreateUserPreferencesDialog();
+        IWorkerDialog CreateWorkerDialog();
+        ITextEncodingDialog CreateTextEncodingDialog();
+        IDeclarationForm CreateDeclarationForm();
+        IJumpTableDialog CreateJumpTableDialog(Program program, MachineInstruction instrIndirectJmp, Address addrVector, int stride);
     }
 }

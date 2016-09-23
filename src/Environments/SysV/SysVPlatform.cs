@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@
 #endregion
 
 using Reko.Core;
+using Reko.Core.CLanguage;
 using Reko.Core.Configuration;
 using Reko.Core.Expressions;
 using Reko.Core.Lib;
@@ -33,14 +34,11 @@ using System.Text;
 
 namespace Reko.Environments.SysV
 {
-    //$TODO: rename to Elf-Neutral?
+    //$TODO: rename to Elf-Neutral? Or Posix?
     public class SysVPlatform : Platform
     {
-        private TypeLibrary[] typelibs;
-        private CharacteristicsLibrary[] CharacteristicsLibs;
-
         public SysVPlatform(IServiceProvider services, IProcessorArchitecture arch)
-            : base(services, arch)
+            : base(services, arch, "elf-neutral")
         {
         }
 
@@ -51,41 +49,49 @@ namespace Reko.Environments.SysV
 
         public override ProcedureSerializer CreateProcedureSerializer(ISerializedTypeVisitor<DataType> typeLoader, string defaultConvention)
         {
-            return new X86_64ProcedureSerializer(Architecture, typeLoader, defaultConvention);
-        }
-
-        public override BitSet CreateImplicitArgumentRegisters()
-        {
-            return Architecture.CreateRegisterBitset();
-        }
-
-        private void EnsureTypeLibraries()
-        {
-            if (typelibs == null)
+            switch (Architecture.Name)
             {
-                var cfgSvc = Services.RequireService<IConfigurationService>();
-                var envCfg = cfgSvc.GetEnvironment("elf-neutral");
-                var tlSvc = Services.RequireService<ITypeLibraryLoaderService>();
-                this.typelibs = ((System.Collections.IEnumerable)envCfg.TypeLibraries)
-                    .OfType<ITypeLibraryElement>()
-                    .Select(tl => tlSvc.LoadLibrary(this, tl.Name))
-                    .Where(tl => tl != null).ToArray();
-                this.CharacteristicsLibs = ((System.Collections.IEnumerable)envCfg.CharacteristicsLibraries)
-                    .OfType<ITypeLibraryElement>()
-                    .Select(cl => tlSvc.LoadCharacteristics(cl.Name))
-                    .Where(cl => cl != null).ToArray();
+            case "mips-be-32":
+                return new MipsProcedureSerializer(Architecture, typeLoader, defaultConvention);
+            case "ppc32":
+                return new PowerPcProcedureSerializer(Architecture, typeLoader, defaultConvention);
+            case "sparc32":
+                return new SparcProcedureSerializer(Architecture, typeLoader, defaultConvention);
+            case "x86-protected-32":
+                return new X86ProcedureSerializer(Architecture, typeLoader, defaultConvention);
+            case "x86-protected-64":
+                return new X86_64ProcedureSerializer(Architecture, typeLoader, defaultConvention);
+            default:
+                throw new NotImplementedException(string.Format("Procedure serializer for {0} not implemented yet.", Architecture.Description));
             }
+        }
+
+        public override HashSet<RegisterStorage> CreateImplicitArgumentRegisters()
+        {
+            return new HashSet<RegisterStorage>();
         }
 
         public override SystemService FindService(int vector, ProcessorState state)
         {
-            EnsureTypeLibraries();
-            return this.typelibs
-                .Where(t => t.ServicesByVector != null && t.ServicesByVector.Count > 0)
-                .SelectMany(t => t.ServicesByVector)
-                .Where(svc => svc.Value.SyscallInfo.Matches(vector, state))
-                .Select(svc => svc.Value)
-                .FirstOrDefault();
+            throw new NotImplementedException(); 
+        }
+
+        public override int GetByteSizeFromCBasicType(CBasicType cb)
+        {
+            switch (cb)
+            {
+            case CBasicType.Char: return 1;
+            case CBasicType.WChar_t: return 2; 
+            case CBasicType.Short: return 2;
+            case CBasicType.Int: return 4;
+            case CBasicType.Long: return 4;
+            case CBasicType.LongLong: return 8;
+            case CBasicType.Float: return 4;
+            case CBasicType.Double: return 8;
+            case CBasicType.LongDouble: return 8;
+            case CBasicType.Int64: return 8;
+            default: throw new NotImplementedException(string.Format("C basic type {0} not supported.", cb));
+            }
         }
 
         public override ProcedureBase GetTrampolineDestination(ImageReader rdr, IRewriterHost host)
@@ -129,14 +135,25 @@ namespace Reko.Environments.SysV
             return host.GetInterceptedCall(addrTarget);
         }
 
+        public override void InjectProcedureEntryStatements(Procedure proc, Address addr, CodeEmitter m)
+        {
+            switch (Architecture.Name)
+            {
+            case "mips-be-32":
+                // MIPS ELF ABI: r25 is _always_ set to the address of a procedure on entry.
+                m.Assign(proc.Frame.EnsureRegister(Architecture.GetRegister(25)), Constant.Word32((uint) addr.ToLinear()));
+                break;
+            }
+        }
+
         public override ExternalProcedure LookupProcedureByName(string moduleName, string procName)
         {
             //$REVIEW: looks a lot like Win32library, perhaps push to parent class?
-            EnsureTypeLibraries();
-            var proc = typelibs.Select(t => t.Lookup(procName))
-                        .Where(sig => sig != null)
-                        .Select(s => new ExternalProcedure(procName, s))
-                        .FirstOrDefault();
+            EnsureTypeLibraries(PlatformIdentifier);
+            var sig = Metadata.Lookup(procName);
+            if (sig == null)
+                return null;
+            var proc = new ExternalProcedure(procName, sig);
             var characteristics = CharacteristicsLibs.Select(cl => cl.Lookup(procName))
                 .Where(c => c != null)
                 .FirstOrDefault();

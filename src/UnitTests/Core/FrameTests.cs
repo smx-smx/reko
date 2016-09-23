@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,26 +37,26 @@ namespace Reko.UnitTests.Core
         [SetUp]
         public void Setup()
         {
-            arch = new IntelArchitecture(ProcessorMode.Real);
+            arch = new X86ArchitectureReal();
         }
+
 		[Test]
-		public void RegisterTest()
+		public void FrRegisterTest()
 		{
 			Frame f = new Frame(PrimitiveType.Word16);
 			Identifier id0 = f.EnsureRegister(Registers.ax);
-			Identifier id1 = f.EnsureRegister(Registers.bx);
+			f.EnsureRegister(Registers.bx);
 			Identifier id2 = f.EnsureRegister(Registers.ax);
 			Assert.AreEqual(id0, id2);
 		}
 
 		[Test]
-		public void SequenceTest()
+		public void FrSequenceTest()
 		{
-			IntelArchitecture arch = new IntelArchitecture(ProcessorMode.Real);
 			Frame f = new Frame(PrimitiveType.Word16);
 			Identifier ax = f.EnsureRegister(Registers.ax);
 			Identifier dx = f.EnsureRegister(Registers.dx);
-			Identifier dxax = f.EnsureSequence(dx, ax, PrimitiveType.Word32);
+			Identifier dxax = f.EnsureSequence(dx.Storage, ax.Storage, PrimitiveType.Word32);
 
 			using (FileUnitTester fut = new FileUnitTester("Core/SequenceTest.txt"))
 			{
@@ -64,17 +64,17 @@ namespace Reko.UnitTests.Core
 				fut.AssertFilesEqual();
 			}
 
-			Identifier dxax2 = f.EnsureSequence(dx,ax, PrimitiveType.Word32);
+			Identifier dxax2 = f.EnsureSequence(dx.Storage, ax.Storage, PrimitiveType.Word32);
 			Assert.IsTrue(dxax2 == dxax);
 		}
 
 		[Test]
 		public void FrGrfTest()
 		{
-			IntelArchitecture arch = new IntelArchitecture(ProcessorMode.Real);
+			IntelArchitecture arch = new X86ArchitectureReal();
 			Frame f = new Frame(PrimitiveType.Word16);
 			uint iSz = (uint) (FlagM.ZF|FlagM.SF);
-			Identifier grfSz = f.EnsureFlagGroup(iSz, arch.GrfToString(iSz), PrimitiveType.Byte);
+			f.EnsureFlagGroup(Registers.eflags, iSz, arch.GrfToString(iSz), PrimitiveType.Byte);
 			using (FileUnitTester fut = new FileUnitTester("Core/FrGrfTest.txt"))
 			{
 				f.Write(fut.TextWriter);
@@ -103,7 +103,7 @@ namespace Reko.UnitTests.Core
 			Frame f = new Frame(PrimitiveType.Word16);
 			Identifier ax = f.EnsureRegister(Registers.ax);
 			Identifier dx = f.EnsureRegister(Registers.dx);
-			Identifier dx_ax = f.EnsureSequence(dx, ax, PrimitiveType.Word32);
+			Identifier dx_ax = f.EnsureSequence(dx.Storage, ax.Storage, PrimitiveType.Word32);
 			SequenceStorage vDx_ax = (SequenceStorage) dx_ax.Storage;
 			using (FileUnitTester fut = new FileUnitTester("Core/FrSequenceAccess.txt"))
 			{
@@ -124,10 +124,10 @@ namespace Reko.UnitTests.Core
 			int stack = 2;
 			Identifier loc02 = f.EnsureStackLocal(-stack, PrimitiveType.Word16, "wLoc02");
 			stack += loc02.DataType.Size;
-			Identifier loc04 = f.EnsureStackLocal(-stack, PrimitiveType.Word16, "wLoc04");
+			f.EnsureStackLocal(-stack, PrimitiveType.Word16, "wLoc04");
 
-			ProcedureSignature sig = new ProcedureSignature(
-				null, new Identifier[] {
+			FunctionType sig = FunctionType.Action(
+                new Identifier[] {
 					new Identifier("arg0", PrimitiveType.Word16, new StackArgumentStorage(4, PrimitiveType.Word16)),
 					new Identifier("arg1", PrimitiveType.Word16, new StackArgumentStorage(6, PrimitiveType.Word16)) });
 
@@ -150,12 +150,14 @@ namespace Reko.UnitTests.Core
 			Identifier ax = f.EnsureRegister(Registers.ax);
 			Identifier cx = f.EnsureRegister(Registers.cx);
 			int stack = PrimitiveType.Word16.Size;
-			Identifier arg1 = f.EnsureStackLocal(-stack, PrimitiveType.Word16);
+			f.EnsureStackLocal(-stack, PrimitiveType.Word16);
 
-			ProcedureSignature sig = new ProcedureSignature(
-				ax,
-			    cx,
-			    new Identifier("arg0", PrimitiveType.Word16, new StackArgumentStorage(0, PrimitiveType.Word16)));
+			FunctionType sig = new FunctionType(
+                ax,
+                new Identifier[] {
+                    cx,
+                    new Identifier("arg0", PrimitiveType.Word16, new StackArgumentStorage(0, PrimitiveType.Word16))
+                });
 			
 			var cs = new CallSite(stack, 0);
 			ProcedureConstant fn = new ProcedureConstant(PrimitiveType.Pointer32, new PseudoProcedure("bar", sig));
@@ -188,7 +190,7 @@ namespace Reko.UnitTests.Core
 		public void FrEnsureRegister()
 		{
 			Frame f = new Frame(PrimitiveType.Word32);
-			f.EnsureRegister(new Mocks.MockMachineRegister("eax", 0, PrimitiveType.Word32));
+			f.EnsureRegister(new RegisterStorage("eax", 0, 0, PrimitiveType.Word32));
 			Assert.AreEqual("eax", f.Identifiers[2].Name);
 			Assert.AreSame(PrimitiveType.Word32, f.Identifiers[2].DataType);
 		}
@@ -197,7 +199,7 @@ namespace Reko.UnitTests.Core
 		public void EnsureOutRegister()
 		{
 			Frame f = new Frame(PrimitiveType.Word32);
-			Identifier r = f.EnsureRegister(new Mocks.MockMachineRegister("r1", 1, PrimitiveType.Word32));
+			Identifier r = f.EnsureRegister(new RegisterStorage("r1", 1, 0, PrimitiveType.Word32));
 			Identifier arg = f.EnsureOutArgument(r, PrimitiveType.Pointer32);
 			Assert.AreEqual("r1Out", arg.Name);
 			Assert.AreSame(PrimitiveType.Pointer32, arg.DataType);

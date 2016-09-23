@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,8 +34,22 @@ namespace Reko.Arch.Cil
             { OpCodes.Ldc_I4_0,  "ldc.i4.0"}
         };
 
+        public override bool IsValid { get { return false; } }
         public OpCode Opcode { get; set; }
         public override int OpcodeAsInteger { get { return (int)Opcode.Value; } }
+
+        public override InstructionClass InstructionClass
+        {
+            get
+            {
+                throw new NotImplementedException();
+            }
+        }
+
+        public override MachineOperand GetOperand(int i)
+        {
+            throw new NotImplementedException();
+        }
 
         public override void Render(MachineInstructionWriter writer)
         {

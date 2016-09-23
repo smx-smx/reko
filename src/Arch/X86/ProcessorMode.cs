@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -60,11 +60,13 @@ namespace Reko.Arch.X86
             get { return Registers.sp; }
         }
 
-        public abstract IEnumerable<Address> CreateInstructionScanner(ImageMap map, ImageReader rdr, IEnumerable<Address> knownAddresses, PointerScannerFlags flags);
+        public abstract IEnumerable<Address> CreateInstructionScanner(SegmentMap map, ImageReader rdr, IEnumerable<Address> knownAddresses, PointerScannerFlags flags);
 
-        public abstract X86Disassembler CreateDisassembler(ImageReader rdr);
+        public abstract X86Disassembler CreateDisassembler(ImageReader rdr, X86Options options);
 
         public abstract OperandRewriter CreateOperandRewriter(IntelArchitecture arch, Frame frame, IRewriterHost host);
+
+        public abstract Address CreateSegmentedAddress(ushort seg, uint offset);
 
         public virtual Expression CreateStackAccess(Frame frame, int offset, DataType dataType)
         {
@@ -81,53 +83,19 @@ namespace Reko.Arch.X86
         {
             if (byteSize == PrimitiveType.Word16.Size)
             {
-                return Address.SegPtr(state.GetRegister(Registers.cs).ToUInt16(), rdr.ReadLeUInt16());
+                return CreateSegmentedAddress(state.GetRegister(Registers.cs).ToUInt16(), rdr.ReadLeUInt16());
             }
             else
             {
                 ushort off = rdr.ReadLeUInt16();
                 ushort seg = rdr.ReadLeUInt16();
-                return Address.SegPtr(seg, off);
+                return CreateSegmentedAddress(seg, off);
             }
         }
 
         public abstract bool TryParseAddress(string txtAddress, out Address addr);
-    }
 
-    internal class RealMode : ProcessorMode
-    {
-        public RealMode()
-            : base(PrimitiveType.Word16, PrimitiveType.Ptr16, PrimitiveType.Pointer32)
-        {
-        }
-
-        public override IEnumerable<Address> CreateInstructionScanner(ImageMap map, ImageReader rdr, IEnumerable<Address> knownAddresses, PointerScannerFlags flags)
-        {
-            var knownLinAddresses = knownAddresses.Select(a => a.ToUInt32()).ToHashSet();
-            return new X86RealModePointerScanner(rdr, knownLinAddresses, flags).Select(li => map.MapLinearAddressToAddress(li));
-        }
-
-        public override X86Disassembler CreateDisassembler(ImageReader rdr)
-        {
-            return new X86Disassembler(rdr, PrimitiveType.Word16, PrimitiveType.Word16, false);
-        }
-
-        public override OperandRewriter CreateOperandRewriter(IntelArchitecture arch, Frame frame, IRewriterHost host)
-        {
-            return new OperandRewriter16(arch, frame, host);
-        }
-
-        public override Address MakeAddressFromConstant(Constant c)
-        {
-            throw new NotSupportedException("Must pass segment:offset to make a segmented address.");
-        }
-
-        public override Address ReadCodeAddress(int byteSize, ImageReader rdr, ProcessorState state)
-        {
-            return ReadSegmentedCodeAddress(byteSize, rdr, state);
-        }
-
-        public override bool TryParseAddress(string txtAddress, out Address addr)
+        public bool TryParseSegmentedAddress(string txtAddress, out Address addr)
         {
             if (txtAddress != null)
             {
@@ -136,7 +104,7 @@ namespace Reko.Arch.X86
                 {
                     try
                     {
-                        addr = Address.SegPtr(
+                        addr = CreateSegmentedAddress(
                             Convert.ToUInt16(txtAddress.Substring(0, c), 16),
                             Convert.ToUInt32(txtAddress.Substring(c + 1), 16));
                         return true;
@@ -146,29 +114,40 @@ namespace Reko.Arch.X86
             }
             addr = null;
             return false;
-		}        
+        }
     }
 
-    internal class SegmentedMode : ProcessorMode
+    internal class RealMode : ProcessorMode
     {
-        public SegmentedMode()
-            : base(PrimitiveType.Word16, PrimitiveType.Ptr16, PrimitiveType.Pointer32)
+        public RealMode()
+            : base(PrimitiveType.Word16, PrimitiveType.Offset16, PrimitiveType.Pointer32)
         {
         }
 
-        public override X86Disassembler CreateDisassembler(ImageReader rdr)
+        public override IEnumerable<Address> CreateInstructionScanner(SegmentMap map, ImageReader rdr, IEnumerable<Address> knownAddresses, PointerScannerFlags flags)
         {
-            return new X86Disassembler(rdr, PrimitiveType.Word16, PrimitiveType.Word16, false);
+            var knownLinAddresses = knownAddresses.Select(a => a.ToUInt32()).ToHashSet();
+            return new X86RealModePointerScanner(rdr, knownLinAddresses, flags).Select(li => map.MapLinearAddressToAddress(li));
         }
 
-        public override IEnumerable<Address> CreateInstructionScanner(ImageMap map, ImageReader rdr, IEnumerable<Address> knownAddresses, PointerScannerFlags flags)
+        public override X86Disassembler CreateDisassembler(ImageReader rdr, X86Options options)
         {
-            throw new NotImplementedException();
+            var dasm = new X86Disassembler(this, rdr, PrimitiveType.Word16, PrimitiveType.Word16, false);
+            if (options != null)
+            {
+                dasm.Emulate8087 = options.Emulate8087;
+            }
+            return dasm;
         }
 
         public override OperandRewriter CreateOperandRewriter(IntelArchitecture arch, Frame frame, IRewriterHost host)
         {
             return new OperandRewriter16(arch, frame, host);
+        }
+
+        public override Address CreateSegmentedAddress(ushort seg, uint offset)
+        {
+            return Address.SegPtr(seg, offset);
         }
 
         public override Address MakeAddressFromConstant(Constant c)
@@ -183,7 +162,51 @@ namespace Reko.Arch.X86
 
         public override bool TryParseAddress(string txtAddress, out Address addr)
         {
-            throw new NotImplementedException();
+            return TryParseSegmentedAddress(txtAddress, out addr);
+        }
+    }
+
+    internal class SegmentedMode : ProcessorMode
+    {
+        public SegmentedMode()
+            : base(PrimitiveType.Word16, PrimitiveType.Offset16, PrimitiveType.Pointer32)
+        {
+        }
+
+        public override X86Disassembler CreateDisassembler(ImageReader rdr, X86Options options)
+        {
+            return new X86Disassembler(this, rdr, PrimitiveType.Word16, PrimitiveType.Word16, false);
+        }
+
+        public override IEnumerable<Address> CreateInstructionScanner(SegmentMap map, ImageReader rdr, IEnumerable<Address> knownAddresses, PointerScannerFlags flags)
+        {
+            var knownLinAddresses = knownAddresses.Select(a => a.ToUInt32()).ToHashSet();
+            return new X86RealModePointerScanner(rdr, knownLinAddresses, flags).Select(li => map.MapLinearAddressToAddress(li));
+        }
+
+        public override OperandRewriter CreateOperandRewriter(IntelArchitecture arch, Frame frame, IRewriterHost host)
+        {
+            return new OperandRewriter16(arch, frame, host);
+        }
+
+        public override Address CreateSegmentedAddress(ushort seg, uint offset)
+        {
+            return Address.ProtectedSegPtr(seg, offset);
+        }
+
+        public override Address MakeAddressFromConstant(Constant c)
+        {
+            throw new NotSupportedException("Must pass segment:offset to make a segmented address.");
+        }
+
+        public override Address ReadCodeAddress(int byteSize, ImageReader rdr, ProcessorState state)
+        {
+            return ReadSegmentedCodeAddress(byteSize, rdr, state);
+        }
+
+        public override bool TryParseAddress(string txtAddress, out Address addr)
+        {
+            return TryParseSegmentedAddress(txtAddress, out addr);
         }
     }
 
@@ -210,7 +233,7 @@ namespace Reko.Arch.X86
         }
 
         public override IEnumerable<Address> CreateInstructionScanner(
-            ImageMap map,
+            SegmentMap map,
             ImageReader rdr,
             IEnumerable<Address> knownAddresses,
             PointerScannerFlags flags)
@@ -219,14 +242,19 @@ namespace Reko.Arch.X86
             return new X86PointerScanner32(rdr, knownLinaddresses, flags).Select(li => map.MapLinearAddressToAddress(li));
         }
 
-        public override X86Disassembler CreateDisassembler(ImageReader rdr)
+        public override X86Disassembler CreateDisassembler(ImageReader rdr, X86Options options)
         {
-            return new X86Disassembler(rdr, PrimitiveType.Word32, PrimitiveType.Word32, false);
+            return new X86Disassembler(this, rdr, PrimitiveType.Word32, PrimitiveType.Word32, false);
         }
 
         public override OperandRewriter CreateOperandRewriter(IntelArchitecture arch, Frame frame, IRewriterHost host)
         {
             return new OperandRewriter32(arch, frame, host);
+        }
+
+        public override Address CreateSegmentedAddress(ushort seg, uint offset)
+        {
+            return null;
         }
 
         public override Expression CreateStackAccess(Frame frame, int offset, DataType dataType)
@@ -268,20 +296,25 @@ namespace Reko.Arch.X86
             return Address.Ptr64(offset);
         }
 
-        public override IEnumerable<Address> CreateInstructionScanner(ImageMap map, ImageReader rdr, IEnumerable<Address> knownAddresses, PointerScannerFlags flags)
+        public override IEnumerable<Address> CreateInstructionScanner(SegmentMap map, ImageReader rdr, IEnumerable<Address> knownAddresses, PointerScannerFlags flags)
         {
             var knownLinAddresses = knownAddresses.Select(a => (ulong)a.ToLinear()).ToHashSet();
             return new X86PointerScanner64(rdr, knownLinAddresses, flags).Select(li => map.MapLinearAddressToAddress(li));
         }
 
-        public override X86Disassembler CreateDisassembler(ImageReader rdr)
+        public override X86Disassembler CreateDisassembler(ImageReader rdr, X86Options options)
         {
-            return new X86Disassembler(rdr, PrimitiveType.Word32, PrimitiveType.Word64, true);
+            return new X86Disassembler(this, rdr, PrimitiveType.Word32, PrimitiveType.Word64, true);
         }
 
         public override OperandRewriter CreateOperandRewriter(IntelArchitecture arch, Frame frame, IRewriterHost host)
         {
             return new OperandRewriter64(arch, frame, host);
+        }
+
+        public override Address CreateSegmentedAddress(ushort seg, uint offset)
+        {
+            return null;
         }
 
         public override Expression CreateStackAccess(Frame frame, int offset, DataType dataType)

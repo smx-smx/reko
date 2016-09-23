@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,10 +28,32 @@ namespace Reko.Arch.Mos6502
 {
     public class Instruction : MachineInstruction
     {
+        private static Dictionary<Opcode, InstructionClass> classOf;
+
         public Opcode Code;
         public Operand Operand;
 
+        public override bool IsValid { get { return Code != Opcode.illegal; } }
+
+        public override InstructionClass InstructionClass
+        {
+            get
+            {
+                InstructionClass ct;
+                if (!classOf.TryGetValue(Code, out ct))
+                {
+                    ct = InstructionClass.Linear;
+                }
+                return ct;
+            }
+        }
+
         public override int OpcodeAsInteger { get { return (int)Code; } }
+
+        public override MachineOperand GetOperand(int i)
+        {
+            return i == 0 ? Operand : null;
+        }
 
         public override void Render(MachineInstructionWriter writer)
         {
@@ -124,6 +146,27 @@ namespace Reko.Arch.Mos6502
                 return FlagM.CF;
             }
             return 0;
+        }
+
+        static Instruction()
+        {
+            classOf = new Dictionary<Opcode, InstructionClass>
+            {
+                { Opcode.illegal, InstructionClass.Linear },
+
+                { Opcode.bcc, InstructionClass.Transfer | InstructionClass.Conditional },
+                { Opcode.bcs, InstructionClass.Transfer | InstructionClass.Conditional },
+                { Opcode.beq, InstructionClass.Transfer | InstructionClass.Conditional },
+                { Opcode.bit, InstructionClass.Transfer | InstructionClass.Conditional },
+                { Opcode.bmi, InstructionClass.Transfer | InstructionClass.Conditional },
+                { Opcode.bne, InstructionClass.Transfer | InstructionClass.Conditional },
+                { Opcode.bpl, InstructionClass.Transfer | InstructionClass.Conditional },
+                { Opcode.brk, InstructionClass.Transfer | InstructionClass.Conditional },
+                { Opcode.bvc, InstructionClass.Transfer | InstructionClass.Conditional },
+                { Opcode.bvs, InstructionClass.Transfer | InstructionClass.Conditional },
+                { Opcode.jmp, InstructionClass.Transfer },
+                { Opcode.jsr, InstructionClass.Transfer | InstructionClass.Call },
+            };
         }
     }
 }

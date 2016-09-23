@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@
 #endregion
 
 using Reko.Core;
+using Reko.Core.Types;
 using Reko.Gui;
 using Reko.Gui.Controls;
 using System.ComponentModel;
@@ -38,25 +39,28 @@ using DragDropEffects = System.Windows.Forms.DragDropEffects;
 using System.Xml;
 using System.Xml.Linq;
 using System.Windows.Forms;
+using System.Drawing;
 
 namespace Reko.UnitTests.Gui.Windows
 {
     [TestFixture]
+    [NUnit.Framework.Category(Categories.UserInterface)]
     public class ProjectBrowserServiceTests
     {
         private readonly string cr = Environment.NewLine == "\r\n"
                 ? "&#xD;&#xA;"
                 : "&#xA;";
+        private readonly char sep = Path.DirectorySeparatorChar;
+
         private MockRepository mr;
         private ServiceContainer sc;
         private FakeTreeView fakeTree;
         private ITreeView mockTree;
         private ITreeNodeCollection mockNodes;
-        private IDecompilerService decompilerSvc;
-        private IDecompiler decompiler;
         private Program program;
         private Project project;
         private IDecompilerShellUiService uiSvc;
+        private IUiPreferencesService uiPrefSvc;
 
         [SetUp]
         public void Setup()
@@ -65,18 +69,17 @@ namespace Reko.UnitTests.Gui.Windows
             sc = new ServiceContainer();
             mockTree = mr.StrictMock<ITreeView>();
             mockNodes = mr.StrictMock<ITreeNodeCollection>();
-            decompilerSvc = mr.StrictMock<IDecompilerService>();
             uiSvc = mr.StrictMock<IDecompilerShellUiService>();
-            decompiler = mr.StrictMock<IDecompiler>();
+            uiPrefSvc = mr.Stub<IUiPreferencesService>();
             mockTree.Stub(t => t.Nodes).Return(mockNodes);
             uiSvc.Stub(u => u.GetContextMenu(0)).IgnoreArguments().Return(new ContextMenu());
             sc.AddService<IDecompilerShellUiService>(uiSvc);
+            sc.AddService<IUiPreferencesService>(uiPrefSvc);
             fakeTree = new FakeTreeView();
         }
 
         private void Expect(string sExp)
         {
-            var x = new XElement("foo");
             Func<ITreeNode, XNode> render = null;
             render = new Func<ITreeNode, XNode>(n =>
             {
@@ -97,8 +100,15 @@ namespace Reko.UnitTests.Gui.Windows
                     fakeTree.Nodes.Select(n => render(n))));
             xdoc.RemoveAnnotations<XProcessingInstruction>();
             xdoc.WriteTo(new XmlTextWriter(sb));
-            Console.WriteLine(sb.ToString());
-            Assert.AreEqual(sExp, sb.ToString());
+            try
+            {
+                Assert.AreEqual(sExp, sb.ToString());
+            }
+            catch
+            {
+                Console.WriteLine(sb.ToString());
+                throw;
+            }
         }
 
         #region Fake TreeView (Move to UnitTests.Fakes?)
@@ -124,9 +134,41 @@ namespace Reko.UnitTests.Gui.Windows
             private ITreeNode selectedItem;
 
             public bool Focused { get; set; }
+            public bool Enabled { get; set; }
             public ContextMenu ContextMenu { get; set; }
             public bool ShowRootLines { get; set; }
             public bool ShowNodeToolTips { get; set; }
+
+            public Color ForeColor
+            {
+                get
+                {
+                    throw new NotImplementedException();
+                }
+
+                set
+                {
+                    throw new NotImplementedException();
+                }
+            }
+
+            public Color BackColor
+            {
+                get
+                {
+                    throw new NotImplementedException();
+                }
+
+                set
+                {
+                    throw new NotImplementedException();
+                }
+            }
+
+            public void CollapseAll()
+            {
+
+            }
 
             public ITreeNode CreateNode()
             {
@@ -161,6 +203,11 @@ namespace Reko.UnitTests.Gui.Windows
             public void PerformMouseWheel(MouseEventArgs e)
             {
                 MouseWheel(this, e);
+            }
+
+            public void Invoke(Action action)
+            {
+                throw new NotImplementedException();
             }
         }
 
@@ -269,6 +316,8 @@ namespace Reko.UnitTests.Gui.Windows
             public void Expand()
             {
             }
+
+            public void Invoke(Action a) { a();  }
         }
 
         [Designer(typeof(TestDesigner))]
@@ -311,6 +360,7 @@ namespace Reko.UnitTests.Gui.Windows
             public string ToolTipText { get; set; }
 
             public void Expand() { }
+            public void Invoke(Action a) { a(); }
         }
 
         #endregion
@@ -328,16 +378,28 @@ namespace Reko.UnitTests.Gui.Windows
 
         private void Given_ProgramWithOneSegment()
         {
-            var image = new LoadedImage(Address.Ptr32(0x12340000), new byte[0x1000]);
-            var imageMap = image.CreateImageMap();
-            imageMap.AddSegment(Address.Ptr32(0x12340000), ".text", AccessMode.Execute);
+            var mem = new MemoryArea(Address.Ptr32(0x12340000), new byte[0x1000]);
+            var segmentMap = new SegmentMap(Address.Ptr32(0x12300000));
+            segmentMap.AddSegment(mem, ".text", AccessMode.ReadExecute);
             var arch = mr.StrictMock<ProcessorArchitecture>();
             arch.Description = "Foo Processor";
             var platform = new DefaultPlatform(sc, arch);
-            this.program = new Program(image, imageMap, arch, platform);
+            this.program = new Program(segmentMap, arch, platform);
             this.program.Name = "foo.exe";
             this.program.Filename = @"c:\test\foo.exe";
             project.Programs.Add(program);
+        }
+
+        private void Given_ImageMapItem(uint address)
+        {
+            this.program.ImageMap.AddItemWithSize(
+                Address.Ptr32(address),
+                new ImageMapItem
+                {
+                    Address = Address.Ptr32(address),
+                    Size = 4,
+                    DataType = PrimitiveType.Int32,
+                });
         }
 
         [Test]
@@ -346,6 +408,7 @@ namespace Reko.UnitTests.Gui.Windows
             var pbs = new ProjectBrowserService(sc, fakeTree);
             Given_Project();
             Given_ProgramWithOneSegment();
+            Given_ImageMapItem(0x12340000);
 
             pbs.Load(project);
 
@@ -356,14 +419,48 @@ namespace Reko.UnitTests.Gui.Windows
                 "<root>" +
                 "<node " +
                     "text=\"foo.exe\" " +
-                    "tip=\"c:\\test\\foo.exe" + cr + "12340000\" " +
+                    "tip=\"c:\\test\\foo.exe" + cr + "12300000\" " +
                     "tag=\"ProgramDesigner\">" +
                     "<node text=\"Foo Processor\" tag=\"ArchitectureDesigner\" />" +
                     "<node text=\"(Unknown operating environment)\" tag=\"PlatformDesigner\" />" +
                     "<node " + 
-                        "text=\"Image base\" " +
-                        "tip=\"Image base" + cr + "Address: 12340000" + cr + "Size: 1000" + cr + "rw-" + "\" " +
+                        "text=\".text\" " +
+                        "tip=\".text" + cr + "Address: 12340000" + cr + "Size: 1000" + cr + "r-x" + "\" " +
+                        "tag=\"ImageMapSegmentNodeDesigner\">" +
+                            "<node " +
+                                "text=\"Global variables\" " +
+                                "tag=\"GlobalVariablesNodeDesigner\" />" +
+                    "</node>" +
+                    "<node tag=\"ProgramResourceGroupDesigner\" />" +
+                "</node>" +
+                "</root>");
+        }
+
+        [Test]
+        public void PBS_SingleBinary_NoGlobals()
+        {
+            var pbs = new ProjectBrowserService(sc, fakeTree);
+            Given_Project();
+            Given_ProgramWithOneSegment();
+
+            pbs.Load(project);
+
+            Assert.IsTrue(fakeTree.ShowNodeToolTips);
+
+            Expect(
+                "<?xml version=\"1.0\" encoding=\"utf-16\"?>" +
+                "<root>" +
+                "<node " +
+                    "text=\"foo.exe\" " +
+                    "tip=\"c:\\test\\foo.exe" + cr + "12300000\" " +
+                    "tag=\"ProgramDesigner\">" +
+                    "<node text=\"Foo Processor\" tag=\"ArchitectureDesigner\" />" +
+                    "<node text=\"(Unknown operating environment)\" tag=\"PlatformDesigner\" />" +
+                    "<node " +
+                        "text=\".text\" " +
+                        "tip=\".text" + cr + "Address: 12340000" + cr + "Size: 1000" + cr + "r-x" + "\" " +
                         "tag=\"ImageMapSegmentNodeDesigner\" />" +
+                    "<node tag=\"ProgramResourceGroupDesigner\" />" +
                 "</node>" +
                 "</root>");
         }
@@ -374,21 +471,29 @@ namespace Reko.UnitTests.Gui.Windows
             var pbs = new ProjectBrowserService(sc, fakeTree);
             Given_Project();
             Given_ProgramWithOneSegment();
+            Given_ImageMapItem(0x12340000);
             mr.ReplayAll();
 
             pbs.Load(project);
 
+            var mem = new MemoryArea(Address.Ptr32(0x1231300), new byte[128]);
+            
             project.Programs.Add(new Program
             {
                 Filename = "bar.exe",
-                Image = new LoadedImage(Address.Ptr32(0x1231300), new byte[128])
+                SegmentMap = new SegmentMap(
+                    mem.BaseAddress,
+                    new ImageSegment(".text", mem, AccessMode.ReadExecute))
             });
 
             Expect("<?xml version=\"1.0\" encoding=\"utf-16\"?>" +
-                "<root><node text=\"foo.exe\" tip=\"c:\\test\\foo.exe&#xD;&#xA;12340000\" tag=\"ProgramDesigner\">" +
+                "<root><node text=\"foo.exe\" tip=\"c:\\test\\foo.exe" + cr + "12300000\" tag=\"ProgramDesigner\">" +
                     "<node text=\"Foo Processor\" tag=\"ArchitectureDesigner\" />" +
                     "<node text=\"(Unknown operating environment)\" tag=\"PlatformDesigner\" />" +
-                    "<node text=\"Image base\" tip=\"Image base&#xD;&#xA;Address: 12340000&#xD;&#xA;Size: 1000&#xD;&#xA;rw-\" tag=\"ImageMapSegmentNodeDesigner\" />" +
+                    "<node text=\".text\" tip=\".text" + cr + "Address: 12340000&#xD;&#xA;Size: 1000" + cr + "r-x\" tag=\"ImageMapSegmentNodeDesigner\">" +
+                        "<node text=\"Global variables\" tag=\"GlobalVariablesNodeDesigner\" />" +
+                    "</node>" +
+                    "<node tag=\"ProgramResourceGroupDesigner\" />" +
                  "</node>" +
                  "</root>");
             mr.VerifyAll();
@@ -401,10 +506,9 @@ namespace Reko.UnitTests.Gui.Windows
             };
         }
 
-
         private void Given_UserProcedure(uint addr, string name)
         {
-            program.UserProcedures.Add(
+            program.User.Procedures.Add(
                 Address.Ptr32(addr), new Reko.Core.Serialization.Procedure_v1
                 {
                     Address = addr.ToString(),
@@ -418,6 +522,7 @@ namespace Reko.UnitTests.Gui.Windows
             var pbs = new ProjectBrowserService(sc, fakeTree);
             Given_Project();
             Given_ProgramWithOneSegment();
+            Given_ImageMapItem(0x12340000);
             Given_UserProcedure(0x12340500, "MyFoo");
             mr.ReplayAll();
 
@@ -428,19 +533,23 @@ namespace Reko.UnitTests.Gui.Windows
                 "<root>" +
                 "<node " +
                     "text=\"foo.exe\" " +
-                    "tip=\"c:\\test\\foo.exe" + cr + "12340000\" " +
+                    "tip=\"c:\\test\\foo.exe" + cr + "12300000\" " +
                     "tag=\"ProgramDesigner\">" +
                     "<node text=\"Foo Processor\" tag=\"ArchitectureDesigner\" />" +
                     "<node text=\"(Unknown operating environment)\" tag=\"PlatformDesigner\" />" +
                     "<node " +
-                        "text=\"Image base\" " +
-                        "tip=\"Image base" + cr + "Address: 12340000" + cr + "Size: 1000" + cr + "rw-" + "\" " +
+                        "text=\".text\" " +
+                        "tip=\".text" + cr + "Address: 12340000" + cr + "Size: 1000" + cr + "r-x" + "\" " +
                         "tag=\"ImageMapSegmentNodeDesigner\">" +
+                        "<node " +
+                            "text=\"Global variables\" " +
+                            "tag=\"GlobalVariablesNodeDesigner\" />" +
                         "<node " +
                             "text=\"MyFoo\" " +
                             "tip=\"12340500\" " +
                             "tag=\"ProcedureDesigner\" />" +
                     "</node>" +
+                    "<node tag=\"ProgramResourceGroupDesigner\" />" +
                 "</node>" +
                 "</root>");
         }
@@ -450,7 +559,6 @@ namespace Reko.UnitTests.Gui.Windows
         public void PBS_AfterSelect_Calls_DoDefaultAction()
         {
             var des = mr.StrictMock<TreeNodeDesigner>();
-            var node = mr.Stub<ITreeNode>();
             des.Expect(d => d.DoDefaultAction());
             des.Stub(d => d.Initialize(null)).IgnoreArguments();
             mockTree = new FakeTreeView();
@@ -466,7 +574,6 @@ namespace Reko.UnitTests.Gui.Windows
             mr.VerifyAll();
         }
 
-        
         public class TestDesigner : TreeNodeDesigner
         {
         }
@@ -513,7 +620,7 @@ namespace Reko.UnitTests.Gui.Windows
 
             project.MetadataFiles.Add(new MetadataFile
             {
-                ModuleName = "..\\foo.tlb"
+                Filename = ".." + sep + "foo.tlb"
             });
 
             Assert.AreEqual(1, mockTree.Nodes.Count);

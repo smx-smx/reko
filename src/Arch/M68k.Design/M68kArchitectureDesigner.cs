@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -33,12 +33,13 @@ namespace Reko.Arch.M68k.Design
         public override void DoDefaultAction()
         {
             var shellUiSvc = Services.RequireService<IDecompilerShellUiService>();
-            var windowFrame = shellUiSvc.FindWindow(GetType().FullName);
+            var windowFrame = shellUiSvc.FindDocumentWindow(GetType().FullName, Component);
             if (windowFrame == null)
             {
                 var arch = (M68kArchitecture)Component;
-                windowFrame = shellUiSvc.CreateWindow(
+                windowFrame = shellUiSvc.CreateDocumentWindow(
                     GetType().FullName,
+                    Component,
                     arch.Description,
                     new M68kPropertiesInteractor(arch));
             }

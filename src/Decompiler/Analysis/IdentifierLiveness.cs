@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,13 +27,14 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 
 namespace Reko.Analysis
 {
 	public class IdentifierLiveness : StorageVisitor<Storage>	
 	{
 		private Identifier id;
-		private BitSet bits;
+		private HashSet<RegisterStorage> ids;
 		private uint grf;
 		private Dictionary<Storage,int> liveStackVars;
 		private IProcessorArchitecture arch;
@@ -72,7 +73,6 @@ namespace Reko.Analysis
             }
             throw new NotImplementedException(string.Format("Can't handle {0}.", e));
         }
-
 
         public bool Def(MemoryAccess mem)
         {
@@ -145,23 +145,24 @@ namespace Reko.Analysis
             Debug.WriteLine(sw.ToString());
         }
 
-		public BitSet BitSet
+		public HashSet<RegisterStorage> Identifiers
 		{
-			get { return bits; }
-			set { bits = value; }
+			get { return ids; }
+			set { ids = value; }
 		}
 
 		public virtual void DefinedRegister(RegisterStorage reg)
 		{
-			defOffset = reg.AliasOffset;
+			defOffset = (int) reg.BitAddress;
 			defBitSize = reg.DataType.BitSize;
-			var widestSub = reg.GetWidestSubregister(bits);
+			var widestSub = arch.GetWidestSubregister(reg, ids);
 			if (widestSub != null)
 			{
-				defOffset = Math.Max(widestSub.AliasOffset, defOffset);
+				defOffset = Math.Max((int)widestSub.BitAddress, defOffset);
 				defBitSize = Math.Min(widestSub.DataType.BitSize, defBitSize);
 			}
-			reg.SetAliases(bits, false);
+            arch.RemoveAliases(ids, reg);
+            ids.ExceptWith(arch.GetAliases(reg));
 		}
 
 		public uint Grf
@@ -176,6 +177,11 @@ namespace Reko.Analysis
 			set { liveStackVars = value; }
 		}
 
+        public Storage VisitFlagRegister(FlagRegister freg)
+        {
+            return null;
+        }
+
 		public Storage VisitFlagGroupStorage(FlagGroupStorage grf)
 		{
 			if (define)
@@ -188,7 +194,6 @@ namespace Reko.Analysis
 			}
             return null;
 		}
-	
 
 		public Storage VisitFpuStackStorage(FpuStackStorage fpu)
 		{
@@ -216,10 +221,10 @@ namespace Reko.Analysis
 			{
 				RegisterStorage r = (useBitSize == 0)
 					? reg
-					: reg.GetSubregister(useOffset, useBitSize);
+					: arch.GetSubregister(reg, useOffset, useBitSize);
 				if (r == null)
 					r = reg;
-				bits[r.Number] = true;
+                ids.Add(r);
 			}
             return null;
 		}
@@ -227,11 +232,11 @@ namespace Reko.Analysis
 
 		public Storage VisitSequenceStorage(SequenceStorage seq)
 		{
-			seq.Head.Storage.Accept(this);
-			seq.Tail.Storage.Accept(this);
+			seq.Head.Accept(this);
+			seq.Tail.Accept(this);
 	  		if (define)
 			{
-				defBitSize = seq.Head.DataType.BitSize + seq.Tail.DataType.BitSize;
+				defBitSize = (int)(seq.Head.BitSize + seq.Tail.BitSize);
 				defOffset = 0;
 			}
 			else
@@ -327,21 +332,10 @@ namespace Reko.Analysis
 
 		private void WriteRegisters(TextWriter writer)
 		{
-			if (this.bits != null && !bits.IsEmpty)
-			{
-				for (int i = 0; i < bits.Count; ++i)
-				{
-					if (bits[i])
-					{
-						var reg = arch.GetRegister(i);
-                        if (reg != null && reg.IsAluRegister)
-						{
-							writer.Write(' ');
-							writer.Write(reg.ToString());
-						}
-					}
-				}
-			}
+            foreach (var reg in ids.OrderBy(r => r.Name))
+            {
+                writer.Write(" {0}", reg.Name);
+            }
 		}
 			
 

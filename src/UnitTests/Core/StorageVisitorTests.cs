@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,10 +18,8 @@
  */
 #endregion
 
-using Reko.Arch.X86;
 using Reko.Core;
 using Reko.Core.Expressions;
-using Reko.Core.Machine;
 using Reko.Core.Types;
 using NUnit.Framework;
 using System;
@@ -35,7 +33,7 @@ namespace Reko.UnitTests.Core
 		[Test]
 		public void VisitRegister()
 		{
-			var reg = new RegisterStorage("r0", 0, PrimitiveType.Word16);
+			var reg = new RegisterStorage("r0", 0, 0, PrimitiveType.Word16);
 			var r = new Identifier(reg.Name, reg.DataType, reg);
 			var type = r.Storage.Accept(this);
 			Assert.AreEqual("reg", type);
@@ -44,7 +42,8 @@ namespace Reko.UnitTests.Core
 		[Test]
 		public void VisitFlagGroup()
 		{
-			var f = new Identifier("grf", PrimitiveType.Word16, new FlagGroupStorage(0x11, "ZO", PrimitiveType.Byte));
+            var flags = new FlagRegister("flags", PrimitiveType.Word32);
+			var f = new Identifier("grf", PrimitiveType.Word16, new FlagGroupStorage(flags, 0x11, "ZO", PrimitiveType.Byte));
 			var type = f.Storage.Accept(this);
 			Assert.AreEqual("grf", type);
 		}
@@ -52,9 +51,11 @@ namespace Reko.UnitTests.Core
 		[Test]
 		public void VisitSequenceVariable()
 		{
-			var ax = new Identifier(Registers.ax.Name, Registers.ax.DataType, Registers.ax);
-			var dx = new Identifier(Registers.dx.Name, Registers.dx.DataType, Registers.dx);
-			var seq = new Identifier("dx_ax", PrimitiveType.Word32, new SequenceStorage(dx, ax));
+			var r_ax = new RegisterStorage("ax", 0, 0, PrimitiveType.Word16);
+			var r_dx = new RegisterStorage("dx", 2, 0, PrimitiveType.Word16);
+			var ax = new Identifier(r_ax.Name, r_ax.DataType, r_ax);
+			var dx = new Identifier(r_dx.Name, r_dx.DataType, r_dx);
+			var seq = new Identifier("dx_ax", PrimitiveType.Word32, new SequenceStorage(dx.Storage, ax.Storage));
 			var type = seq.Storage.Accept(this);
 			Assert.AreEqual("seq", type);
 		}
@@ -72,7 +73,12 @@ namespace Reko.UnitTests.Core
 			return "grf";
 		}
 
-		public string VisitFpuStackStorage(FpuStackStorage fpu)
+        public string VisitFlagRegister(Reko.Core.FlagRegister freg)
+        {
+            return "freg";
+        }
+
+        public string VisitFpuStackStorage(FpuStackStorage fpu)
 		{
 			return "fpu";
 		}

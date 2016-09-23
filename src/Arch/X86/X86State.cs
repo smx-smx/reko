@@ -1,7 +1,7 @@
 
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -38,8 +38,8 @@ namespace Reko.Arch.X86
     /// </summary>
 	public class X86State : ProcessorState
 	{
-		private ulong [] regs;
-		private bool [] valid;
+		private ulong [] regs;              // register values
+		private ulong [] valid;             // masks out only valid bits
         private uint flags;
         private uint validFlags;
         private IntelArchitecture arch;
@@ -50,7 +50,7 @@ namespace Reko.Arch.X86
 		{
             this.arch = arch;
 			this.regs = new ulong[(int)Registers.Max];
-			this.valid = new bool[(int)Registers.Max];
+			this.valid = new ulong[(int)Registers.Max];
 		}
 
 		public X86State(X86State st) : base(st)
@@ -58,7 +58,7 @@ namespace Reko.Arch.X86
             arch = st.arch;
             FpuStackItems = st.FpuStackItems;
             regs = (ulong[])st.regs.Clone();
-			valid = (bool []) st.valid.Clone();
+			valid = (ulong []) st.valid.Clone();
 		}
 
         public override IProcessorArchitecture Architecture { get { return arch; } }
@@ -69,7 +69,7 @@ namespace Reko.Arch.X86
 			Constant c = GetRegister(seg);
 			if (c.IsValid)
 			{
-				return Address.SegPtr((ushort) c.ToUInt32(), offset & 0xFFFF);
+				return arch.ProcessorMode.CreateSegmentedAddress((ushort) c.ToUInt32(), offset & 0xFFFF);
 			}
 			else
 				return null;
@@ -91,10 +91,18 @@ namespace Reko.Arch.X86
 			return new X86State(this);
 		}
 
+        public bool IsValid(RegisterStorage reg)
+        {
+            return (valid[reg.Number] & reg.BitMask) == reg.BitMask;
+        }
+
         public override Constant GetRegister(RegisterStorage reg)
         {
-            if (valid[reg.Number])
-                return Constant.Create(reg.DataType, regs[reg.Number]);
+            if (IsValid(reg))
+            {
+                var val = (regs[reg.Number] & reg.BitMask) >> (int)reg.BitAddress;
+                return Constant.Create(reg.DataType, val);
+            }
             else
                 return Constant.Invalid;
         }
@@ -103,19 +111,19 @@ namespace Reko.Arch.X86
 		{
 			if (c == null || !c.IsValid)
 			{
-				valid[reg.Number] = false;
+                valid[reg.Number] &= ~reg.BitMask;
 			}
 			else
 			{
-				reg.SetRegisterFileValues(regs, c.ToUInt64(), valid);
+                valid[reg.Number] |= reg.BitMask;
+                regs[reg.Number] = (regs[reg.Number] & ~reg.BitMask) | (c.ToUInt64() << (int)reg.BitAddress);
 			}
 		}
 
         public override void SetInstructionPointer(Address addr)
         {
-            var segAddr = addr as SegAddress32;
-            if (segAddr != null)
-                SetRegister(Registers.cs, Constant.Word16(segAddr.Selector));
+            if (addr.Selector.HasValue)
+                SetRegister(Registers.cs, Constant.Word16(addr.Selector.Value));
         }
 
         public override void OnProcedureEntered()
@@ -124,75 +132,29 @@ namespace Reko.Arch.X86
             // We're making an assumption that the direction flag is always clear
             // when a procedure is entered. This is true of the vast majority of
             // x86 code out there, and the assumption is certainly made by most
-            // compilers and code libraries.
+            // compilers and code libraries. If you know the DF flag is set on
+            // procedure entry, you can manually set that flag using a user-
+            // defined register value.
             SetFlagGroup(arch.GetFlagGroup((uint) FlagM.DF), Constant.False());
         }
 
-        public override void OnProcedureLeft(ProcedureSignature sig)
+        public override void OnProcedureLeft(FunctionType sig)
         {
             sig.FpuStackDelta = FpuStackItems;     
         }
 
         public override CallSite OnBeforeCall(Identifier sp, int returnAddressSize)
         {
-            if (returnAddressSize > 0)
-            {
-                var spVal = GetValue(sp);
-                SetValue(
-                    arch.StackRegister,
-                    new BinaryExpression(
-                        Operator.ISub,
-                        spVal.DataType,
-                        sp,
-                        Constant.Create(
-                            PrimitiveType.CreateWord(returnAddressSize),
-                            returnAddressSize)));
-            }
             return new CallSite(returnAddressSize, FpuStackItems);  
         }
 
-        public override void OnAfterCall(Identifier sp, ProcedureSignature sig, ExpressionVisitor<Expression> eval)
+        public override void OnAfterCall(FunctionType sig)
         {
             if (sig == null)
                 return;
-            var spReg = (RegisterStorage)sp.Storage;
-            var spVal = GetValue(spReg);
-            var stackOffset = SetValue(
-                spReg,
-                new BinaryExpression(
-                    Operator.IAdd,
-                    spVal.DataType,
-                    sp,
-                    Constant.Create(
-                        PrimitiveType.CreateWord(spReg.DataType.Size),
-                        sig.StackDelta)).Accept(eval));
-            if (stackOffset.IsValid)
-            {
-                if (stackOffset.ToInt32() > 0)
-                    ErrorListener("Possible stack underflow detected.");
-            }
+
             ShrinkFpuStack(-sig.FpuStackDelta);
         }
-
-
-        public bool HasSameValues(X86State st2)
-        {
-            for (int i = 0; i < valid.Length; ++i)
-            {
-                if (valid[i] != st2.valid[i])
-                    return false;
-                if (valid[i])
-                {
-                    RegisterStorage reg = Registers.GetRegister(i);
-                    ulong u1 = (ulong)(regs[reg.Number] & ((1UL << reg.DataType.BitSize) - 1UL));
-                    ulong u2 = (ulong)(st2.regs[reg.Number] & ((1UL << reg.DataType.BitSize) - 1UL));
-                    if (u1 != u2)
-                        return false;
-                }
-            }
-            return true;
-        }
-
 
 		public void GrowFpuStack(Address addrInstr)
 		{

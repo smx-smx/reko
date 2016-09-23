@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -97,7 +97,7 @@ namespace Reko.Core
         public int ReturnAddressSize { get; set; }
         public bool ReturnAddressKnown { get; set; }
 
-        public Identifier CreateSequence(Identifier head, Identifier tail, DataType dt)
+        public Identifier CreateSequence(Storage head, Storage tail, DataType dt)
         {
             Identifier id = new Identifier(string.Format("{0}_{1}", head.Name, tail.Name), dt, new
                 SequenceStorage(head, tail));
@@ -119,8 +119,16 @@ namespace Reko.Core
                     seq.Head, 
                     seq.Tail, 
                     PrimitiveType.CreateWord(
-                        seq.Head.DataType.Size + seq.Tail.DataType.Size));
-            throw new NotImplementedException();
+                        (int)(seq.Head.BitSize + seq.Tail.BitSize)/DataType.BitsPerByte));
+            var fp = stgForeign as FpuStackStorage;
+            if (fp != null)
+                return EnsureFpuStackVariable(fp.FpuStackOffset, fp.DataType);
+            var st = stgForeign as StackStorage;
+            if (st != null)
+                return EnsureStackVariable(st.StackOffset, st.DataType);
+            throw new NotImplementedException(string.Format(
+                "Unsupported storage {0}.",
+                stgForeign != null ? stgForeign.ToString() : "(null)"));
         }
 
 		/// <summary>
@@ -140,19 +148,19 @@ namespace Reko.Core
 		public Identifier CreateTemporary(string name, DataType dt)
 		{
 			Identifier id = new Identifier(name, dt, 
-                new TemporaryStorage(name, identifiers.Count, (PrimitiveType) dt));
+                new TemporaryStorage(name, identifiers.Count, dt));
 			identifiers.Add(id);
 			return id;
 		}
 
-		public Identifier EnsureFlagGroup(uint grfMask, string name, DataType dt)
+        public Identifier EnsureFlagGroup(FlagRegister freg, uint grfMask, string name, DataType dt)
 		{
 			if (grfMask == 0)
 				return null;
 			Identifier id = FindFlagGroup(grfMask);
 			if (id == null)
 			{
-				id = new Identifier(name, dt, new FlagGroupStorage(grfMask, name, dt));
+				id = new Identifier(name, dt, new FlagGroupStorage(freg, grfMask, name, dt));
 				identifiers.Add(id);
 			}
 			return id;
@@ -165,7 +173,7 @@ namespace Reko.Core
             var id = FindFlagGroup(grf.FlagGroupBits);
             if (id == null)
             {
-                id = new Identifier(grf.Name, grf.DataType, new FlagGroupStorage(grf.FlagGroupBits, grf.Name, grf.DataType));
+                id = new Identifier(grf.Name, grf.DataType, new FlagGroupStorage(grf.FlagRegister, grf.FlagGroupBits, grf.Name, grf.DataType));
                 identifiers.Add(id);
             }
             return id;
@@ -212,7 +220,7 @@ namespace Reko.Core
 			return idOut;
 		}
 
-		public Identifier EnsureSequence(Identifier head, Identifier tail, DataType dt)
+		public Identifier EnsureSequence(Storage head, Storage tail, DataType dt)
 		{
 			Identifier idSeq = FindSequence(head, tail);
 			if (idSeq == null)
@@ -283,12 +291,12 @@ namespace Reko.Core
                 : EnsureStackLocal(byteOffset, type);
         }
 
-		/// <summary>
-		/// The offset of a variable from the return address, as seen from a caller.
-		/// </summary>
-		/// <param name="var"></param>
-		/// <returns></returns>
-		public int ExternalOffset(Identifier id)
+        /// <summary>
+        /// The offset of a variable from the return address, as seen from a caller.
+        /// </summary>
+        /// <param name="var"></param>
+        /// <returns></returns>
+        public int ExternalOffset(Identifier id)
 		{
 			if (id == null)
 				return 0;
@@ -302,7 +310,7 @@ namespace Reko.Core
 			throw new ArgumentOutOfRangeException("var", "Variable must be an argument.");
 		}
 
-		public Identifier FindSequence(Identifier n1, Identifier n2)
+		public Identifier FindSequence(Storage n1, Storage n2)
 		{
 			foreach (Identifier id in identifiers)
 			{

@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,6 +34,8 @@ namespace Reko.Arch.Z80
 {
     public class Z80ProcessorArchitecture : ProcessorArchitecture
     {
+        private Dictionary<uint, FlagGroupStorage> flagGroups;
+
         public Z80ProcessorArchitecture()
         {
             this.InstructionBitSize = 8;
@@ -42,6 +44,7 @@ namespace Reko.Arch.Z80
             this.WordWidth = PrimitiveType.Word16;
             this.StackRegister = Registers.sp;
             this.CarryFlagMask = (uint)FlagM.CF;
+            this.flagGroups = new Dictionary<uint, FlagGroupStorage>();
         }
 
         public override IEnumerable<MachineInstruction> CreateDisassembler(ImageReader imageReader)
@@ -49,14 +52,29 @@ namespace Reko.Arch.Z80
             return new Z80Disassembler(imageReader);
         }
 
-        public override ImageReader CreateImageReader(LoadedImage image, Address addr)
+        public override ImageReader CreateImageReader(MemoryArea image, Address addr)
         {
             return new LeImageReader(image, addr);
         }
 
-        public override ImageReader CreateImageReader(LoadedImage image, ulong offset)
+        public override ImageReader CreateImageReader(MemoryArea image, Address addrBegin, Address addrEnd)
+        {
+            return new LeImageReader(image, addrBegin, addrEnd);
+        }
+
+        public override ImageReader CreateImageReader(MemoryArea image, ulong offset)
         {
             return new LeImageReader(image, offset);
+        }
+
+        public override ImageWriter CreateImageWriter()
+        {
+            return new LeImageWriter();
+        }
+
+        public override ImageWriter CreateImageWriter(MemoryArea mem, Address addr)
+        {
+            return new LeImageWriter(mem, addr);
         }
 
         public override IEqualityComparer<MachineInstruction> CreateInstructionComparer(Normalize norm)
@@ -69,12 +87,7 @@ namespace Reko.Arch.Z80
             return new Z80ProcessorState(this);
         }
 
-        public override IEnumerable<Address> CreatePointerScanner(ImageMap map, ImageReader rdr, IEnumerable<Address> knownLinAddresses, PointerScannerFlags flags)
-        {
-            throw new NotImplementedException();
-        }
-
-        public override BitSet CreateRegisterBitset()
+        public override IEnumerable<Address> CreatePointerScanner(SegmentMap map, ImageReader rdr, IEnumerable<Address> knownLinAddresses, PointerScannerFlags flags)
         {
             throw new NotImplementedException();
         }
@@ -91,7 +104,7 @@ namespace Reko.Arch.Z80
 
         public override RegisterStorage GetRegister(string name)
         {
-            throw new NotImplementedException();
+            return Registers.GetRegister(name);
         }
 
         public override RegisterStorage[] GetRegisters()
@@ -104,9 +117,52 @@ namespace Reko.Arch.Z80
             throw new NotImplementedException();
         }
 
+        public override RegisterStorage GetSubregister(RegisterStorage reg, int offset, int width)
+        {
+            if (offset == 0 && reg.BitSize == (ulong)width)
+                return reg;
+            Dictionary<uint, RegisterStorage> dict;
+            if (!Registers.SubRegisters.TryGetValue(reg, out dict))
+                return null;
+            RegisterStorage subReg;
+            if (!dict.TryGetValue((uint)(offset + width * 16), out subReg))
+                return null;
+            return subReg;
+        }
+
+        public override RegisterStorage GetWidestSubregister(RegisterStorage reg, HashSet<RegisterStorage> regs)
+        {
+            ulong mask = regs.Where(b => b != null && b.OverlapsWith(reg)).Aggregate(0ul, (a, r) => a | r.BitMask);
+            Dictionary<uint, RegisterStorage> subregs;
+            if ((mask & reg.BitMask) == reg.BitMask)
+                return reg;
+            RegisterStorage rMax = null;
+            if (Registers.SubRegisters.TryGetValue(reg, out subregs))
+            {
+                foreach (var subreg in subregs.Values)
+                {
+                    if ((subreg.BitMask & mask) == subreg.BitMask &&
+                        (rMax == null || subreg.BitSize > rMax.BitSize))
+                    {
+                        rMax = subreg;
+                    }
+                }
+            }
+            return rMax;
+        }
+
         public override FlagGroupStorage GetFlagGroup(uint grf)
         {
-            throw new NotImplementedException();
+            FlagGroupStorage f;
+            if (flagGroups.TryGetValue(grf, out f))
+            {
+                return f;
+            }
+
+            PrimitiveType dt = Bits.IsSingleBitSet(grf) ? PrimitiveType.Bool : PrimitiveType.Byte;
+            var fl = new FlagGroupStorage(Registers.f, grf, GrfToString(grf), dt);
+            flagGroups.Add(grf, fl);
+            return fl;
         }
 
         public override FlagGroupStorage GetFlagGroup(string name)
@@ -129,7 +185,6 @@ namespace Reko.Arch.Z80
             throw new NotImplementedException();
         }
 
-
 		public override string GrfToString(uint grf)
 		{
 			StringBuilder s = new StringBuilder();
@@ -147,68 +202,41 @@ namespace Reko.Arch.Z80
         }
     }
 
-    public abstract class Z80Register : RegisterStorage
-    {
-        public readonly int FileSlot;
-        
-        public Z80Register(string name, int id, int fileSlot, PrimitiveType dataType) :
-            base(name, id, dataType)
-        {
-            this.FileSlot = fileSlot;
-        }
-    }
-
-    public class LowByteRegister : Z80Register
-    {
-        public LowByteRegister(string name, int id, int fileSlot) :
-            base(name, id, fileSlot,PrimitiveType.Byte)
-        {
-        }
-    }
-
-    public class HighByteRegister : Z80Register
-    {
-        public HighByteRegister(string name, int id, int fileSlot) :
-            base(name, id, fileSlot, PrimitiveType.Byte)
-        {
-        }
-    }
-
-    public class WordRegister : Z80Register
-    {
-        public WordRegister(string name, int id, int fileSlot) : 
-            base(name, id, fileSlot, PrimitiveType.Word32)
-        {
-        }
-    }
-
     public static class Registers
     {
-        public static readonly RegisterStorage b = new RegisterStorage("b", 0, PrimitiveType.Byte);
-        public static readonly RegisterStorage c = new RegisterStorage("c", 1, PrimitiveType.Byte);
-        public static readonly RegisterStorage d = new RegisterStorage("d", 2, PrimitiveType.Byte);
-        public static readonly RegisterStorage e = new RegisterStorage("e", 3, PrimitiveType.Byte);
-        public static readonly RegisterStorage h = new RegisterStorage("h", 4, PrimitiveType.Byte);
-        public static readonly RegisterStorage l = new RegisterStorage("l", 5, PrimitiveType.Byte);
-        public static readonly RegisterStorage a = new RegisterStorage("a", 7, PrimitiveType.Byte);
+        public static readonly RegisterStorage b = new RegisterStorage("b", 1, 8, PrimitiveType.Byte);
+        public static readonly RegisterStorage c = new RegisterStorage("c", 1, 0, PrimitiveType.Byte);
+        public static readonly RegisterStorage d = new RegisterStorage("d", 2, 8, PrimitiveType.Byte);
+        public static readonly RegisterStorage e = new RegisterStorage("e", 2, 0, PrimitiveType.Byte);
+        public static readonly RegisterStorage h = new RegisterStorage("h", 3, 8, PrimitiveType.Byte);
+        public static readonly RegisterStorage l = new RegisterStorage("l", 3, 0, PrimitiveType.Byte);
+        public static readonly RegisterStorage a = new RegisterStorage("a", 0, 0, PrimitiveType.Byte);
 
-        public static readonly RegisterStorage bc = new RegisterStorage("bc", 8, PrimitiveType.Word16);
-        public static readonly RegisterStorage de = new RegisterStorage("de", 9, PrimitiveType.Word16);
-        public static readonly RegisterStorage hl = new RegisterStorage("hl", 10, PrimitiveType.Word16);
-        public static readonly RegisterStorage sp = new RegisterStorage("sp", 11, PrimitiveType.Word16);
-        public static readonly RegisterStorage ix = new RegisterStorage("ix", 12, PrimitiveType.Word16);
-        public static readonly RegisterStorage iy = new RegisterStorage("iy", 13, PrimitiveType.Word16);
-        public static readonly RegisterStorage af = new RegisterStorage("af", 14, PrimitiveType.Word16);
+        public static readonly RegisterStorage bc = new RegisterStorage("bc", 1, 0, PrimitiveType.Word16);
+        public static readonly RegisterStorage de = new RegisterStorage("de", 2, 0, PrimitiveType.Word16);
+        public static readonly RegisterStorage hl = new RegisterStorage("hl", 3, 0, PrimitiveType.Word16);
+        public static readonly RegisterStorage sp = new RegisterStorage("sp", 4, 0, PrimitiveType.Word16);
+        public static readonly RegisterStorage ix = new RegisterStorage("ix", 5, 0, PrimitiveType.Word16);
+        public static readonly RegisterStorage iy = new RegisterStorage("iy", 6, 0, PrimitiveType.Word16);
+        public static readonly RegisterStorage af = new RegisterStorage("af", 0, 0, PrimitiveType.Word16);
 
-        public static readonly RegisterStorage i = new RegisterStorage("i", 16, PrimitiveType.Byte);
-        public static readonly RegisterStorage r = new RegisterStorage("r", 17, PrimitiveType.Byte);
+        public static readonly FlagRegister f = new FlagRegister("f", PrimitiveType.Byte);
 
-        public static readonly RegisterStorage S = new RegisterStorage("S", 20, PrimitiveType.Bool);
-        public static readonly RegisterStorage Z = new RegisterStorage("Z", 21, PrimitiveType.Bool);
-        public static readonly RegisterStorage P = new RegisterStorage("P", 22, PrimitiveType.Bool);
-        public static readonly RegisterStorage C = new RegisterStorage("C", 23, PrimitiveType.Bool);
+        public static readonly RegisterStorage i = new RegisterStorage("i", 8, 0, PrimitiveType.Byte);
+        public static readonly RegisterStorage r = new RegisterStorage("r", 9, 0, PrimitiveType.Byte);
+
+        public static readonly RegisterStorage bc_ = new RegisterStorage("bc'", 12, 0, PrimitiveType.Word16);
+        public static readonly RegisterStorage de_ = new RegisterStorage("de'", 13, 0, PrimitiveType.Word16);
+        public static readonly RegisterStorage hl_ = new RegisterStorage("hl'", 14, 0, PrimitiveType.Word16);
+
+        public static readonly RegisterStorage S = new RegisterStorage("S", 24, 0, PrimitiveType.Bool);
+        public static readonly RegisterStorage Z = new RegisterStorage("Z", 25, 0, PrimitiveType.Bool);
+        public static readonly RegisterStorage P = new RegisterStorage("P", 26, 0, PrimitiveType.Bool);
+        public static readonly RegisterStorage C = new RegisterStorage("C", 27, 0, PrimitiveType.Bool);
 
         internal static RegisterStorage[] All;
+        internal static Dictionary<RegisterStorage, Dictionary<uint, RegisterStorage>> SubRegisters;
+        private static Dictionary<string, RegisterStorage> regsByName;
 
         static Registers()
         {
@@ -221,7 +249,7 @@ namespace Reko.Arch.Z80
              h ,
              l ,
              a ,
-             null,
+             f,
                
              bc,
              de,
@@ -237,16 +265,55 @@ namespace Reko.Arch.Z80
              null,
              null,
 
+             bc_,
+             de_,
+             hl_,
+             null,
+
              S ,
              Z ,
              P ,
              C ,
+            };
+
+            Registers.regsByName = All.Where(r => r != null).ToDictionary(r => r.Name);
+
+            SubRegisters = new Dictionary<
+                RegisterStorage, 
+                Dictionary<uint, RegisterStorage>>
+            {
+                {
+                    bc, new Dictionary<uint, RegisterStorage>
+                    {
+                        { 0x08, Registers.c },
+                        { 0x88, Registers.b },
+                    }
+                },
+                {
+                    de, new Dictionary<uint, RegisterStorage>
+                    {
+                        { 0x08, Registers.e },
+                        { 0x88, Registers.d },
+                    }
+                },
+                {
+                    hl, new Dictionary<uint, RegisterStorage>
+                    {
+                        { 0x08, Registers.l },
+                        { 0x88, Registers.h },
+                    }
+                }
             };
         }
 
         internal static RegisterStorage GetRegister(int r)
         {
             return All[r];
+        }
+
+        internal static RegisterStorage GetRegister(string name)
+        {
+            return regsByName[name];
         }
     }
 

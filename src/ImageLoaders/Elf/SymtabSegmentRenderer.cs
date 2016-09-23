@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,22 +27,22 @@ using System.Text;
 
 namespace Reko.ImageLoaders.Elf
 {
-    public class SymtabSegmentRenderer32 : ImageMapSegmentRenderer
+    public class SymtabSegmentRenderer32 : ImageSegmentRenderer
     {
-        private ElfImageLoader loader;
-        private Elf32_SHdr shdr;
+        private ElfLoader32 loader;
+        private ElfSection shdr;
 
-        public SymtabSegmentRenderer32(ElfImageLoader loader, Elf32_SHdr shdr)
+        public SymtabSegmentRenderer32(ElfLoader32 loader, ElfSection shdr)
         {
             this.loader = loader;
             this.shdr = shdr;
         }
 
-        public override void Render(ImageMapSegment segment, Program program, Formatter formatter)
+        public override void Render(ImageSegment segment, Program program, Formatter formatter)
         {
-            var entries = shdr.sh_size / shdr.sh_entsize;
-            var symtab = (int)shdr.sh_link;
-            var rdr = loader.CreateReader(shdr.sh_offset);
+            var entries = shdr.EntryCount();
+            var symtab = shdr.LinkedSection;
+            var rdr = loader.CreateReader(shdr.FileOffset);
             for (int i = 0; i < entries; ++i)
             {
                 uint iName;
@@ -65,29 +65,29 @@ namespace Reko.ImageLoaders.Elf
                     return;
                 string symStr = loader.GetStrPtr(symtab, iName);
                 string segName = loader.GetSectionName(shIndex);
-                formatter.Write("{0,-40} {1:X8} {2:X8} {3:X2} {4}", symStr, value, size, info & 0xFF, segName);
+                formatter.Write("{0:X4} {1,-40} {2:X8} {3:X8} {4:X2} {5}", i, symStr, value, size, info & 0xFF, segName);
                 formatter.WriteLine();
             }
         }
 
     }
 
-    public class SymtabSegmentRenderer64 : ImageMapSegmentRenderer
+    public class SymtabSegmentRenderer64 : ImageSegmentRenderer
     {
-        private ElfImageLoader loader;
-        private Elf64_SHdr shdr;
+        private ElfLoader64 loader;
+        private ElfSection shdr;
 
-        public SymtabSegmentRenderer64(ElfImageLoader loader, Elf64_SHdr shdr)
+        public SymtabSegmentRenderer64(ElfLoader64 loader, ElfSection shdr)
         {
             this.loader = loader;
             this.shdr = shdr;
         }
 
-        public override void Render(ImageMapSegment segment, Program program, Formatter formatter)
+        public override void Render(ImageSegment segment, Program program, Formatter formatter)
         {
-            var entries = (int)shdr.sh_size / (int) shdr.sh_entsize;
-            var symtab = (int) shdr.sh_link;
-            var rdr = loader.CreateReader(shdr.sh_offset);
+            var entries = shdr.EntryCount();
+            var symtab = shdr.LinkedSection;
+            var rdr = loader.CreateReader(shdr.FileOffset);
             for (var i = 0; i < entries; ++i)
             {
                 uint iName;
@@ -108,7 +108,7 @@ namespace Reko.ImageLoaders.Elf
                 ulong size;
                 if (!rdr.TryReadUInt64(out size))
                     return;
-                string symStr = loader.GetStrPtr64(symtab, iName);
+                string symStr = loader.GetStrPtr(symtab, iName);
                 string segName = loader.GetSectionName(shIndex);
                 formatter.Write("{0,4} {1,-40} {2:X8} {3:X8} {4:X2} {5}", i, symStr, value, size, info & 0xFF, segName);
                 formatter.WriteLine();

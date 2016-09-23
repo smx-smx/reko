@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,8 +19,11 @@
 #endregion
 
 using Reko.Core.Machine;
+using Reko.Core.Output;
+using Reko.Core.Types;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 
@@ -41,71 +44,97 @@ namespace Reko.Core
         public bool ShowAddresses { get; set; }
         public bool ShowCodeBytes { get; set; }
 
-		public void Dump(Program program, ImageMap map, TextWriter stm)
-		{
-			if (map == null)
-			{
-				DumpAssembler(program.Image, program.Image.BaseAddress, program.Image.BaseAddress + (uint)program.Image.Length, stm);
-			}
-			else
-			{
-				foreach (ImageMapItem i in map.Items.Values)
-				{
-                    if (!program.Image.IsValidAddress(i.Address))
-                        continue;
-					//				Address addrLast = i.Address + i.Size;
-					ImageMapBlock block = i as ImageMapBlock;
-					if (block != null)
-					{
-                        stm.WriteLine();
-                        if (program.Procedures.ContainsKey(block.Address))
-						{
-							stm.WriteLine(block.Address.GenerateName("fn","()"));
-						}
-						else																			 
-						{
-							stm.WriteLine(block.Address.GenerateName("l",":"));
-						}
-						DumpAssembler(program.Image, block.Address, block.Address + block.Size, stm);
-						continue;
-					}
+        public void Dump(Program program, Formatter formatter)
+        {
+            var map = program.SegmentMap;
+            ImageSegment segment = null;
+            foreach (ImageMapItem i in program.ImageMap.Items.Values)
+            {
+                if (!map.IsValidAddress(i.Address))
+                    continue;
+                ImageSegment seg;
+                if (!map.TryFindSegment(i.Address, out seg))
+                    continue;
+                if (seg != segment)
+                {
+                    segment = seg;
+                    formatter.WriteLine(";;; Segment {0} ({1})", seg.Name, seg.Address);
+                }
 
-					ImageMapVectorTable table = i as ImageMapVectorTable;
-					if (table != null)
-					{
-						stm.WriteLine("{0} table at {1} ({2} bytes)",
-							table.IsCallTable?"Call":"Jump",
-							table.Address, table.Size);
-						foreach (Address addr in table.Addresses)
-						{
-							stm.WriteLine("\t{0}", addr != null ? addr.ToString() : "-- null --");
-						}
-						DumpData(program.Image, i.Address, i.Size, stm);
-					}
-					else
-					{
-						DumpData(program.Image, i.Address, i.Size, stm);
-					}							   
-				}
-			}
-		}
+                ImageMapBlock block = i as ImageMapBlock;
+                if (block != null)
+                {
+                    formatter.WriteLine();
+                    Procedure proc;
+                    if (program.Procedures.TryGetValue(block.Address, out proc))
+                    {
+                        formatter.WriteComment(string.Format(
+                            ";; {0}: {1}", proc.Name, block.Address));
+                        formatter.WriteLine();
 
-        public void DumpData(LoadedImage image, Address address, int cbBytes, TextWriter stm)
+                        formatter.Write(proc.Name);
+                        formatter.Write(" ");
+                        formatter.Write("proc");
+                        formatter.WriteLine();
+                    }
+                    else
+                    {
+                        formatter.Write(block.Block.Name);
+                        formatter.Write(":");
+                        formatter.WriteLine();
+                    }
+                    DumpAssembler(program.SegmentMap, block.Address, block.Address + block.Size, formatter);
+                    continue;
+                }
+
+                ImageMapVectorTable table = i as ImageMapVectorTable;
+                if (table != null)
+                {
+                    formatter.WriteLine(";; Code vector at {0} ({1} bytes)",
+                        table.Address, table.Size);
+                    foreach (Address addr in table.Addresses)
+                    {
+                        formatter.WriteLine("\t{0}", addr != null ? addr.ToString() : "-- null --");
+                    }
+                    DumpData(program.SegmentMap, i.Address, i.Size, formatter);
+                }
+                else
+                {
+                    var segLast = segment.Address + segment.Size;
+                    var size = segLast - i.Address;
+                    size = Math.Min(i.Size, size);
+                    if (i.DataType == null || i.DataType is UnknownType ||
+                        i.DataType is CodeType)
+                    {
+                        DumpData(program.SegmentMap, i.Address, size, formatter);
+                    }
+                    else
+                    {
+                        DumpTypedData(program.SegmentMap, i, formatter);
+                    }
+                }
+            }
+        }
+
+        public void DumpData(SegmentMap map, Address address, int cbBytes, Formatter stm)
         {
             if (cbBytes < 0)
                 throw new ArgumentException("Must be a nonnegative number.", "cbBytes"); 
-            DumpData(image, address, (uint)cbBytes, stm);
+            DumpData(map, address, (uint)cbBytes, stm);
         }
 
-        public void DumpData(LoadedImage image, AddressRange range, TextWriter stm)
+        public void DumpData(SegmentMap map, AddressRange range, Formatter stm)
         {
-            DumpData(image, range.Begin, (long) (range.End - range.Begin), stm);
+            DumpData(map, range.Begin, (long) (range.End - range.Begin), stm);
         }
 
-		public void DumpData(LoadedImage image, Address address, long cbBytes, TextWriter stm)
+		public void DumpData(SegmentMap map, Address address, long cbBytes, Formatter stm)
 		{
 			ulong cSkip = address.ToLinear() & 0x0F;
-			ImageReader rdr = arch.CreateImageReader(image, address);
+            ImageSegment segment;
+            if (!map.TryFindSegment(address, out segment) || segment.MemoryArea == null)
+                return;
+			ImageReader rdr = arch.CreateImageReader(segment.MemoryArea, address);
 			while (cbBytes > 0)
 			{
 				StringBuilder sb = new StringBuilder(0x12);
@@ -135,34 +164,38 @@ namespace Reko.Core
 				catch
 				{
 					stm.WriteLine();
-					stm.WriteLine("...end of image");
+					stm.WriteLine(";;; ...end of image");
 					return;
 				}
 				stm.WriteLine(sb.ToString());
 			}
 		}
 
-        public void DumpAssembler(LoadedImage image, Address addrStart, Address addrLast, TextWriter writer)
+        public void DumpAssembler(SegmentMap map, Address addrStart, Address addrLast, Formatter formatter)
         {
-            var dasm = arch.CreateDisassembler(arch.CreateImageReader(image, addrStart));
+            ImageSegment segment;
+            if (!map.TryFindSegment(addrStart, out segment))
+                return;
+            var dasm = arch.CreateDisassembler(arch.CreateImageReader(segment.MemoryArea, addrStart));
             try
             {
+                var writer = new InstrWriter(formatter);
                 foreach (var instr in dasm)
                 {
                     if (instr.Address >= addrLast)
                         break;
-                    if (!DumpAssemblerLine(image, instr, writer))
+                    if (!DumpAssemblerLine(segment.MemoryArea, instr, writer))
                         break;
                 }
             }
             catch (Exception ex)
             {
-                writer.WriteLine(ex.Message);
-                writer.WriteLine();
+                formatter.WriteLine(ex.Message);
+                formatter.WriteLine();
             }
         }
 
-        public bool DumpAssemblerLine(LoadedImage image, MachineInstruction instr, TextWriter writer)
+        public bool DumpAssemblerLine(MemoryArea mem, MachineInstruction instr, InstrWriter writer)
         {
             Address addrBegin = instr.Address;
             if (ShowAddresses)
@@ -170,23 +203,89 @@ namespace Reko.Core
             if (ShowCodeBytes)
             {
                 StringWriter sw = new StringWriter();
-                WriteByteRange(image, instr.Address, instr.Address + instr.Length, sw);
-                writer.WriteLine("{0,-16}\t{1}", sw.ToString(), instr);
+                WriteByteRange(mem, instr.Address, instr.Address + instr.Length, writer);
+                if (instr.Length * 3 < 16)
+                {
+                    writer.Write(new string(' ', 16 - (instr.Length * 3)));
+                }
             }
-            else
-            {
-                writer.WriteLine("\t{0}", instr.ToString());
-            }
+            writer.Write("\t");
+            instr.Render(writer);
+            writer.WriteLine();
             return true;
         }
 
-		public void WriteByteRange(LoadedImage image, Address begin, Address addrEnd, TextWriter writer)
+        private void DumpTypedData(SegmentMap map, ImageMapItem item, Formatter stm)
+        {
+            ImageSegment segment;
+            if (!map.TryFindSegment(item.Address, out segment) || segment.MemoryArea == null)
+                return;
+            stm.Write(Block.GenerateName(item.Address));
+            stm.Write("\t");
+
+            ImageReader rdr = arch.CreateImageReader(segment.MemoryArea, item.Address);
+            item.DataType.Accept(new TypedDataDumper(rdr, item.Size, stm));
+        }
+
+        public void WriteByteRange(MemoryArea image, Address begin, Address addrEnd, InstrWriter writer)
 		{
 			ImageReader rdr = arch.CreateImageReader(image, begin);
 			while (rdr.Address < addrEnd)
 			{
-				writer.Write("{0:X2} ", rdr.ReadByte());
+				writer.Write(string.Format("{0:X2} ", rdr.ReadByte()));
 			}
 		}
-	}
+
+        public class InstrWriter : MachineInstructionWriter
+        {
+            private Formatter formatter;
+
+            public InstrWriter(Formatter formatter)
+            {
+                this.formatter = formatter;
+            }
+
+            public IPlatform Platform { get; private set; }
+
+            public void Tab()
+            {
+                formatter.Write("\t");
+            }
+
+            public void Write(string s)
+            {
+                formatter.Write(s);
+            }
+
+            public void Write(uint n)
+            {
+                formatter.Write(n.ToString());
+            }
+
+            public void Write(char c)
+            {
+                formatter.Write(c);
+            }
+
+            public void Write(string fmt, params object[] parms)
+            {
+                formatter.Write(fmt, parms);
+            }
+
+            public void WriteAddress(string formattedAddress, Address addr)
+            {
+                formatter.WriteHyperlink(formattedAddress, addr);
+            }
+
+            public void WriteOpcode(string opcode)
+            {
+                formatter.Write(opcode);
+            }
+
+            public void WriteLine()
+            {
+                formatter.WriteLine();
+            }
+        }
+    }
 }

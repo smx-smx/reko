@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,6 +24,7 @@ using Reko.Core.Lib;
 using NUnit.Framework;
 using System;
 using System.Linq;
+using System.Collections.Generic;
 
 namespace Reko.UnitTests.Analysis
 {
@@ -54,10 +55,15 @@ namespace Reko.UnitTests.Analysis
 		{
 			this.proc = proc;
 			this.doms = proc.CreateBlockDominatorGraph();
-			SsaTransform sst = new SsaTransform(new ProgramDataFlow(), proc, doms);
+
+			SsaTransform sst = new SsaTransform(
+                new ProgramDataFlow(), 
+                proc, 
+                null, 
+                doms,
+                new HashSet<RegisterStorage>());
 			
 			this.ssaIds = sst.SsaState.Identifiers;
-            sst.SsaState.DebugDump(true);//$DEBUG
 		}
 	}
 }

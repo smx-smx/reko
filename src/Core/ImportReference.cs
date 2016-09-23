@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,6 +18,7 @@
  */
 #endregion
 
+using Reko.Core.Expressions;
 using Reko.Core.Services;
 using System;
 using System.Collections.Generic;
@@ -26,6 +27,9 @@ using System.Text;
 
 namespace Reko.Core
 {
+    /// <summary>
+    /// Represents a reference to an external symbol from another module.
+    /// </summary>
     public abstract class ImportReference
     {
         public Address ReferenceAddress;
@@ -36,8 +40,9 @@ namespace Reko.Core
             this.ReferenceAddress = addr;
             this.ModuleName = moduleName;
         }
-  
-        public abstract ExternalProcedure ResolveImportedProcedure(IImportResolver importResolver, Platform platform, AddressContext ctx);
+
+        public abstract Identifier ResolveImportedGlobal(IImportResolver importResolver, IPlatform platform, AddressContext ctx);
+        public abstract ExternalProcedure ResolveImportedProcedure(IImportResolver importResolver, IPlatform platform, AddressContext ctx);
     }
 
     public class NamedImportReference : ImportReference
@@ -50,26 +55,30 @@ namespace Reko.Core
             this.ImportName = importName;
         }
 
+        public override Identifier ResolveImportedGlobal(
+            IImportResolver resolver,
+            IPlatform platform,
+            AddressContext ctx)
+        {
+            var global = resolver.ResolveGlobal(ModuleName, ImportName, platform);
+            return global;
+        }
+
         public override ExternalProcedure ResolveImportedProcedure(
             IImportResolver resolver, 
-            Platform platform, 
+            IPlatform platform, 
             AddressContext ctx)
         {
             var ep = resolver.ResolveProcedure(ModuleName, ImportName, platform);
             if (ep != null)
                 return ep;
             // Can we guess at the signature?
-            var sig = platform.SignatureFromName(ImportName);
-            if (sig != null)
-            {
-                ep = new ExternalProcedure(ImportName, sig);   //$BUGBUG: mangled name!
-            }
-            else
-            {
-                ctx.Warn("Unable to resolve imported reference {0}.", this);
-                return new ExternalProcedure(this.ToString(), null);
-            }
-            return ep;
+            ep = platform.SignatureFromName(ImportName);
+            if (ep != null)
+                return ep;
+            
+            ctx.Warn("Unable to resolve imported reference {0}.", this);
+            return new ExternalProcedure(this.ToString(), null);
         }
 
         public override string ToString()
@@ -81,6 +90,9 @@ namespace Reko.Core
         }
     }
 
+    /// <summary>
+    /// Windows likes to use imports by ordinal number, especially Win16.
+    /// </summary>
     public class OrdinalImportReference : ImportReference
     {
         public int Ordinal;
@@ -91,7 +103,13 @@ namespace Reko.Core
             this.Ordinal = ordinal;
         }
 
-        public override ExternalProcedure ResolveImportedProcedure(IImportResolver resolver, Platform platform, AddressContext ctx)
+        public override Identifier ResolveImportedGlobal(IImportResolver importResolver, IPlatform platform, AddressContext ctx)
+        {
+            ctx.Warn("Ordinal global imports not supported. Please report this message to the Reko maintainers (https://github.com/uxmal/reko).");
+            return null;
+        }
+
+        public override ExternalProcedure ResolveImportedProcedure(IImportResolver resolver, IPlatform platform, AddressContext ctx)
         {
             var ep = resolver.ResolveProcedure(ModuleName, Ordinal, platform);
             if (ep != null)

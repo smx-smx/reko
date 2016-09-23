@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,7 +29,7 @@ using System.Text;
 namespace Reko.Core.Output
 {
     /// <summary>
-    /// Writes out global initialized data.
+    /// Writes out initialized global variables.
     /// </summary>
     public class GlobalDataWriter : IDataTypeVisitor<CodeFormatter>
     {
@@ -38,6 +38,10 @@ namespace Reko.Core.Output
         private CodeFormatter codeFormatter;
         private StructureType globals;
         private IServiceProvider services;
+        private int recursionGuard;     //$REVIEW: remove this once deep recursion bugs have been flushed out.
+        private Formatter formatter;
+        private TypeReferenceFormatter tw;
+        private Queue<StructureField> queue;
 
         public GlobalDataWriter(Program program, IServiceProvider services)
         {
@@ -47,38 +51,87 @@ namespace Reko.Core.Output
 
         public void WriteGlobals(Formatter formatter)
         {
+            this.formatter = formatter;
             this.codeFormatter = new CodeFormatter(formatter);
-            var tw = new TypeReferenceFormatter(formatter, true);
-            this.globals = (StructureType)(((Pointer)program.Globals.TypeVariable.DataType).Pointee);
-            foreach (var field in globals.Fields)
+            this.tw = new TypeReferenceFormatter(formatter);
+            var eqGlobalStruct = program.Globals.TypeVariable.Class;
+            this.globals = eqGlobalStruct.ResolveAs<StructureType>();
+            if (this.globals == null)
             {
-                var name = string.Format("g_{0:X}", field.Name);
-                var addr = Address.Ptr32((uint) field.Offset);  //$BUG: this is completely wrong; offsets should be as wide as the platform permits.
-                try
-                {
-                    tw.WriteDeclaration(field.DataType, name);
-                    if (program.Image.IsValidAddress(addr))
-                    {
-                        formatter.Write(" = ");
-                        this.rdr = program.CreateImageReader(addr);
-                        field.DataType.Accept(this);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    var dc = services.RequireService<DecompilerEventListener>();
-                    dc.Error(
-                        dc.CreateAddressNavigator(program, addr),
-                        ex,
-                        string.Format("Failed to write global variable {0}.", name));
-                }
-                formatter.Terminate(";");
+                Debug.Print("No global variables found.");
+                return;
             }
+            this.queue = new Queue<StructureField>(globals.Fields);
+            while (queue.Count > 0)
+            {
+                var field = queue.Dequeue();
+                WriteGlobalVariable(field);
+            }
+        }
+
+        private void WriteGlobalVariable(StructureField field)
+        {
+            var name = string.Format("g_{0:X}", field.Name);
+            var addr = Address.Ptr32((uint)field.Offset);  //$BUG: this is completely wrong; field.Offsets should be as wide as the platform permits.
+            try
+            {
+                tw.WriteDeclaration(field.DataType, name);
+                if (program.SegmentMap.IsValidAddress(addr))
+                {
+                    formatter.Write(" = ");
+                    this.rdr = program.CreateImageReader(addr);
+                    field.DataType.Accept(this);
+                }
+            }
+            catch (Exception ex)
+            {
+                var dc = services.RequireService<DecompilerEventListener>();
+                dc.Error(
+                    dc.CreateAddressNavigator(program, addr),
+                    ex,
+                    "Failed to write global variable {0}.", name);
+            }
+            formatter.Terminate(";");
+        }
+
+        public void WriteGlobalVariable(Address address, DataType dataType, string name, Formatter formatter)
+        {
+            this.formatter = formatter;
+            this.codeFormatter = new CodeFormatter(formatter);
+            this.tw = new TypeReferenceFormatter(formatter);
+            this.globals = new StructureType();
+            this.queue = new Queue<StructureField>(globals.Fields);
+            try
+            {
+                tw.WriteDeclaration(dataType, name);
+                if (program.SegmentMap.IsValidAddress(address))
+                {
+                    formatter.Write(" = ");
+                    this.rdr = program.CreateImageReader(address);
+                    dataType.Accept(this);
+                }
+            }
+            catch (Exception ex)
+            {
+                var dc = services.RequireService<DecompilerEventListener>();
+                dc.Error(
+                    dc.CreateAddressNavigator(program, address),
+                    ex,
+                    "Failed to write global variable {0}.",
+                    name);
+            }
+            formatter.Terminate(";");
         }
 
         public CodeFormatter VisitArray(ArrayType at)
         {
-            Debug.Assert(at.Length != 0, "Expected sizes of arrays to have been determined by now");
+            if (at.Length == 0)
+            {
+                var dc = services.RequireService<DecompilerEventListener>();
+                dc.Warn(
+                    dc.CreateAddressNavigator(program, rdr.Address),
+                    "Expected sizes of arrays to have been determined by now");
+            }
             var fmt = codeFormatter.InnerFormatter;
             fmt.Terminate();
             fmt.Indent();
@@ -88,12 +141,9 @@ namespace Reko.Core.Output
             
             for (int i = 0; i < at.Length; ++i)
             {
-                var r = rdr.Clone();
                 fmt.Indent();
                 at.ElementType.Accept(this);
                 fmt.Terminate(",");
-                r.Offset += (uint) at.ElementType.Size;
-                rdr = r;
             }
 
             fmt.Indentation -= fmt.TabSize;
@@ -102,9 +152,15 @@ namespace Reko.Core.Output
             return codeFormatter;
         }
 
-        public CodeFormatter VisitCode(CodeType c)
+        public CodeFormatter VisitClass(ClassType ct)
         {
             throw new NotImplementedException();
+        }
+
+        public CodeFormatter VisitCode(CodeType c)
+        {
+            codeFormatter.InnerFormatter.Write("<code>");
+            return codeFormatter;
         }
 
         public CodeFormatter VisitEnum(EnumType e)
@@ -112,21 +168,22 @@ namespace Reko.Core.Output
             throw new NotImplementedException();
         }
 
-        private int guard;
+
         public CodeFormatter VisitEquivalenceClass(EquivalenceClass eq)
         {
-            if (guard > 100)
+            if (recursionGuard > 100)
             { codeFormatter.InnerFormatter.WriteComment("Recursion too deep"); return codeFormatter; }
             else
             {
                 if (eq.DataType != null)
                 {
                     //$TODO: this should go away once we figure out why type inference loops.
-                    ++guard;
+                    ++recursionGuard;
                     var cf = eq.DataType.Accept(this);
-                    --guard;
+                    --recursionGuard;
                     return cf;
-                } else
+                }
+                else
                 {
                     Debug.Print("WARNING: eq.DataType is null for {0}", eq.Name);
                     return codeFormatter;
@@ -136,7 +193,8 @@ namespace Reko.Core.Output
 
         public CodeFormatter VisitFunctionType(FunctionType ft)
         {
-            throw new NotImplementedException();
+            codeFormatter.InnerFormatter.WriteLine("Unexpected function type {0}", ft);
+            return codeFormatter;
         }
 
         public CodeFormatter VisitPrimitive(PrimitiveType pt)
@@ -153,6 +211,14 @@ namespace Reko.Core.Output
         public CodeFormatter VisitPointer(Pointer ptr)
         {
             var c = rdr.Read(PrimitiveType.Create(Domain.Pointer, ptr.Size));
+            var addr = Address.FromConstant(c);
+            // Check if it is pointer to function
+            Procedure proc;
+            if (program.Procedures.TryGetValue(addr, out proc))
+            {
+                codeFormatter.InnerFormatter.WriteHyperlink(proc.Name, proc);
+                return codeFormatter;
+            }
             int offset = c.ToInt32();
             if (offset == 0)
             {
@@ -162,15 +228,38 @@ namespace Reko.Core.Output
             {
                 var field = globals.Fields.AtOffset(offset);
                 if (field == null)
-                    throw new NotImplementedException("Drill into struct");
+                {
+                    // We've discovered a global variable! Create it!
+                    //$REVIEW: what about collisions and the usual merge crap?
+                    var dt = ptr.Pointee;
+                    //$REVIEW: that this is a pointer to a C-style null 
+                    // terminated string is a wild-assed guess of course.
+                    // It could be a pascal string, or a raw area of bytes.
+                    // Depend on user for this, or possibly platform.
+                    var pt = dt as PrimitiveType;
+                    if (pt != null && pt.Domain == Domain.Character)
+                    {
+                        dt = StringType.NullTerminated(pt);
+                    }
+                    globals.Fields.Add(offset, dt);
+                    // add field to queue.
+                    field = globals.Fields.AtOffset(offset);
+                    queue.Enqueue(field);
+                }
                 codeFormatter.InnerFormatter.Write("&g_{0}", field.Name);
             }
             return codeFormatter;
         }
 
+        public CodeFormatter VisitReference(ReferenceTo refTo)
+        {
+            throw new NotSupportedException("Global variables cannot be references.");
+        }
+
         public CodeFormatter VisitString(StringType str)
         {
-            var s = rdr.ReadCString(str.ElementType, Encoding.UTF8);    //$BUG: should get this from platform / user-setting.
+            var offset = rdr.Offset;
+            var s = rdr.ReadCString(str.ElementType, program.TextEncoding);
             var fmt = codeFormatter.InnerFormatter;
             fmt.Write('"');
             foreach (var ch in s.ToString())
@@ -187,6 +276,10 @@ namespace Reko.Core.Output
                 }
             }
             fmt.Write('"');
+            if (str.Length > 0)
+            {
+                rdr.Offset = offset + str.Length * str.ElementType.Size;
+            }
             return codeFormatter;
         }
 
@@ -199,12 +292,15 @@ namespace Reko.Core.Output
             fmt.Terminate();
             fmt.Indentation += fmt.TabSize;
 
+            var structOffset = rdr.Offset;
             for (int i = 0; i < str.Fields.Count; ++i)
             {
                 fmt.Indent();
+                rdr.Offset = structOffset + str.Fields[i].Offset;
                 str.Fields[i].DataType.Accept(this);
                 fmt.Terminate(",");
             }
+            rdr.Offset = structOffset + str.GetInferredSize();
 
             fmt.Indentation -= fmt.TabSize;
             fmt.Indent();
@@ -214,9 +310,7 @@ namespace Reko.Core.Output
 
         public CodeFormatter VisitTypeReference(TypeReference typeref)
         {
-            var fmt = codeFormatter.InnerFormatter;
-            fmt.WriteType(typeref.Name, typeref);
-            return codeFormatter;
+            return typeref.Referent.Accept(this);
         }
 
         public CodeFormatter VisitTypeVariable(TypeVariable tv)

@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -42,6 +42,7 @@ namespace Reko.UnitTests.Mocks
 	public class FakeArchitecture : IProcessorArchitecture
 	{
 		private static RegisterStorage [] registers;
+        private static FlagRegister flags = new FlagRegister("flags", PrimitiveType.Word32);
         private RtlTraceBuilder rewriters;
 
 		internal const int RegisterCount = 64;
@@ -58,13 +59,14 @@ namespace Reko.UnitTests.Mocks
 			registers = new RegisterStorage[RegisterCount];
 			for (int i = 0; i < registers.Length; ++i)
 			{
-				registers[i] = new MockMachineRegister("r" + i, i, PrimitiveType.Word32);
+				registers[i] = new RegisterStorage("r" + i, i, 0, PrimitiveType.Word32);
 			}
 		}
 
+        public string Name { get; set; }
         public string Description { get; set; }
 
-        public IEnumerable<MachineInstruction> DisassemblyStream { get; set; }
+        public IEnumerable<MachineInstruction> Test_DisassemblyStream { get; set; }
 
         public void Test_AddTrace(RtlTrace trace)
         {
@@ -93,7 +95,7 @@ namespace Reko.UnitTests.Mocks
             return trace;
         }
 
-        public IEnumerable<Address> CreatePointerScanner(ImageMap map, ImageReader rdr, IEnumerable<Address> knownLinAddrs, PointerScannerFlags flags)
+        public IEnumerable<Address> CreatePointerScanner(SegmentMap map, ImageReader rdr, IEnumerable<Address> knownLinAddrs, PointerScannerFlags flags)
         {
             throw new NotImplementedException();
         }
@@ -103,14 +105,29 @@ namespace Reko.UnitTests.Mocks
             throw new NotImplementedException();
         }
 
-        public ImageReader CreateImageReader(LoadedImage image, Address addr)
+        public ImageReader CreateImageReader(MemoryArea image, Address addr)
         {
             return new LeImageReader(image, addr);
         }
 
-        public ImageReader CreateImageReader(LoadedImage image, ulong offset)
+        public ImageReader CreateImageReader(MemoryArea image, Address addrBegin, Address addrEnd)
+        {
+            return new LeImageReader(image, addrBegin, addrEnd);
+        }
+
+        public ImageReader CreateImageReader(MemoryArea image, ulong offset)
         {
             return new LeImageReader(image, offset);
+        }
+
+        public ImageWriter CreateImageWriter()
+        {
+            return new LeImageWriter();
+        }
+
+        public ImageWriter CreateImageWriter(MemoryArea mem, Address addr)
+        {
+            return new LeImageWriter(mem, addr);
         }
 
         public ProcedureSerializer CreateProcedureSerializer(ISerializedTypeVisitor<DataType> typeLoader, string defaultCc)
@@ -119,13 +136,37 @@ namespace Reko.UnitTests.Mocks
         }
 
         public FlagGroupStorage GetFlagGroup(uint grf)
-		{
-			return null;
-		}
+        {
+            var sb = new StringBuilder();
+            if (((uint)grf & 0x01) != 0) sb.Append('S');
+            if (((uint)grf & 0x02) != 0) sb.Append('C');
+            if (((uint)grf & 0x04) != 0) sb.Append('Z');
+            if (((uint)grf & 0x10) != 0) sb.Append('O');
+            if (((uint)grf & 0x20) != 0) sb.Append('O');
+            if (sb.Length == 0)
+                return null;
+            return new FlagGroupStorage(flags, grf, sb.ToString(), PrimitiveType.Byte);
+        }
 
-		public FlagGroupStorage GetFlagGroup(string name)
+		public FlagGroupStorage GetFlagGroup(string s)
 		{
-			return null;
+            uint grf = 0;
+            for (int i = 0; i < s.Length; ++i)
+            {
+                switch (char.ToUpper(s[i]))
+                {
+                case 'S': grf |= 0x01; break;
+                case 'C': grf |= 0x02; break;
+                case 'Z': grf |= 0x04; break;
+                case 'O': grf |= 0x10; break;
+                case 'V': grf |= 0x10; break;
+                case 'X': grf |= 0x20; break;
+
+                }
+            }
+            if (grf != 0)
+                return new FlagGroupStorage(flags, grf, s, PrimitiveType.Byte);
+            return null;
 		}
 
         public RegisterStorage GetRegister(int i)
@@ -145,6 +186,14 @@ namespace Reko.UnitTests.Mocks
             }
             return null;
 		}
+
+        public RegisterStorage GetSubregister(RegisterStorage reg, int offset, int width)
+        {
+            if (offset == 0 && width == (int)reg.BitSize)
+                return reg;
+            else
+                return null;
+        }
 
         public RegisterStorage[] GetRegisters()
         {
@@ -166,7 +215,7 @@ namespace Reko.UnitTests.Mocks
 
 		public IEnumerable<MachineInstruction> CreateDisassembler(ImageReader rdr)
 		{
-            return new FakeDisassembler(rdr.Address, DisassemblyStream.GetEnumerator());
+            return new FakeDisassembler(rdr.Address, Test_DisassemblyStream.GetEnumerator());
 		}
 
         public IEqualityComparer<MachineInstruction> CreateInstructionComparer(Normalize norm)
@@ -182,11 +231,6 @@ namespace Reko.UnitTests.Mocks
 		public ProcessorState CreateProcessorState()
 		{
 			return new FakeProcessorState(this);
-		}
-
-		public BitSet CreateRegisterBitset()
-		{
-			return new BitSet(RegisterCount);
 		}
 
 		public string GrfToString(uint grf)
@@ -223,6 +267,10 @@ namespace Reko.UnitTests.Mocks
 
         public Address ReadCodeAddress(int size, ImageReader rdr, ProcessorState state)
         {
+            if (size == 4)
+            {
+                return Address.Ptr32(rdr.ReadLeUInt32());
+            }
             throw new NotImplementedException();
         }
 
@@ -231,24 +279,48 @@ namespace Reko.UnitTests.Mocks
             return Address.TryParse32(txtAddress, out addr);
         }
 
+        public Address MakeSegmentedAddress(Constant seg, Constant offset)
+        {
+            throw new NotImplementedException();
+        }
+
+        public RegisterStorage GetPart(RegisterStorage reg, DataType width)
+        {
+            throw new NotImplementedException();
+        }
+
+        public IEnumerable<RegisterStorage> GetAliases(RegisterStorage reg)
+        {
+            yield return reg;
+        }
+
+        public RegisterStorage GetWidestSubregister(RegisterStorage reg, HashSet<RegisterStorage> bits)
+        {
+            ulong mask = bits.Where(b => b.OverlapsWith(reg)).Aggregate(0ul, (a, r) => a | r.BitMask);
+            return mask != 0 ? reg : null;
+        }
+
+        public void RemoveAliases(ISet<RegisterStorage> ids, RegisterStorage reg)
+        {
+            ids.Remove(reg);
+        }
+
+        public void LoadUserOptions(Dictionary<string, object> options)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Dictionary<string, object> SaveUserOptions()
+        {
+            throw new NotImplementedException();
+        }
+
         #endregion
     }
 
 	public class MockMachineRegister : RegisterStorage
 	{
-		public MockMachineRegister(string name, int i, PrimitiveType dt) : base(name, i, dt) { }
-
-        public override RegisterStorage GetSubregister(int offset, int size)
-		{
-			return this;
-		}
-
-		public override RegisterStorage GetWidestSubregister(BitSet bits)
-		{
-			return (bits[Number])
-				? this
-				: null;
-		}
+		public MockMachineRegister(string name, int i, PrimitiveType dt) : base(name, i, 0, dt) { }
 	}
 
 	public class FakeProcessorState : ProcessorState
@@ -293,7 +365,7 @@ namespace Reko.UnitTests.Mocks
         {
         }
 
-        public override void OnProcedureLeft(ProcedureSignature sig)
+        public override void OnProcedureLeft(FunctionType sig)
         {
         }
 
@@ -311,7 +383,7 @@ namespace Reko.UnitTests.Mocks
             return new CallSite(returnAddressSize, 0);
         }
 
-        public override void OnAfterCall(Identifier sp, ProcedureSignature sigCallee, ExpressionVisitor<Expression> eval)
+        public override void OnAfterCall(FunctionType sigCallee)
         {
         }
 	}

@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -132,14 +132,15 @@ namespace Reko.Core.Code
             return addr;
         }
 
-		public virtual Expression VisitApplication(Application appl)
-		{
-			for (int i = 0; i < appl.Arguments.Length; ++i)
-			{
-				appl.Arguments[i] = appl.Arguments[i].Accept(this);
-			}
-			return appl;
-		}
+        public virtual Expression VisitApplication(Application appl)
+        {
+            appl.Procedure = appl.Procedure.Accept(this);
+            for (int i = 0; i < appl.Arguments.Length; ++i)
+            {
+                appl.Arguments[i] = appl.Arguments[i].Accept(this);
+            }
+            return appl;
+        }
 
 		public virtual Expression VisitArrayAccess(ArrayAccess acc)
 		{
@@ -174,9 +175,9 @@ namespace Reko.Core.Code
 
 		public virtual Expression VisitDepositBits(DepositBits d)
 		{
-			d.Source = d.Source.Accept(this);
-			d.InsertedBits = d.InsertedBits.Accept(this);
-			return d;
+			var src = d.Source.Accept(this);
+			var bits = d.InsertedBits.Accept(this);
+            return new DepositBits(src, bits, d.BitPosition);
 		}
 
 		public virtual Expression VisitDereference(Dereference deref)

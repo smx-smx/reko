@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,8 +21,11 @@
 using Reko.Core;
 using Reko.Core.Expressions;
 using Reko.Core.Operators;
+using Reko.Core.Services;
 using Reko.Core.Types;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace Reko.Typing
 {
@@ -32,19 +35,25 @@ namespace Reko.Typing
 	public class TypedConstantRewriter : IDataTypeVisitor<Expression>
 	{
         private Program program;
-        private Platform platform;
+        private IPlatform platform;
 		private TypeStore store;
 		private Identifier globals;
 		private Constant c;
 		private PrimitiveType pOrig;
 		private bool dereferenced;
+        private Dictionary<ushort, Identifier> mpSelectorToSegId;
+        private DecompilerEventListener eventListener;
 
-		public TypedConstantRewriter(Program program)
+        public TypedConstantRewriter(Program program, DecompilerEventListener eventListener)
 		{
+            this.eventListener = eventListener;
             this.program = program;
             this.platform = program.Platform;
             this.store = program.TypeStore;
             this.globals = program.Globals;
+            this.mpSelectorToSegId = program.SegmentMap.Segments.Values
+                .Where(s => s.Identifier != null && s.Address.Selector.HasValue)
+                .ToDictionary(s => s.Address.Selector.Value, s => s.Identifier);
 		}
 
         /// <summary>
@@ -56,19 +65,63 @@ namespace Reko.Typing
         public Expression Rewrite(Constant c, bool dereferenced)
         {
             this.c = c;
-            DataType dtInferred = c.TypeVariable.DataType.ResolveAs<DataType>();
-            this.pOrig = c.TypeVariable.OriginalDataType as PrimitiveType;
+            DataType dtInferred = c.DataType;
+            this.pOrig = c.DataType as PrimitiveType;
+            if (c.TypeVariable != null)
+            {
+                dtInferred = c.TypeVariable.DataType;
+                this.pOrig = c.TypeVariable.OriginalDataType as PrimitiveType;
+            }
+            dtInferred = dtInferred.ResolveAs<DataType>();
             this.dereferenced = dereferenced;
             return dtInferred.Accept(this);
         }
 
         public Expression Rewrite(Address addr, bool dereferenced)
         {
-            this.c = Constant.UInt32(addr.ToUInt32());  //$BUG: won't work for x86.
-            var dtInferred = addr.TypeVariable.DataType.ResolveAs<DataType>();
-            this.pOrig = addr.TypeVariable.OriginalDataType as PrimitiveType;
-            this.dereferenced = dereferenced;
-            return dtInferred.Accept(this);
+            if (addr.Selector.HasValue)
+            {
+                Identifier segId;
+                if (!mpSelectorToSegId.TryGetValue(addr.Selector.Value, out segId))
+                {
+                    eventListener.Warn(
+                        new NullCodeLocation(""), 
+                        "Selector {0:X4} has no known segment.",
+                        addr.Selector.Value);
+                    return addr;
+                }
+                var ptrSeg = segId.TypeVariable.DataType.ResolveAs<Pointer>();
+                if (ptrSeg == null)
+                {
+                    //$TODO: what should the warning be?
+                    return addr;
+                }
+                var baseType = ptrSeg.Pointee.ResolveAs<StructureType>();
+                var dt = addr.TypeVariable.DataType.ResolveAs<Pointer>();
+                this.c = Constant.Create(
+                    PrimitiveType.CreateWord(addr.DataType.Size - ptrSeg.Size),
+                    addr.Offset);
+
+                var f = EnsureFieldAtOffset(baseType, dt.Pointee, c.ToInt32());
+                Expression ex = new FieldAccess(dt, new Dereference(ptrSeg, segId), f);
+                if (dereferenced || dt.Pointee is ArrayType)
+                {
+                    return ex;
+                }
+                else
+                {
+                    var un = new UnaryExpression(Operator.AddrOf, dt, ex);
+                    return un;
+                }
+            }
+            else
+            {
+                this.c = addr.ToConstant();  //$BUG: won't work for x86.
+                var dtInferred = addr.TypeVariable.DataType.ResolveAs<DataType>();
+                this.pOrig = addr.TypeVariable.OriginalDataType as PrimitiveType;
+                this.dereferenced = dereferenced;
+                return dtInferred.Accept(this);
+            }
         }
 
 		private StructureType GlobalVars
@@ -109,6 +162,11 @@ namespace Reko.Typing
 			throw new ArgumentException("Constants cannot have array values yet.");
 		}
 
+        public Expression VisitClass(ClassType ct)
+        {
+            throw new NotImplementedException();
+        }
+
         public Expression VisitCode(CodeType c)
         {
             throw new NotImplementedException();
@@ -118,7 +176,7 @@ namespace Reko.Typing
         {
             string name;
             if (e.Members.TryGetValue(c.ToInt64(), out name))
-                return new Identifier(name, e, TemporaryStorage.None);
+                return new Identifier(name, e, RegisterStorage.None);
             return new Cast(e, c);
         }
 
@@ -143,7 +201,7 @@ namespace Reko.Typing
 
             var dt = memptr.Pointee.ResolveAs<DataType>();
             var f = EnsureFieldAtOffset(baseType, dt, c.ToInt32());
-            Expression ex = new FieldAccess(memptr.Pointee, baseExpr, f.Name);
+            Expression ex = new FieldAccess(memptr.Pointee, baseExpr, f);
 			if (dereferenced)
 			{
 				ex.DataType = memptr.Pointee;
@@ -168,6 +226,9 @@ namespace Reko.Typing
 			Expression e = c;
             if (IsSegmentPointer(ptr))
             {
+                Identifier segID;
+                if (mpSelectorToSegId.TryGetValue(c.ToUInt16(), out segID))
+                    return segID;
                 return e;
             } 
             else if (GlobalVars != null)
@@ -181,8 +242,9 @@ namespace Reko.Typing
                     return np;
                 }
 
+                var addr = program.Platform.MakeAddressFromConstant(c);
                 // An invalid pointer -- often used as sentinels in code.
-                if (!program.Image.IsValidLinearAddress(c.ToUInt64()))
+                if (!program.SegmentMap.IsValidAddress(addr))
                 {
                     //$TODO: probably should use a reinterpret_cast here.
                     var ce = new Cast(c.DataType, c);
@@ -192,20 +254,26 @@ namespace Reko.Typing
                 }
                 
                 var dt = ptr.Pointee.ResolveAs<DataType>();
+                if (IsCharPtrToReadonlySection(c, dt))
+                {
+                    PromoteToCString(c, dt);
+                    return ReadNullTerminatedString(c, dt);
+                }
                 StructureField f = EnsureFieldAtOffset(GlobalVars, dt, c.ToInt32());
                 var ptrGlobals = new Pointer(GlobalVars, platform.PointerType.Size);
-                e = new FieldAccess(ptr.Pointee, new Dereference(ptrGlobals, globals), f.Name);
+                e = new FieldAccess(ptr.Pointee, new Dereference(ptrGlobals, globals), f);
                 if (dereferenced)
                 {
                     e.DataType = ptr.Pointee;
                 }
                 else
                 {
-                    var array = dt as ArrayType;
+                    var array = f.DataType as ArrayType;
                     if (array != null) // C language rules 'promote' arrays to pointers.
                     {
-                        //$BUG: no factory?
-                        e.DataType = new Pointer(array.ElementType, platform.PointerType.Size);
+                        e.DataType = program.TypeFactory.CreatePointer(
+                            array.ElementType, 
+                            platform.PointerType.Size);
                     }
                     else
                     {
@@ -215,6 +283,37 @@ namespace Reko.Typing
             }
 			return e;
 		}
+
+        public Expression VisitReference(ReferenceTo refTo)
+        {
+            throw new NotImplementedException();
+        }
+
+        private bool IsCharPtrToReadonlySection(Constant c, DataType dt)
+        {
+            var pr = dt as PrimitiveType;
+            if (pr == null || pr.Domain != Domain.Character)
+                return false;
+            var addr = platform.MakeAddressFromConstant(c);
+            if (addr == null)
+                return false;
+            ImageSegment seg;
+            if (!program.SegmentMap.TryFindSegment(addr, out seg))
+                return false;
+            return (seg.Access & AccessMode.ReadWrite) == AccessMode.Read;
+        }
+
+        private Expression ReadNullTerminatedString(Constant c, DataType dt)
+        {
+            var rdr = program.CreateImageReader(platform.MakeAddressFromConstant(c));
+            return rdr.ReadCString(dt, program.TextEncoding);
+        }
+
+        void PromoteToCString(Constant c, DataType charType)
+        {
+            var field = GlobalVars.Fields.AtOffset(c.ToInt32());
+            field.DataType = StringType.NullTerminated(charType);
+        }
 
         private StructureField EnsureFieldAtOffset(StructureType str, DataType dt, int offset)
         {
@@ -227,6 +326,31 @@ namespace Reko.Typing
                 str.Fields.Add(f);
             }
             return f;
+#if TODO
+            var f = GlobalVars.Fields.LowerBound(c.ToInt32());
+            //StructureField f = str.Fields.AtOffset(offset);
+            if (f != null)
+            {
+                Unifier u = new Unifier();
+                if (u.AreCompatible(f.DataType, dt))
+                {
+                    return f;
+                }
+
+                // Check for special case when an array ends at the offset.
+                f = GlobalVars.Fields.LowerBound(c.ToInt32() - 1);
+                var array = f.DataType.ResolveAs<ArrayType>();
+                if (array != null && u.AreCompatible(array.ElementType, dt))
+                {
+                    return f;
+                }
+            }
+            //$TODO: overlaps and conflicts.
+            //$TODO: strings.
+            f = new StructureField(offset, dt);
+            str.Fields.Add(f);
+            return f;
+#endif
         }
 
 		public Expression VisitPrimitive(PrimitiveType pt)

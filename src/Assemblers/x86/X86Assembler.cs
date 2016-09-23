@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -38,7 +38,16 @@ namespace Reko.Assemblers.x86
     /// </summary>
     public class X86Assembler
     {
-        private IntelArchitecture arch;
+        enum StringInstructionBaseOps : byte
+        {
+            Move = 0xA4,
+            Compare = 0xA6,
+            Store = 0xAA,
+            Load = 0xAC,
+            Scan = 0xAE,
+        }
+        private IServiceProvider services;
+        private IProcessorArchitecture arch;
         private Address addrBase;
         private ModRmBuilder modRm;
         private PrimitiveType defaultWordSize;
@@ -46,16 +55,17 @@ namespace Reko.Assemblers.x86
         private AssembledSegment currentSegment;
         private AssembledSegment unknownSegment;
         private SymbolTable symtab;
-        private List<EntryPoint> entryPoints;
+        private List<ImageSymbol> entryPoints;
         private Dictionary<Address, ImportReference> importReferences;
         private List<AssembledSegment> segments;
         private Dictionary<string, AssembledSegment> mpNameToSegment;
         private Dictionary<Symbol, AssembledSegment> symbolSegments;        // The segment to which a symbol belongs.
 
-        public X86Assembler(IntelArchitecture arch, Address addrBase, List<EntryPoint> entryPoints)
+        public X86Assembler(IServiceProvider services, IPlatform platform, Address addrBase, List<ImageSymbol> entryPoints)
         {
-            this.arch = arch;
-            this.Platform = new MsdosPlatform(null, arch);
+            this.services = services;
+            this.Platform = platform;
+            this.arch = platform.Architecture;
             this.addrBase = addrBase;
             this.entryPoints = entryPoints;
             this.defaultWordSize = arch.WordWidth;
@@ -75,12 +85,7 @@ namespace Reko.Assemblers.x86
             SetDefaultWordWidth(defaultWordSize);
         }
 
-        public IntelArchitecture Architecture
-        {
-            get { return arch; }
-        }
-
-        public Platform Platform { get; set; }
+        public IPlatform Platform { get; set; }
 
         public Dictionary<Address, ImportReference> ImportReferences
         {
@@ -91,9 +96,14 @@ namespace Reko.Assemblers.x86
         {
             var stm = new MemoryStream();
             LoadSegments(stm);
-            var image = new LoadedImage(addrBase, stm.ToArray());
-            RelocateSegmentReferences(image);
-            return new Program(image, image.CreateImageMap(), arch, Platform);
+            var mem = new MemoryArea(addrBase, stm.ToArray());
+            RelocateSegmentReferences(mem);
+            return new Program(
+                new SegmentMap(
+                    mem.BaseAddress,
+                    new ImageSegment("code", mem, AccessMode.ReadWriteExecute)),
+                arch,
+                Platform);
         }
 
         private void LoadSegments(MemoryStream stm)
@@ -105,10 +115,9 @@ namespace Reko.Assemblers.x86
                     stm.WriteByte(0x90);        // 1-byte NOP instruction.
                 }
                 
-                var segAddr = this.addrBase as SegAddress32;
                 ushort sel;
-                if (segAddr != null)
-                    sel = (ushort)(this.addrBase.Selector + (stm.Position >> 4));
+                if (addrBase.Selector.HasValue)
+                    sel = (ushort)(this.addrBase.Selector.Value + (stm.Position >> 4));
                 else
                     sel = 0;
                 seg.Selector = sel;
@@ -117,13 +126,13 @@ namespace Reko.Assemblers.x86
             }
         }
 
-        private void RelocateSegmentReferences(LoadedImage image)
+        private void RelocateSegmentReferences(MemoryArea image)
         {
             foreach (var seg in segments)
             {
                 foreach (var reloc in seg.Relocations)
                 {
-                    image.WriteLeUInt16((uint)((reloc.Segment.Selector - addrBase.Selector) * 16u + reloc.Offset), seg.Selector);
+                    image.WriteLeUInt16((uint)((reloc.Segment.Selector - addrBase.Selector.Value) * 16u + reloc.Offset), seg.Selector);
                 }
             }
         }
@@ -473,11 +482,11 @@ namespace Reko.Assemblers.x86
             if (regOpDst != null)	//$BUG: what about segment registers?
             {
                 byte reg = RegisterEncoding(regOpDst.Register);
-                if (regOpDst.Register is SegmentRegister)
+                if (IsSegmentRegister(regOpDst.Register))
                 {
                     if (regOpSrc != null)
                     {
-                        if (regOpSrc.Register is SegmentRegister)
+                        if (IsSegmentRegister(regOpSrc.Register ))
                             Error("Cannot assign between two segment registers");
                         if (ops[1].Operand.Width != PrimitiveType.Word16)
                             Error(string.Format("Values assigned to/from segment registers must be 16 bits wide"));
@@ -494,9 +503,9 @@ namespace Reko.Assemblers.x86
                     }
                 }
 
-                if (regOpSrc != null && regOpSrc.Register is SegmentRegister)
+                if (regOpSrc != null && IsSegmentRegister(regOpSrc.Register))
                 {
-                    if (regOpDst.Register is SegmentRegister)
+                    if (IsSegmentRegister(regOpDst.Register))
                         Error("Cannot assign between two segment registers");
                     if (ops[0].Operand.Width != PrimitiveType.Word16)
                         Error(string.Format("Values assigned to/from segment registers must be 16 bits wide"));
@@ -545,7 +554,7 @@ namespace Reko.Assemblers.x86
             regOpSrc = ops[1].Operand as RegisterOperand;
             if (regOpSrc != null)
             {
-                if (regOpSrc.Register is SegmentRegister)
+                if (IsSegmentRegister(regOpSrc.Register))
                 {
                     EmitOpcode(0x8C, PrimitiveType.Word16);
                 }
@@ -564,6 +573,17 @@ namespace Reko.Assemblers.x86
                 emitter.EmitLeImmediate(immOpSrc.Value, dataWidth);
             }
         }
+
+        public static bool IsSegmentRegister(RegisterStorage seg)
+        {
+            return seg.Domain == Registers.cs.Domain ||
+                   seg.Domain == Registers.ds.Domain ||
+                   seg.Domain == Registers.es.Domain ||
+                   seg.Domain == Registers.fs.Domain ||
+                   seg.Domain == Registers.gs.Domain ||
+                   seg.Domain == Registers.ss.Domain;
+        }
+
         internal void ProcessMovx(int opcode, ParsedOperand[] ops)
         {
             PrimitiveType dataWidth = EnsureValidOperandSize(ops[1]);
@@ -614,8 +634,8 @@ namespace Reko.Assemblers.x86
             RegisterOperand regOp = op.Operand as RegisterOperand;
             if (regOp != null)
             {
-                IntelRegister rrr = (IntelRegister) regOp.Register;
-                if (rrr.IsBaseRegister)
+                var rrr = regOp.Register;
+                if (IsBaseRegister(rrr))
                 {
                     EmitOpcode(0x50 | (fPop ? 8 : 0) | RegisterEncoding(regOp.Register), dataWidth);
                 }
@@ -639,6 +659,12 @@ namespace Reko.Assemblers.x86
 
             EmitOpcode(fPop ? 0x8F : 0xFF, dataWidth);
             EmitModRM(fPop ? 0 : 6, op);
+        }
+
+        private bool IsBaseRegister(RegisterStorage reg)
+        {
+            var r = (int)reg.Domain;
+            return (int)Registers.eax.Domain <= r && r <= (int)Registers.edi.Domain;
         }
 
         internal void ProcessSetCc(byte bits, ParsedOperand op)
@@ -1005,14 +1031,9 @@ namespace Reko.Assemblers.x86
             }
         }
 
-        public static byte RegisterEncoding(byte b)
-        {
-            return registerEncodings[b];
-        }
-
         public static byte RegisterEncoding(RegisterStorage reg)
         {
-            return registerEncodings[reg.Number];
+            return registerEncodings[reg];
         }
 
         public static Constant IntegralConstant(int i, PrimitiveType width)
@@ -1047,56 +1068,55 @@ namespace Reko.Assemblers.x86
             Error(args.Message);
         }
 
-        private static readonly byte[] registerEncodings = 
+        private static readonly Dictionary<RegisterStorage, byte> registerEncodings = 
+            new Dictionary<RegisterStorage, byte>
 		{
-			0x00, // eax
-			0x01, // ecx
-			0x02, // edx
-			0x03, // ebx
-			0x04, // esp
-			0x05, // ebp
-			0x06, // esi
-			0x07, // edi
+			{ Registers.eax, 0x00 },
+			{ Registers.ecx, 0x01 },
+			{ Registers.edx, 0x02 },
+			{ Registers.ebx, 0x03 },
+			{ Registers.esp, 0x04 },
+			{ Registers.ebp, 0x05 },
+			{ Registers.esi, 0x06 },
+			{ Registers.edi, 0x07 },
 
-			0x00, // ax
-			0x01, // cx
-			0x02, // dx
-			0x03, // bx
-			0x04, // sp
-			0x05, // bp
-			0x06, // si
-			0x07, // di
+			{ Registers.ax, 0x00 },
+			{ Registers.cx, 0x01 },
+			{ Registers.dx, 0x02 },
+			{ Registers.bx, 0x03 },
+			{ Registers.sp, 0x04 },
+			{ Registers.bp, 0x05 },
+			{ Registers.si, 0x06 },
+			{ Registers.di, 0x07 },
 
-			0x00, // al
-			0x01, // cl
-			0x02, // dl
-			0x03, // bl
-			0x04, // ah
-			0x05, // ch
-			0x06, // dh
-			0x07, // bh
+			{ Registers.al, 0x00 },
+			{ Registers.cl, 0x01 },
+			{ Registers.dl, 0x02 },
+			{ Registers.bl, 0x03 },
+			{ Registers.ah, 0x04 },
+			{ Registers.ch, 0x05 },
+			{ Registers.dh, 0x06 },
+			{ Registers.bh, 0x07 },
 
-			0x00, // es
-			0x01, // cs
-			0x02, // ss
-			0x03, // ds
-			0x04, // fs
-			0x05, // gs
+			{ Registers.es, 0x00 },
+			{ Registers.cs, 0x01 },
+			{ Registers.ss, 0x02 },
+			{ Registers.ds, 0x03 },
+			{ Registers.fs, 0x04 },
+			{ Registers.gs, 0x05 },
 		};
         private Encoding textEncoding;
 
-
-
         public void i386()
         {
-            arch = new IntelArchitecture(ProcessorMode.Protected32);
+            arch = new X86ArchitectureFlat32();
             SetDefaultWordWidth(PrimitiveType.Word32);
         }
 
         public void i86()
         {
-            arch = new IntelArchitecture(ProcessorMode.Real);
-            Platform = new MsdosPlatform(null, arch);
+            arch = new X86ArchitectureReal();
+            Platform = new MsdosPlatform(services, arch);
             SetDefaultWordWidth(PrimitiveType.Word16);
         }
 
@@ -1271,8 +1291,10 @@ namespace Reko.Assemblers.x86
         public void Proc(string procName)
         {
             DefineSymbol(procName);
+            //$BUG: should be symbols. the ORG directive specifies the start symbol.
             if (entryPoints != null && entryPoints.Count == 0)
-                entryPoints.Add(new EntryPoint(addrBase + emitter.Position, arch.CreateProcessorState()));
+                entryPoints.Add(
+                    new ImageSymbol(addrBase + emitter.Position));
         }
 
         public void Push(ParsedOperand op)
@@ -1305,7 +1327,7 @@ namespace Reko.Assemblers.x86
             ProcessBinop(0x02, op1, op2);
         }
 
-        public void Add(IntelRegister reg, int constant)
+        public void Add(RegisterStorage reg, int constant)
         {
             ProcessBinop(
                 0x00,
@@ -1485,7 +1507,7 @@ namespace Reko.Assemblers.x86
         {
             emitter.EmitByte(0xEA);
             emitter.EmitLeUInt16((ushort)address.Offset);
-            emitter.EmitLeUInt16(address.Selector);
+            emitter.EmitLeUInt16(address.Selector.Value);
         }
 
         public X86Assembler Label(string label)
@@ -1760,11 +1782,6 @@ namespace Reko.Assemblers.x86
             ProcessBinop(0x7, src, Imm(dst));
         }
 
-        public void Cmpsb()
-        {
-            ProcessStringInstruction(0xA6, PrimitiveType.Byte);
-        }
-
         public void Db(params int[] bytes)
         {
             for (int i = 0; i < bytes.Length; ++i)
@@ -1826,11 +1843,6 @@ namespace Reko.Assemblers.x86
             ProcessLxs(-1, 0xC4, dst, src);
         }
 
-        public void Lodsw()
-        {
-            ProcessStringInstruction(0xAC, PrimitiveType.Word16);
-        }
-
         public void Loop(string target)
         {
             ProcessLoop(2, target);
@@ -1846,24 +1858,74 @@ namespace Reko.Assemblers.x86
             ProcessLoop(0, target);
         }
 
-        public void Movsw()
-        {
-            ProcessStringInstruction(0xA4, PrimitiveType.Word16);
-        }
-
         public void Rep()
         {
             emitter.EmitByte(0xF3);
         }
 
-        public void Scasb()
+        public void Lodsb()
         {
-            ProcessStringInstruction(0xAE, PrimitiveType.Byte);
+            ProcessStringInstruction((byte)StringInstructionBaseOps.Load, PrimitiveType.Byte);
+        }
+        public void Lodsw()
+        {
+            ProcessStringInstruction((byte)StringInstructionBaseOps.Load, PrimitiveType.Word16);
+        }
+        public void Lodsd()
+        {
+            ProcessStringInstruction((byte)StringInstructionBaseOps.Load, PrimitiveType.Word32);
         }
 
+        public void Stosb()
+        {
+            ProcessStringInstruction((byte)StringInstructionBaseOps.Store, PrimitiveType.Byte);
+        }
+        public void Stosw()
+        {
+            ProcessStringInstruction((byte)StringInstructionBaseOps.Store, PrimitiveType.Word16);
+        }
+        public void Stosd()
+        {
+            ProcessStringInstruction((byte)StringInstructionBaseOps.Store, PrimitiveType.Word32);
+        }
+
+        public void Movsb()
+        {
+            ProcessStringInstruction((byte)StringInstructionBaseOps.Move, PrimitiveType.Byte);
+        }
+        public void Movsw()
+        {
+            ProcessStringInstruction((byte)StringInstructionBaseOps.Move, PrimitiveType.Word16);
+        }
+        public void Movsd()
+        {
+            ProcessStringInstruction((byte)StringInstructionBaseOps.Move, PrimitiveType.Word32);
+        }
+
+        public void Scasb()
+        {
+            ProcessStringInstruction((byte)StringInstructionBaseOps.Scan, PrimitiveType.Byte);
+        }
         public void Scasw()
         {
-            ProcessStringInstruction(0xAE, PrimitiveType.Word16);
+            ProcessStringInstruction((byte)StringInstructionBaseOps.Scan, PrimitiveType.Word16);
+        }
+        public void Scasd()
+        {
+            ProcessStringInstruction((byte)StringInstructionBaseOps.Scan, PrimitiveType.Word32);
+        }
+
+        public void Cmpsb()
+        {
+            ProcessStringInstruction((byte)StringInstructionBaseOps.Compare, PrimitiveType.Byte);
+        }
+        public void Cmpsw()
+        {
+            ProcessStringInstruction((byte)StringInstructionBaseOps.Compare, PrimitiveType.Word16);
+        }
+        public void Cmpsd()
+        {
+            ProcessStringInstruction((byte)StringInstructionBaseOps.Compare, PrimitiveType.Word32);
         }
 
         public ParsedOperand St(int n)
@@ -2043,7 +2105,7 @@ namespace Reko.Assemblers.x86
             return new ParsedOperand(new ImmediateOperand(IntegralConstant(n, this.defaultWordSize)));
         }
 
-        public ParsedOperand MemW(SegmentRegister seg, RegisterStorage @base, int offset)
+        public ParsedOperand MemW(RegisterStorage seg, RegisterStorage @base, int offset)
         {
             var mem = new MemoryOperand(PrimitiveType.Word16);
             mem.Base = @base;
@@ -2083,7 +2145,7 @@ namespace Reko.Assemblers.x86
             return Mem(PrimitiveType.Byte, null, @base, null, 1, offset);
         }
 
-        public ParsedOperand MemW(SegmentRegister seg, RegisterStorage @base, string offset)
+        public ParsedOperand MemW(RegisterStorage seg, RegisterStorage @base, string offset)
         {
             return Mem(PrimitiveType.Word16, seg, @base, null, 1, offset);
         }
@@ -2110,7 +2172,7 @@ namespace Reko.Assemblers.x86
 
         private ParsedOperand Mem(
             PrimitiveType width, 
-            SegmentRegister seg, 
+            RegisterStorage seg, 
             RegisterStorage @base,  
             RegisterStorage index, 
             int scale, 

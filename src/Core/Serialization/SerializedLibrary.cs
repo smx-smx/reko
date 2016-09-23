@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,6 +29,8 @@ namespace Reko.Core.Serialization
     [XmlRoot(ElementName = "library", Namespace = SerializedLibrary.Namespace_v1)]
     public class SerializedLibrary
     {
+        public const string Namespace_v4 = "http://schemata.jklnet.org/Reko/v4";
+        public const string Namespace_v3 = "http://schemata.jklnet.org/Reko/v3";
         public const string Namespace_v2 = "http://schemata.jklnet.org/Decompiler/v2";
         public const string Namespace_v1 = "http://schemata.jklnet.org/Decompiler";
 
@@ -46,13 +48,17 @@ namespace Reko.Core.Serialization
 
         [XmlElement("procedure", typeof(Procedure_v1))]
         [XmlElement("service", typeof(SerializedService))]
-        public List<SerializedProcedureBase_v1> Procedures;
+        public List<ProcedureBase_v1> Procedures;
+
+        [XmlElement("global", typeof(GlobalVariable_v1))]
+        public List<GlobalVariable_v1> Globals;
 
         private static XmlSerializer serializer;
 
         public SerializedLibrary()
         {
-            this.Procedures = new List<SerializedProcedureBase_v1>();
+            this.Procedures = new List<ProcedureBase_v1>();
+            this.Globals = new List<GlobalVariable_v1>();
         }
 
         public static SerializedLibrary LoadFromStream(Stream stm)
@@ -66,21 +72,35 @@ namespace Reko.Core.Serialization
         {
             if (serializer == null)
             {
-                serializer = CreateSerializer_v1(typeof(SerializedLibrary));
+                serializer = CreateSerializer(typeof(SerializedLibrary), Namespace_v1);
             }
             return serializer;
         }
 
+        public static XmlSerializer CreateSerializer(Type rootType, string @namespace)
+        {
+            var attrOverrides = SerializedType.GetAttributeOverrides(TypesToDecorate, @namespace);
+            return new XmlSerializer(rootType, attrOverrides);
+        }
+
+        public static XmlSerializer CreateSerializer_v4(Type rootType)
+        {
+            return CreateSerializer(rootType, Namespace_v4);
+        }
+
+        public static XmlSerializer CreateSerializer_v3(Type rootType)
+        {
+            return CreateSerializer(rootType, Namespace_v3);
+        }
+
         public static XmlSerializer CreateSerializer_v2(Type rootType)
         {
-            var attrOverrides = SerializedType.GetAttributeOverrides(TypesToDecorate, Namespace_v2);
-            return new XmlSerializer(rootType, attrOverrides);
+            return CreateSerializer(rootType, Namespace_v2);
         }
 
         public static XmlSerializer CreateSerializer_v1(Type rootType)
         {
-            var attrOverrides = SerializedType.GetAttributeOverrides(TypesToDecorate, Namespace_v1);
-            return new XmlSerializer(rootType, attrOverrides);
+            return CreateSerializer(rootType, Namespace_v1);
         }
 
         private static Type[] TypesToDecorate = new Type[] 
@@ -90,7 +110,7 @@ namespace Reko.Core.Serialization
             typeof(ArrayType_v1),
             typeof(CodeType_v1),
             typeof(SerializedEnumType),
-            typeof(SerializedStructType),
+            typeof(StructType_v1),
             typeof(StructField_v1),
             typeof(UnionType_v1),
             typeof(SerializedUnionAlternative),
@@ -99,7 +119,19 @@ namespace Reko.Core.Serialization
             typeof(SerializedTypedef),
             typeof(SerializedLibrary),
             typeof(Argument_v1),
+            typeof(GlobalVariable_v1),
             typeof(GlobalDataItem_v2)
         };
+    }
+
+    /// <summary>
+    /// Defines a global variable in a library.
+    /// </summary>
+    public class GlobalVariable_v1
+    {
+        [XmlAttribute("name")]
+        public string Name;
+
+        public SerializedType Type;
     }
 }

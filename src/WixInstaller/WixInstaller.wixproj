@@ -6,7 +6,7 @@
     <ProductVersion>3.7</ProductVersion>
     <ProjectGuid>b1916638-ef20-4692-8c95-1c5ad6c67d30</ProjectGuid>
     <SchemaVersion>2.0</SchemaVersion>
-    <OutputName>reko-0.5.1.0</OutputName>
+    <OutputName>reko-0.6.0.0</OutputName>
     <OutputType>Package</OutputType>
     <WixTargetsPath Condition=" '$(WixTargetsPath)' == '' AND '$(MSBuildExtensionsPath32)' != '' ">$(MSBuildExtensionsPath32)\Microsoft\WiX\v3.x\Wix.targets</WixTargetsPath>
     <WixTargetsPath Condition=" '$(WixTargetsPath)' == '' ">$(MSBuildExtensionsPath)\Microsoft\WiX\v3.x\Wix.targets</WixTargetsPath>
@@ -28,6 +28,14 @@
     <ProjectReference Include="..\Arch\Arm\Arm.csproj">
       <Name>Arm</Name>
       <Project>{32f09304-51be-4797-a86a-c0befed2422b}</Project>
+      <Private>True</Private>
+      <DoNotHarvest>True</DoNotHarvest>
+      <RefProjectOutputGroups>Binaries;Content;Satellites</RefProjectOutputGroups>
+      <RefTargetDir>INSTALLFOLDER</RefTargetDir>
+    </ProjectReference>
+    <ProjectReference Include="..\Arch\M68k.Design\M68k.Design.csproj">
+      <Name>M68k.Design</Name>
+      <Project>{90b83ec1-915b-471b-8f86-6a71b17db6a1}</Project>
       <Private>True</Private>
       <DoNotHarvest>True</DoNotHarvest>
       <RefProjectOutputGroups>Binaries;Content;Satellites</RefProjectOutputGroups>
@@ -76,6 +84,22 @@
     <ProjectReference Include="..\Arch\Sparc\Sparc.csproj">
       <Name>Sparc</Name>
       <Project>{454d9734-edf3-4646-8c7f-8449c68eb826}</Project>
+      <Private>True</Private>
+      <DoNotHarvest>True</DoNotHarvest>
+      <RefProjectOutputGroups>Binaries;Content;Satellites</RefProjectOutputGroups>
+      <RefTargetDir>INSTALLFOLDER</RefTargetDir>
+    </ProjectReference>
+    <ProjectReference Include="..\Arch\Vax\Vax.csproj">
+      <Name>Vax</Name>
+      <Project>{82777964-b370-431a-ac97-733c594c02b5}</Project>
+      <Private>True</Private>
+      <DoNotHarvest>True</DoNotHarvest>
+      <RefProjectOutputGroups>Binaries;Content;Satellites</RefProjectOutputGroups>
+      <RefTargetDir>INSTALLFOLDER</RefTargetDir>
+    </ProjectReference>
+    <ProjectReference Include="..\Arch\X86.Design\X86.Design.csproj">
+      <Name>X86.Design</Name>
+      <Project>{370a707f-3b17-4680-bc35-8edc846f058f}</Project>
       <Private>True</Private>
       <DoNotHarvest>True</DoNotHarvest>
       <RefProjectOutputGroups>Binaries;Content;Satellites</RefProjectOutputGroups>
@@ -169,9 +193,25 @@
       <RefProjectOutputGroups>Binaries;Content;Satellites</RefProjectOutputGroups>
       <RefTargetDir>INSTALLFOLDER</RefTargetDir>
     </ProjectReference>
+    <ProjectReference Include="..\Environments\Cpm\Cpm.csproj">
+      <Name>Cpm</Name>
+      <Project>{a1376626-5207-41a9-a77b-11ddb9f534d1}</Project>
+      <Private>True</Private>
+      <DoNotHarvest>True</DoNotHarvest>
+      <RefProjectOutputGroups>Binaries;Content;Satellites</RefProjectOutputGroups>
+      <RefTargetDir>INSTALLFOLDER</RefTargetDir>
+    </ProjectReference>
     <ProjectReference Include="..\Environments\MacOS\MacOS.csproj">
       <Name>MacOS</Name>
       <Project>{d0d1798c-08f7-4de6-94e9-cc382e1fbec8}</Project>
+      <Private>True</Private>
+      <DoNotHarvest>True</DoNotHarvest>
+      <RefProjectOutputGroups>Binaries;Content;Satellites</RefProjectOutputGroups>
+      <RefTargetDir>INSTALLFOLDER</RefTargetDir>
+    </ProjectReference>
+    <ProjectReference Include="..\Environments\Msdos.Design\Msdos.Design.csproj">
+      <Name>Msdos.Design</Name>
+      <Project>{6b0ded4f-5035-49ce-ae54-be92b3354e44}</Project>
       <Private>True</Private>
       <DoNotHarvest>True</DoNotHarvest>
       <RefProjectOutputGroups>Binaries;Content;Satellites</RefProjectOutputGroups>
@@ -201,6 +241,22 @@
       <RefProjectOutputGroups>Binaries;Content;Satellites</RefProjectOutputGroups>
       <RefTargetDir>INSTALLFOLDER</RefTargetDir>
     </ProjectReference>
+    <ProjectReference Include="..\Environments\RT11\RT11.csproj">
+      <Name>RT11</Name>
+      <Project>{697accc1-ba7b-4b34-bca3-f82113843f40}</Project>
+      <Private>True</Private>
+      <DoNotHarvest>True</DoNotHarvest>
+      <RefProjectOutputGroups>Binaries;Content;Satellites</RefProjectOutputGroups>
+      <RefTargetDir>INSTALLFOLDER</RefTargetDir>
+    </ProjectReference>
+    <ProjectReference Include="..\Environments\SegaGenesis\SegaGenesis.csproj">
+      <Name>SegaGenesis</Name>
+      <Project>{46d47ac5-dec2-44e6-942a-f1d9b77bb514}</Project>
+      <Private>True</Private>
+      <DoNotHarvest>True</DoNotHarvest>
+      <RefProjectOutputGroups>Binaries;Content;Satellites</RefProjectOutputGroups>
+      <RefTargetDir>INSTALLFOLDER</RefTargetDir>
+    </ProjectReference>
     <ProjectReference Include="..\Environments\SysV\SysV.csproj">
       <Name>SysV</Name>
       <Project>{5307665e-072f-4398-872d-6550be6fc1eb}</Project>
@@ -209,8 +265,8 @@
       <RefProjectOutputGroups>Binaries;Content;Satellites</RefProjectOutputGroups>
       <RefTargetDir>INSTALLFOLDER</RefTargetDir>
     </ProjectReference>
-    <ProjectReference Include="..\Environments\Win32\Win32.csproj">
-      <Name>Win32</Name>
+    <ProjectReference Include="..\Environments\Windows\Windows.csproj">
+      <Name>Windows</Name>
       <Project>{4a298321-9855-43de-aa9c-79e4efa0ae56}</Project>
       <Private>True</Private>
       <DoNotHarvest>True</DoNotHarvest>
@@ -284,6 +340,30 @@
     <ProjectReference Include="..\ImageLoaders\OdbgScript\OdbgScript.csproj">
       <Name>OdbgScript</Name>
       <Project>{2882376f-663a-4fc8-842c-b0300a6829e8}</Project>
+      <Private>True</Private>
+      <DoNotHarvest>True</DoNotHarvest>
+      <RefProjectOutputGroups>Binaries;Content;Satellites</RefProjectOutputGroups>
+      <RefTargetDir>INSTALLFOLDER</RefTargetDir>
+    </ProjectReference>
+    <ProjectReference Include="..\ImageLoaders\VmsExe\VmsExe.csproj">
+      <Name>VmsExe</Name>
+      <Project>{4059bebf-7b5c-4701-ac98-ade2515d8823}</Project>
+      <Private>True</Private>
+      <DoNotHarvest>True</DoNotHarvest>
+      <RefProjectOutputGroups>Binaries;Content;Satellites</RefProjectOutputGroups>
+      <RefTargetDir>INSTALLFOLDER</RefTargetDir>
+    </ProjectReference>
+    <ProjectReference Include="..\Libraries\Libc\Libc.csproj">
+      <Name>Libc</Name>
+      <Project>{fdaf4ca9-085c-473e-bcb5-0d2a4354a949}</Project>
+      <Private>True</Private>
+      <DoNotHarvest>True</DoNotHarvest>
+      <RefProjectOutputGroups>Binaries;Content;Satellites</RefProjectOutputGroups>
+      <RefTargetDir>INSTALLFOLDER</RefTargetDir>
+    </ProjectReference>
+    <ProjectReference Include="..\Libraries\Python\Python.csproj">
+      <Name>Python</Name>
+      <Project>{c278ca2f-7d7c-47c3-b560-7bc63e1fad96}</Project>
       <Private>True</Private>
       <DoNotHarvest>True</DoNotHarvest>
       <RefProjectOutputGroups>Binaries;Content;Satellites</RefProjectOutputGroups>

@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,33 +20,41 @@
 
 using Reko.Arch.X86;
 using Reko.Core;
+using Reko.Core.CLanguage;
 using Reko.Core.Lib;
 using Reko.Core.Serialization;
+using Reko.Core.Services;
 using Reko.Core.Types;
 using System;
+using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 
 namespace Reko.Environments.Msdos
 {
-	public class MsdosPlatform : Platform
+    /// <summary>
+    /// Platform services for the MS-DOS real-mode operating environment.
+    /// </summary>
+    [Designer("Reko.Environments.Msdos.Design.MsdosPlatformDesigner,Reko.Environments.Msdos.Design")]
+    public partial class MsdosPlatform : Platform
 	{
 		private SystemService [] realModeServices; 
 
-		public MsdosPlatform(IServiceProvider services, IProcessorArchitecture arch) : base(services, arch)
+		public MsdosPlatform(IServiceProvider services, IProcessorArchitecture arch) : base(services, arch, "ms-dos")
 		{
-			LoadRealmodeServices(arch);
 		}
 
-        public override BitSet CreateImplicitArgumentRegisters()
+        public override HashSet<RegisterStorage> CreateImplicitArgumentRegisters()
         {
-            var bitset = Architecture.CreateRegisterBitset();
-            Registers.cs.SetAliases(bitset, true);
-            Registers.ss.SetAliases(bitset, true);
-            Registers.sp.SetAliases(bitset, true);
-            Registers.esp.SetAliases(bitset, true);
-            return bitset;
+            return new HashSet<RegisterStorage>
+            {
+            Registers.cs,
+            Registers.ss,
+            Registers.sp,
+            Registers.esp,
+            };
         }
 
         public override ProcedureSerializer CreateProcedureSerializer(ISerializedTypeVisitor<DataType> typeLoader, string defaultConvention)
@@ -55,8 +63,48 @@ namespace Reko.Environments.Msdos
             return new X86ProcedureSerializer((IntelArchitecture) this.Architecture, typeLoader, defaultConvention);
         }
 
-		public override SystemService FindService(int vector, ProcessorState state)
+        public override string DetermineCallingConvention(FunctionType signature)
+        {
+            if (!signature.HasVoidReturn)
+            {
+                var reg = signature.ReturnValue.Storage as RegisterStorage;
+                if (reg != null)
+                {
+                    if (reg != Registers.al && reg != Registers.ax)
+                        return null;
+                }
+                var seq = signature.ReturnValue.Storage as SequenceStorage;
+                if (seq != null)
+                {
+                    if (seq.Head != Registers.dx || seq.Tail != Registers.ax)
+                        return null;
+                }
+            }
+            if (signature.Parameters.Any(p => !(p.Storage is StackArgumentStorage)))
+                return null;
+            if (signature.FpuStackDelta != 0 || signature.FpuStackArgumentMax >= 0)
+                return null;
+            if (signature.StackDelta == 0)
+                return "__cdecl";
+            else
+                return "__pascal";
+        }
+
+        public override void EnsureTypeLibraries(string envName)
+        {
+            base.EnsureTypeLibraries(envName);
+            LoadRealmodeServices(Architecture);
+        }
+
+        public override ImageSymbol FindMainProcedure(Program program, Address addrStart)
+        {
+            var sf = new StartupFinder(Services, program, addrStart);
+            return sf.FindMainAddress();
+        }
+
+        public override SystemService FindService(int vector, ProcessorState state)
 		{
+            EnsureTypeLibraries(PlatformIdentifier);
 			foreach (SystemService svc in realModeServices)
 			{
 				if (svc.SyscallInfo.Matches(vector, state))
@@ -64,6 +112,23 @@ namespace Reko.Environments.Msdos
 			}
 			return null;
 		}
+
+        public override int GetByteSizeFromCBasicType(CBasicType cb)
+        {
+            switch (cb)
+            {
+            case CBasicType.Char: return 1;
+            case CBasicType.Short: return 2;
+            case CBasicType.Int: return 2;
+            case CBasicType.Long: return 4;
+            case CBasicType.LongLong: return 8;
+            case CBasicType.Float: return 4;
+            case CBasicType.Double: return 8;
+            case CBasicType.LongDouble: return 8;
+            case CBasicType.Int64: return 8;
+            default: throw new NotImplementedException(string.Format("C basic type {0} not supported.", cb));
+            }
+        }
 
         /// <summary>
         /// MS-DOS has no concept of "trampolines".
@@ -91,14 +156,15 @@ namespace Reko.Environments.Msdos
             }
 
             SerializedLibrary lib;
-            using (FileStream stm = new FileStream(libPath, FileMode.Open))
+            var fsSvc = Services.RequireService<IFileSystemService>();
+            using (Stream stm = fsSvc.CreateFileStream(libPath, FileMode.Open, FileAccess.Read))
             {
                 lib = SerializedLibrary.LoadFromStream(stm);
             }
 
             realModeServices = lib.Procedures
                 .Cast<SerializedService>()
-                .Select(s => s.Build(this))
+                .Select(s => s.Build(this, Metadata))
                 .ToArray();
         }
 

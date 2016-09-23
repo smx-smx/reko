@@ -36,8 +36,10 @@
     <IsWebBootstrapper>false</IsWebBootstrapper>
     <UseApplicationTrust>false</UseApplicationTrust>
     <BootstrapperEnabled>true</BootstrapperEnabled>
-    <UseMSBuildEngine>False</UseMSBuildEngine>
+    <UseMSBuildEngine>True</UseMSBuildEngine>
     <TargetFrameworkProfile />
+    <ProductVersion>12.0.0</ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <OutputPath>bin\Debug\</OutputPath>
@@ -71,6 +73,17 @@
     <ErrorReport>prompt</ErrorReport>
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'TravisRelease|AnyCPU'">
+    <OutputPath>bin\TravisRelease\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <BaseAddress>285212672</BaseAddress>
+    <Optimize>true</Optimize>
+    <FileAlignment>4096</FileAlignment>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
   <ItemGroup>
     <Reference Include="System">
       <Name>System</Name>
@@ -94,6 +107,7 @@
     <Compile Include="Analysis\Aliases.cs">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Analysis\AliasState.cs" />
     <Compile Include="Analysis\BlockFlow.cs">
       <SubType>Code</SubType>
     </Compile>
@@ -103,6 +117,7 @@
     <Compile Include="Analysis\ConditionCodeEliminator.cs">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Analysis\ConstDivisionImplementedByMultiplication.cs" />
     <Compile Include="Analysis\CriticalInstruction.cs">
       <SubType>Code</SubType>
     </Compile>
@@ -130,8 +145,10 @@
     <Compile Include="Analysis\GrfDefinitionFinder.cs">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Analysis\IndirectCallRewriter.cs" />
     <Compile Include="Analysis\ProcedureFlow2.cs" />
     <Compile Include="Analysis\ProcedureGraph.cs" />
+    <Compile Include="Analysis\RegisterPreservation.cs" />
     <Compile Include="Analysis\TrashedRegisterFinder2.cs" />
     <Compile Include="Analysis\UsedIdentifierFinder.cs" />
     <Compile Include="Analysis\IdentifierLiveness.cs" />
@@ -190,6 +207,7 @@
     <Compile Include="Analysis\TrashedRegisterFinder.cs" />
     <Compile Include="Analysis\TrashedRegisterSummarizer.cs" />
     <Compile Include="Analysis\TrashedStorageHelper.cs" />
+    <Compile Include="Analysis\UserSignatureBuilder.cs" />
     <Compile Include="Analysis\ValueNumbering.cs">
       <SubType>Code</SubType>
     </Compile>
@@ -205,6 +223,12 @@
     <Compile Include="AssemblyInfo.cs">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Evaluation\CastCastRule.cs" />
+    <Compile Include="Evaluation\IdProcConstRule.cs" />
+    <Compile Include="Evaluation\SelfDpbRule.cs" />
+    <Compile Include="Evaluation\Shl_add_Rule.cs" />
+    <Compile Include="Evaluation\SliceSegmentedPointer_Rule.cs" />
+    <Compile Include="Loading\DccSignatureLoader.cs" />
     <Compile Include="Decompiler.cs">
       <SubType>Code</SubType>
     </Compile>
@@ -215,6 +239,7 @@
     <Compile Include="Evaluation\Add_e_c_cRule.cs" />
     <Compile Include="Evaluation\Add_mul_id_c_id_Rule.cs" />
     <Compile Include="Evaluation\ConstConstBin_Rule.cs" />
+    <Compile Include="Evaluation\ConstDivisionImplementedByMultiplication.cs" />
     <Compile Include="Evaluation\DpbConstantRule.cs" />
     <Compile Include="Evaluation\DpbDpbRule.cs" />
     <Compile Include="Evaluation\ExpressionSimplifier.cs" />
@@ -233,6 +258,7 @@
     <Compile Include="Evaluation\Substitutor.cs" />
     <Compile Include="Evaluation\SymbolicEvaluationContext.cs" />
     <Compile Include="Evaluation\SymbolicEvaluator.cs" />
+    <Compile Include="Loading\FlirtoidSignatureLoader.cs" />
     <Compile Include="Loading\ImageSignature.cs" />
     <Compile Include="Loading\NullImageLoader.cs" />
     <Compile Include="Loading\SignatureLoader.cs" />
@@ -252,22 +278,23 @@
     <Compile Include="Scanning\Dfa\State.cs" />
     <Compile Include="Scanning\Dfa\TreeNode.cs" />
     <Compile Include="Scanning\Dfa\Automaton.cs" />
+    <Compile Include="Scanning\GlobalDataWorkItem.cs" />
     <Compile Include="Scanning\HeuristicBlock.cs" />
     <Compile Include="Scanning\HeuristicDisassembler.cs" />
     <Compile Include="Scanning\HeuristicProcedure.cs" />
     <Compile Include="Scanning\HeuristicProcedureScanner.cs" />
     <Compile Include="Scanning\IdentifierReplacer.cs" />
     <Compile Include="Scanning\BlockWorkitem.cs" />
-    <Compile Include="Scanning\EntryPointWorkitem.cs" />
+    <Compile Include="Scanning\ImageSymbolWorkItem.cs" />
     <Compile Include="Scanning\PromoteBlockWorkItem.cs" />
+    <Compile Include="Scanning\RobustRewriter.cs" />
+    <Compile Include="Scanning\ShingledScanner.cs" />
+    <Compile Include="Scanning\StringFinder.cs" />
     <Compile Include="Scanning\StringSearch.cs" />
     <Compile Include="Scanning\KmpStringSearch.cs" />
     <Compile Include="Scanning\ProcedureWorkItem.cs" />
+    <Compile Include="Scanning\VarargsFormatScanner.cs" />
     <Compile Include="Scanning\VectorWorkItem.cs" />
-    <Compile Include="Structure\AbsynCodeGenerator.cs">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="Structure\Conditional.cs" />
     <Compile Include="Loading\Loader.cs" />
     <Compile Include="Scanning\EscapedAccessRewriter.cs">
       <SubType>Code</SubType>
@@ -295,49 +322,23 @@
     </Compile>
     <Compile Include="Analysis\StrengthReduction.cs" />
     <Compile Include="Structure\AbsynStatementEmitter.cs" />
-    <Compile Include="Structure\DerivedGraph.cs" />
-    <Compile Include="Structure\DerivedSequenceBuilder.cs">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="Structure\CaseFinder.cs" />
     <Compile Include="Structure\IStructureAnalysis.cs" />
-    <Compile Include="Structure\ProcedureStructure.cs" />
     <Compile Include="Structure\CompoundConditionCoalescer.cs">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="Structure\ControlFlowGraphCleaner.cs">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Structure\Interval.cs">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="Structure\IntervalBuilder.cs">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="Structure\Loop.cs">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="Structure\LoopFinder.cs">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="Structure\ProcedureStructureBuilder.cs" />
-    <Compile Include="Structure\Schwartz\LoopFinder.cs" />
-    <Compile Include="Structure\Schwartz\ProcedureStructurer.cs" />
-    <Compile Include="Structure\Schwartz\Region.cs" />
-    <Compile Include="Structure\Schwartz\RegionFactory.cs" />
-    <Compile Include="Structure\Schwartz\ReverseGraph.cs" />
-    <Compile Include="Structure\StructureAnalysis.cs">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="Structure\UnstructuredConditionalAnalysis.cs" />
+    <Compile Include="Structure\LoopFinder.cs" />
+    <Compile Include="Structure\StructureAnalysis.cs" />
+    <Compile Include="Structure\Region.cs" />
+    <Compile Include="Structure\RegionFactory.cs" />
+    <Compile Include="Structure\ReverseGraph.cs" />
     <Compile Include="Typing\ConstantPointerTraversal.cs" />
     <Compile Include="Typing\ExpressionTypeAscender.cs" />
     <Compile Include="Typing\ExpressionTypeDescender.cs" />
     <Compile Include="Typing\InductionVariableCollector.cs" />
     <Compile Include="Typing\StructureFieldMerger.cs" />
-    <Compile Include="Structure\StructureNode.cs">
-      <SubType>Code</SubType>
-    </Compile>
     <Compile Include="Typing\AddressTraitCollector.cs">
       <SubType>Code</SubType>
     </Compile>
@@ -353,7 +354,7 @@
     <Compile Include="Typing\DataTypeBuilder.cs">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Typing\DerivedPointerAnalysis.cs">
+    <Compile Include="Typing\ConstantPointerAnalysis.cs">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="Typing\EquivalenceClassBuilder.cs">
@@ -383,7 +384,6 @@
     <Compile Include="Typing\TypedExpressionRewriter.cs">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Typing\TypedMemoryExpressionRewriter.cs" />
     <Compile Include="Typing\TypeInferenceException.cs">
       <SubType>Code</SubType>
     </Compile>
@@ -446,5 +446,4 @@
     <PostBuildEvent>
     </PostBuildEvent>
   </PropertyGroup>
-  <ItemGroup />
 </Project>

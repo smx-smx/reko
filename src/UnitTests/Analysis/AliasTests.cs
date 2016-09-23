@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -41,24 +41,24 @@ namespace Reko.UnitTests.Analysis
         [SetUp]
         public void Setup()
         {
-            var arch = new IntelArchitecture(ProcessorMode.Real);
-            proc = new Procedure("foo", arch.CreateFrame());
+            var arch = new X86ArchitectureReal();
+            proc = Procedure.Create("foo", Address.Ptr32(0x100), arch.CreateFrame());
             alias = new Aliases(proc, arch);
         }
 
-        protected override void RunTest(Program prog, TextWriter writer)
+        protected override void RunTest(Program program, TextWriter writer)
         {
-            var dfa = new DataFlowAnalysis(prog, new FakeDecompilerEventListener());
+            var dfa = new DataFlowAnalysis(program, null, new FakeDecompilerEventListener());
             var eventListener = new FakeDecompilerEventListener();
-            var trf = new TrashedRegisterFinder(prog, prog.Procedures.Values, dfa.ProgramDataFlow, eventListener);
+            var trf = new TrashedRegisterFinder(program, program.Procedures.Values, dfa.ProgramDataFlow, eventListener);
             trf.Compute();
             trf.RewriteBasicBlocks();
-            RegisterLiveness rl = RegisterLiveness.Compute(prog, dfa.ProgramDataFlow, eventListener);
-            foreach (Procedure proc in prog.Procedures.Values)
+            RegisterLiveness.Compute(program, dfa.ProgramDataFlow, eventListener);
+            foreach (Procedure proc in program.Procedures.Values)
             {
-                LongAddRewriter larw = new LongAddRewriter(proc, prog.Architecture);
+                LongAddRewriter larw = new LongAddRewriter(proc, program.Architecture);
                 larw.Transform();
-                Aliases alias = new Aliases(proc, prog.Architecture, dfa.ProgramDataFlow);
+                Aliases alias = new Aliases(proc, program.Architecture, dfa.ProgramDataFlow);
                 alias.Transform();
                 alias.Write(writer);
                 proc.Write(false, writer);
@@ -113,7 +113,7 @@ namespace Reko.UnitTests.Analysis
         {
             Identifier eax = proc.Frame.EnsureRegister(Registers.eax);
             Identifier edx = proc.Frame.EnsureRegister(Registers.edx);
-            Identifier edx_eax = proc.Frame.EnsureSequence(edx, eax, PrimitiveType.Word64);
+            Identifier edx_eax = proc.Frame.EnsureSequence(edx.Storage, eax.Storage, PrimitiveType.Word64);
             Assignment ass = alias.CreateAliasInstruction(edx_eax, eax);
             Assert.AreEqual("eax = (word32) edx_eax (alias)", ass.ToString());
         }
@@ -123,7 +123,7 @@ namespace Reko.UnitTests.Analysis
         {
             Identifier eax = proc.Frame.EnsureRegister(Registers.eax);
             Identifier edx = proc.Frame.EnsureRegister(Registers.edx);
-            Identifier edx_eax = proc.Frame.EnsureSequence(edx, eax, PrimitiveType.Word64);
+            Identifier edx_eax = proc.Frame.EnsureSequence(edx.Storage, eax.Storage, PrimitiveType.Word64);
             Identifier dh = proc.Frame.EnsureRegister(Registers.dh);
             Assignment ass = alias.CreateAliasInstruction(edx_eax, dh);
             Assert.AreEqual("dh = SLICE(edx_eax, byte, 40) (alias)", ass.ToString());
@@ -134,7 +134,7 @@ namespace Reko.UnitTests.Analysis
         {
             Identifier eax = proc.Frame.EnsureRegister(Registers.eax);
             Identifier edx = proc.Frame.EnsureRegister(Registers.edx);
-            Identifier edx_eax = proc.Frame.EnsureSequence(edx, eax, PrimitiveType.Word64);
+            Identifier edx_eax = proc.Frame.EnsureSequence(edx.Storage, eax.Storage, PrimitiveType.Word64);
             Assignment ass = alias.CreateAliasInstruction(eax, edx_eax);
             Assert.AreEqual("edx_eax = SEQ(edx, eax) (alias)", ass.ToString());
 
@@ -144,24 +144,45 @@ namespace Reko.UnitTests.Analysis
         public void AliasStackArgument()
         {
             Identifier argOff = proc.Frame.EnsureStackArgument(4, PrimitiveType.Word16);
-            Identifier argSeg = proc.Frame.EnsureStackArgument(6, PrimitiveType.Word16);
             Identifier argPtr = proc.Frame.EnsureStackArgument(4, PrimitiveType.Pointer32);
             Assignment ass = alias.CreateAliasInstruction(argOff, argPtr);
-            Assert.AreEqual("ptrArg04 = DPB(ptrArg04, wArg04, 0, 16) (alias)", ass.ToString());
+            Assert.AreEqual("ptrArg04 = DPB(ptrArg04, wArg04, 0) (alias)", ass.ToString());
         }
 
         [Test]
-        [Ignore("scanning-development")]
         public void AliasFlags()
         {
-            var sExp = "@@@";
+            var sExp =
+@"Mem0:Global memory (aliases:)
+fp:fp (aliases:)
+SZ:Flags (aliases: CZ C)
+CZ:Flags (aliases: SZ C)
+C:Flags (aliases: SZ CZ)
+al:al (aliases:)
+esi:esi (aliases:)
+r63:r63 (aliases:)
+// ProcedureBuilder
+// Return size: 0
+void ProcedureBuilder()
+ProcedureBuilder_entry:
+	// succ:  l1
+l1:
+	SZ = cond(esi & esi)
+	C = false
+	CZ = C
+	al = Test(ULE,CZ)
+	return
+	// succ:  ProcedureBuilder_exit
+ProcedureBuilder_exit:
+
+";
             RunStringTest(sExp, m =>
             {
-                var scz = m.Frame.EnsureFlagGroup(7, "SZ", PrimitiveType.Byte);
-                var cz = m.Frame.EnsureFlagGroup(3, "CZ", PrimitiveType.Byte);
-                var c = m.Frame.EnsureFlagGroup(1, "C", PrimitiveType.Bool);
-                var al = m.Reg8("al");
-                var esi = m.Reg32("esi");
+                var scz = m.Frame.EnsureFlagGroup(Registers.eflags, 7, "SZ", PrimitiveType.Byte);
+                var cz = m.Frame.EnsureFlagGroup(Registers.eflags, 3, "CZ", PrimitiveType.Byte);
+                var c = m.Frame.EnsureFlagGroup(Registers.eflags, 1, "C", PrimitiveType.Bool);
+                var al = m.Reg8("al", 0);
+                var esi = m.Reg32("esi", 6);
                 m.Assign(scz, m.Cond(m.And(esi, esi)));
                 m.Assign(c, Constant.False());
                 m.Emit(new AliasAssignment(cz, c));

@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -41,7 +41,6 @@ namespace Reko.UnitTests.Core
 			Procedure p3 = new Procedure("p3000", null);
 			Procedure p4 = new Procedure("p4000", null);
 
-            var pc1 = new ProcedureConstant(PrimitiveType.Pointer32, p1);
             var pc2 = new ProcedureConstant(PrimitiveType.Pointer32, p2);
             var pc3 = new ProcedureConstant(PrimitiveType.Pointer32, p3);
             var pc4 = new ProcedureConstant(PrimitiveType.Pointer32, p4);

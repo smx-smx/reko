@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,8 +19,10 @@
 #endregion
 
 using Reko.Core;
+using Reko.Core.Output;
 using System;
 using System.IO;
+using System.Threading;
 using System.Web;
 using System.Web.UI.WebControls;
 
@@ -66,7 +68,6 @@ namespace Reko.WebSite
 			}
 		}
 
-
 		public TextWriter DecompiledCodeWriter
 		{
 			get { return writer; }
@@ -87,15 +88,14 @@ namespace Reko.WebSite
 			get { return writer; }
 		}
 
-
 		public void WriteDiagnostic(Diagnostic d, string format, params object[] args)
 		{
 			writer.Write("{0}: ", d);
 			writer.Write(format, args);
-			writer.WriteLine("<br>");
+			writer.WriteLine("<br />");
 		}
 
-        public void WriteDisassembly(Program program, Action<TextWriter> writer)
+        public void WriteDisassembly(Program program, Action<Formatter> writer)
         {
             throw new NotImplementedException();
         }

@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -128,7 +128,7 @@ namespace Reko.UnitTests.Analysis
 		[Test]
 		public void TestDbp()
 		{
-			Assert.IsFalse(ci.IsCritical(new DepositBits(Id32("eax"), Id16("ax"), 0, 16)));
+			Assert.IsFalse(ci.IsCritical(new DepositBits(Id32("eax"), Id16("ax"), 0)));
 		}
 
         private Identifier Id16(string name)

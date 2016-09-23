@@ -1,6 +1,6 @@
  #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,15 +37,15 @@ namespace Reko.Analysis
 {
 	/// <summary>
 	/// Uses an interprocedural reaching definition analysis to detect which 
-	/// registers are modified by the procedures, which registers are constant at block
-    /// exits, and which registers have their values preserved.
+	/// registers are modified by the procedures, which registers are constant
+    /// at block exits, and which registers have their values preserved.
     /// <para>
     /// The results of the analysis are stored in the ProgramDataFlow.</para>
 	/// </summary>
     //$TODO: bugger. Can use a queue here, but must use depth-first search.
     public class TrashedRegisterFinder : InstructionVisitor<Instruction>
     {
-        private Program prog;
+        private Program program;
         private IEnumerable<Procedure> procedures;
         private ProgramDataFlow flow;
         private BlockFlow bf;
@@ -57,12 +57,12 @@ namespace Reko.Analysis
         private ExpressionValueComparer ecomp;
 
         public TrashedRegisterFinder(
-            Program prog,
+            Program program,
             IEnumerable<Procedure> procedures,
             ProgramDataFlow flow,
             DecompilerEventListener eventListener)
         {
-            this.prog = prog;
+            this.program = program;
             this.procedures = procedures;
             this.flow = flow;
             this.eventListener = eventListener ?? NullDecompilerEventListener.Instance;
@@ -79,10 +79,12 @@ namespace Reko.Analysis
         {
             foreach (Procedure proc in procedures)
             {
+                if (eventListener.IsCanceled())
+                    break;
                 var pf = flow[proc];
-                foreach (int r in pf.TrashedRegisters)
+                foreach (var reg in pf.TrashedRegisters.ToList())
                 {
-                    prog.Architecture.GetRegister(r).SetAliases(pf.TrashedRegisters, true);
+                    pf.TrashedRegisters.UnionWith(program.Architecture.GetAliases(reg));
                 }
             }
         }
@@ -101,6 +103,8 @@ namespace Reko.Analysis
             var e = eventListener;
             while (worklist.GetWorkItem(out block))
             {
+                if (e.IsCanceled())
+                    break;
                 eventListener.ShowStatus(string.Format("Blocks left: {0}", worklist.Count));
                 ProcessBlock(block);
             }
@@ -120,18 +124,34 @@ namespace Reko.Analysis
             foreach (var proc in procedures)
             {
                 SetInitialValueOfStackPointer(proc);
-                foreach (var block in new DfsIterator<Block>(proc.ControlGraph).PreOrder())
+                var blocks = new DfsIterator<Block>(proc.ControlGraph).PreOrder().ToList();
+                foreach (var block in blocks)
                 {
                     RewriteBlock(block);
                 }
             }
         }
 
+        /// <summary>
+        /// Sets the initial value of the processor's stack pointer register to 
+        /// the virtual register 'fp':
+        ///     sp = fp
+        /// The intent of this is to propagate fp into all expressions using sp,
+        /// so that, for instance, the x86 sequence
+        ///     push ebp
+        ///     mov ebp,esp
+        ///     mov eax,[ebp+8]
+        /// can be translated to
+        ///     esp = fp
+        ///     Mem[fp - 4] = esp ; original sp
+        ///     ebp = fp - 4
+        ///     eax = Mem[fp + 4]
+        /// </summary>
+        /// <param name="proc"></param>
         private void SetInitialValueOfStackPointer(Procedure proc)
         {
-            Debug.Print("SetInitialValueSP: {0}", proc.Name);
             flow[proc.EntryBlock].SymbolicIn.SetValue(
-                proc.Frame.EnsureRegister(prog.Architecture.StackRegister),
+                proc.Frame.EnsureRegister(program.Architecture.StackRegister),
                 proc.Frame.FramePointer);
         }
 
@@ -154,15 +174,20 @@ namespace Reko.Analysis
         {
             visited.Add(block);
             StartProcessingBlock(block);
-            try
+            foreach (var stm in block.Statements)
             {
-                block.Statements.ForEach(stm => stm.Instruction.Accept(this));
-            } catch (Exception ex)
-            {
-                eventListener.Error(
-                    eventListener.CreateBlockNavigator(block),
-                    ex,
-                    "Error while analyzing trashed registers.");
+                try
+                {
+                    stm.Instruction.Accept(this);
+
+                }
+                catch (Exception ex)
+                {
+                    eventListener.Error(
+                        eventListener.CreateStatementNavigator(program, stm),
+                        ex,
+                        "Error while analyzing trashed registers.");
+                }
             }
             if (block == block.Procedure.ExitBlock)
             {
@@ -177,9 +202,7 @@ namespace Reko.Analysis
         public void RewriteBlock(Block block)
         {
             StartProcessingBlock(block);
-            if (block.Procedure.Name.EndsWith("2BE4")) //$DEBUG
-                block.ToString();
-            var propagator = new ExpressionPropagator(prog.Architecture, se.Simplifier, ctx, flow);
+            var propagator = new ExpressionPropagator(program.Architecture, se.Simplifier, ctx, flow);
             foreach (Statement stm in block.Statements)
             {
                 try
@@ -199,11 +222,12 @@ namespace Reko.Analysis
                 }
                 catch (Exception ex)
                 {
-                    var location = eventListener.CreateBlockNavigator(block);
+                    var location = eventListener.CreateStatementNavigator(program, stm);
                     eventListener.Error(
                         location,
                         ex,
-                        string.Format("An error occurred while rewriting at linear address {0:X}.", stm.LinearAddress));
+                        "An error occurred while processing instruction at address {0:X}.",
+                            program.SegmentMap.MapLinearAddressToAddress(stm.LinearAddress));
                 }
             }
         }
@@ -214,7 +238,7 @@ namespace Reko.Analysis
             EnsureEvaluationContext(bf);
             if (block.Procedure.EntryBlock == block)
             {
-                var sp = block.Procedure.Frame.EnsureRegister(prog.Architecture.StackRegister);
+                var sp = block.Procedure.Frame.EnsureRegister(program.Architecture.StackRegister);
                 bf.SymbolicIn.RegisterState[sp.Storage] = block.Procedure.Frame.FramePointer;
             }
             ctx.TrashedFlags = bf.grfTrashedIn;
@@ -229,11 +253,11 @@ namespace Reko.Analysis
 
         public void PropagateToProcedureSummary(Procedure proc)
         {
-            var prop = new TrashedRegisterSummarizer(prog.Architecture, proc, flow[proc], ctx);
+            var prop = new TrashedRegisterSummarizer(program.Architecture, proc, flow[proc], ctx);
             bool changed = prop.PropagateToProcedureSummary();
             if (changed)
             {
-                foreach (Statement stm in prog.CallGraph.CallerStatements(proc))
+                foreach (Statement stm in program.CallGraph.CallerStatements(proc))
                 {
                     if (visited.Contains(stm.Block))
                         worklist.Add(stm.Block);
@@ -295,7 +319,7 @@ namespace Reko.Analysis
         }
 
         [Conditional("DEBUG")]
-        private void Dump(Map<int, Expression> map)
+        private void Dump(SortedList<int, Expression> map)
         {
             var sort = new SortedList<string, string>();
             foreach (var de in map)
@@ -444,6 +468,5 @@ namespace Reko.Analysis
                 return e;
             }
         }
-
     }
 }

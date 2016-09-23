@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -39,9 +39,9 @@ namespace Reko.UnitTests.Loading
         private IServiceContainer sc;
         private FakeDecompilerEventListener eventListener;
         private IConfigurationService cfgSvc;
-        private List<SignatureFileElement> signatureFiles;
+        private List<SignatureFile> signatureFiles;
         private IProcessorArchitecture x86arch;
-        private Platform msdosPlatform;
+        private IPlatform msdosPlatform;
         private byte[] testImage;
 
         [SetUp]
@@ -51,7 +51,7 @@ namespace Reko.UnitTests.Loading
             sc = new ServiceContainer();
             eventListener = new FakeDecompilerEventListener();
             cfgSvc = mr.Stub<IConfigurationService>();
-            signatureFiles = new List<SignatureFileElement>();
+            signatureFiles = new List<SignatureFile>();
             sc.AddService<DecompilerEventListener>(eventListener);
             sc.AddService<IConfigurationService>(cfgSvc);
             cfgSvc.Stub(d => d.GetSignatureFiles()).Return(signatureFiles);
@@ -71,7 +71,7 @@ namespace Reko.UnitTests.Loading
         [Test(Description="Unless otherwise specified, fail loading unknown file formats.")]
         public void Ldr_UnknownImageType()
         {
-            cfgSvc.Stub(d => d.GetImageLoaders()).Return(new ArrayList());
+            cfgSvc.Stub(d => d.GetImageLoaders()).Return(new List<LoaderConfiguration>());
             cfgSvc.Stub(d => d.GetRawFile(null)).IgnoreArguments().Return(null);
             var testImage = new byte[] { 42, 42, 42, 42, };
             mr.ReplayAll();
@@ -81,7 +81,7 @@ namespace Reko.UnitTests.Loading
             Program prog = ldr.LoadExecutable("", testImage, null);
 
             Assert.AreEqual("WarningDiagnostic -  - The format of the file is unknown." , eventListener.LastDiagnostic);
-            Assert.AreEqual(0, prog.Image.BaseAddress.Offset);
+            Assert.AreEqual(0, prog.ImageMap.BaseAddress.Offset);
             Assert.IsNull(prog.Architecture);
             Assert.IsAssignableFrom<DefaultPlatform>(prog.Platform);
             mr.VerifyAll();
@@ -91,7 +91,7 @@ namespace Reko.UnitTests.Loading
         public void Ldr_UnknownImageType_DefaultSpecified()
         {
             Given_MsDosRawFileFormat();
-            cfgSvc.Stub(d => d.GetImageLoaders()).Return(new ArrayList());
+            cfgSvc.Stub(d => d.GetImageLoaders()).Return(new List<LoaderConfiguration>());
 
             var testImage = new byte[] { 42, 42, 42, 42, };
             mr.ReplayAll();
@@ -102,7 +102,7 @@ namespace Reko.UnitTests.Loading
             Program prog = ldr.LoadExecutable("", testImage, null);
 
             Assert.IsNull(eventListener.LastDiagnostic);
-            Assert.AreEqual("0C00:0100", prog.Image.BaseAddress.ToString());
+            Assert.AreEqual("0C00:0100", prog.ImageMap.BaseAddress.ToString());
             Assert.AreSame(x86arch, prog.Architecture);
             Assert.AreSame(msdosPlatform, prog.Platform);
             mr.VerifyAll();
@@ -112,7 +112,7 @@ namespace Reko.UnitTests.Loading
         {
             this.x86arch = mr.Stub<IProcessorArchitecture>();
             var env = mr.Stub<OperatingEnvironment>();
-            this.msdosPlatform = mr.Stub<Platform>(sc, x86arch);
+            this.msdosPlatform = mr.Stub<IPlatform>();
             var state = mr.Stub<ProcessorState>();
             var rawFile = new RawFileElementImpl
             {
@@ -136,7 +136,7 @@ namespace Reko.UnitTests.Loading
         [Test]
         public void Ldr_AtOffset()
         {
-            cfgSvc.Stub(d => d.GetImageLoaders()).Return(new ArrayList
+            cfgSvc.Stub(d => d.GetImageLoaders()).Return(new List<LoaderConfiguration>
             {
                 new LoaderElementImpl {
                     Offset = "0002",
@@ -179,13 +179,13 @@ namespace Reko.UnitTests.Loading
 
             public override RelocationResults Relocate(Program program, Address addrLoad)
             {
-                return new RelocationResults(new List<EntryPoint>(), new RelocationDictionary());
+                return new RelocationResults(new List<ImageSymbol>(), new SortedList<Address, ImageSymbol>());
             }
         }
 
         private void Given_ImageLoader()
         {
-            var ldrs = new List<LoaderElement>{
+            var ldrs = new List<LoaderConfiguration>{
                 new LoaderElementImpl {
                     MagicNumber = "2A2A",
                     TypeName = typeof(FakeImageLoader).AssemblyQualifiedName,

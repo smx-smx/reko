@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -32,7 +32,6 @@ namespace Reko.UnitTests.Scanning
     [TestFixture]
     public class HeuristicProcedureScannerTests : HeuristicTestBase
     {
-        private HeuristicProcedureScanner subject;
         private HeuristicProcedure proc;
 
         [SetUp]
@@ -59,10 +58,10 @@ namespace Reko.UnitTests.Scanning
 
         private void When_DisassembleProcedure()
         {
-            var hsc = new HeuristicScanner(prog, host);
+            var hsc = new HeuristicScanner(program, host, eventListener);
             this.proc = hsc.DisassembleProcedure(
-                prog.Image.BaseAddress,
-                prog.Image.BaseAddress + prog.Image.Length);
+                program.ImageMap.BaseAddress,
+                program.ImageMap.BaseAddress + program.SegmentMap.GetExtent());
         }
 
         [Test]
@@ -121,7 +120,7 @@ namespace Reko.UnitTests.Scanning
             mr.ReplayAll();
 
             When_DisassembleProcedure();
-            var hps = new HeuristicProcedureScanner(prog, proc);
+            var hps = new HeuristicProcedureScanner(program, proc, host);
             hps.BlockConflictResolution();
 
             var sExp =
@@ -159,12 +158,12 @@ l00010009:  // pred: l00010008
             mr.ReplayAll();
 
             When_DisassembleProcedure();
-            var hps = new HeuristicProcedureScanner(prog, proc);
+            var hps = new HeuristicProcedureScanner(program, proc, host);
             hps.BlockConflictResolution();
 
             var sExp =
             #region Expected
-@"l00010000:  // pred:
+ @"l00010000:  // pred:
     push ebp
 l00010001:  // pred: l00010000
     mov ebp,esp
@@ -186,6 +185,8 @@ l0001001B:  // pred: l00010019
     pop ebp
 l0001001C:  // pred: l0001001B
     ret 
+l0001001D:  // pred:
+    nop 
 ";
 #endregion
             AssertBlocks(sExp, proc.Cfg);

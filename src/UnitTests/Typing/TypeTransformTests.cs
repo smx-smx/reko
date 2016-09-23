@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -45,7 +45,6 @@ namespace Reko.UnitTests.Typing
             store = new TypeStore();
         }
 
-
         protected override void RunTest(Program program, string outputFileName)
         {
             ExpressionNormalizer aen = new ExpressionNormalizer(program.Architecture.PointerType);
@@ -53,23 +52,36 @@ namespace Reko.UnitTests.Typing
             EquivalenceClassBuilder eq = new EquivalenceClassBuilder(factory, store);
             eq.Build(program);
 #if OLD
-            			DataTypeBuilder dtb = new DataTypeBuilder(factory, store, program.Architecture);
+			DataTypeBuilder dtb = new DataTypeBuilder(factory, store, program.Architecture);
 			TraitCollector coll = new TraitCollector(factory, store, dtb, program);
 			coll.CollectProgramTraits(program);
-			dtb.BuildEquivalenceClassDataTypes();
+			sktore.BuildEquivalenceClassDataTypes(factory);
 #else
-            TypeCollector coll = new TypeCollector(factory, store, program);
+            TypeCollector coll = new TypeCollector(factory, store, program, new FakeDecompilerEventListener());
             coll.CollectTypes();
+
             store.BuildEquivalenceClassDataTypes(factory);
 #endif
 
             TypeVariableReplacer tvr = new TypeVariableReplacer(store);
             tvr.ReplaceTypeVariables();
 
-            TypeTransformer trans = new TypeTransformer(factory, store, program);
-            trans.Transform();
+            Exception theEx = null;
+            try
+            {
+                TypeTransformer trans = new TypeTransformer(factory, store, program);
+                trans.Transform();
+            } catch (Exception ex)
+            {
+                theEx = ex;
+            }
             using (FileUnitTester fut = new FileUnitTester(outputFileName))
             {
+                if (theEx != null)
+                {
+                    fut.TextWriter.WriteLine(theEx.Message);
+                    fut.TextWriter.WriteLine(theEx.StackTrace);
+                }
                 foreach (Procedure proc in program.Procedures.Values)
                 {
                     proc.Write(false, fut.TextWriter);
@@ -211,18 +223,18 @@ namespace Reko.UnitTests.Typing
         [Test]
         public void TtranUnion()
         {
-            UnionType t = factory.CreateUnionType("foo", null);
-            t.Alternatives.Add(new UnionAlternative(PrimitiveType.Word32));
-            t.Alternatives.Add(new UnionAlternative(PrimitiveType.Word32));
-            t.Alternatives.Add(new UnionAlternative(PrimitiveType.Word32));
-            t.Alternatives.Add(new UnionAlternative(PrimitiveType.Word32));
+            UnionType ut = factory.CreateUnionType("foo", null);
+            ut.AddAlternative(PrimitiveType.Word32);
+            ut.AddAlternative(PrimitiveType.Word32);
+            ut.AddAlternative(PrimitiveType.Word32);
+            ut.AddAlternative(PrimitiveType.Word32);
             TypeTransformer trans = new TypeTransformer(factory, null, null);
-            PrimitiveType dt = (PrimitiveType) t.Accept(trans);
+            PrimitiveType dt = (PrimitiveType) ut.Accept(trans);
             Assert.AreEqual("word32", dt.ToString());
 
-            t.Alternatives.Add(PrimitiveType.Real32);
-            t.Alternatives.Add(PrimitiveType.Int32);
-            DataType d = t.Accept(trans);
+            ut.AddAlternative(PrimitiveType.Real32);
+            ut.AddAlternative(PrimitiveType.Int32);
+            DataType d = ut.Accept(trans);
             Assert.AreEqual("(union \"foo\" (int32 u0) (real32 u1))", d.ToString());
         }
 
@@ -361,6 +373,77 @@ namespace Reko.UnitTests.Typing
                     m.SegMemW(
                         ds,
                         m.IAdd(m.IMul(bx, 2), m.Word16(0x5388))));
+            });
+            RunTest(pb.BuildProgram());
+        }
+
+        [Test]
+        public void TtranMemStore()
+        {
+            RunTest(Fragments.MemStore, "Typing/TtranMemStore.txt");
+        }
+
+        [Test]
+        public void TtranUserStruct()
+        {
+            var t1 = new StructureType("T1", 4, true);
+            var t2 = new StructureType("T2", 0, true)
+            {
+                Fields = { { 0, t1 } }
+            };
+            var ttran = new TypeTransformer(factory, store, null);
+            var dt = t2.Accept(ttran);
+            Assert.AreSame(t2, dt, "Should not affect user-defined types");
+        }
+
+        [Test]
+        public void TtranNonUserStruct()
+        {
+            var t1 = new StructureType("T1", 4, true);
+            var t2 = new StructureType("T2", 0, false)
+            {
+                Fields = { { 0, t1 } }
+            };
+            var ttran = new TypeTransformer(factory, store, null);
+            var dt = t2.Accept(ttran);
+            Assert.AreSame(t1, dt, "Should reduce fields at offset 0 ");
+        }
+
+        [Test]
+        public void TtranAddressOf()
+        {
+            var pb = new ProgramBuilder();
+            pb.Add("AddressOf", m =>
+            {
+                var foo = new Identifier("foo", new UnknownType(), new MemoryStorage());
+                var r1 = m.Reg32("r1", 1);
+                m.Declare(r1, m.AddrOf(foo));
+                m.Store(r1, m.Word16(0x1234));
+                m.Store(m.IAdd(r1, 4), m.Byte(0x0A));
+                m.Return();
+            });
+            RunTest(pb.BuildProgram());
+        }
+
+        [Test]
+        public void TtranTypedAddressOf()
+        {
+            var pb = new ProgramBuilder();
+            pb.Add("TypedAddressOf", m =>
+            {
+                var str = new TypeReference("foo", new StructureType("foo", 0)
+                {
+                    Fields = {
+                        { 0, PrimitiveType.Int16, "word00" },
+                        { 4, PrimitiveType.Byte, "byte004"}
+                    }
+                });
+                var foo = new Identifier("foo", str, new MemoryStorage());
+                var r1 = m.Reg32("r1", 1);
+                m.Declare(r1, m.AddrOf(foo));
+                m.Store(r1, m.Word16(0x1234));
+                m.Store(m.IAdd(r1, 4), m.Byte(0x0A));
+                m.Return();
             });
             RunTest(pb.BuildProgram());
         }

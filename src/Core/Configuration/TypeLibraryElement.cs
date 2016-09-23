@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,22 +31,20 @@ namespace Reko.Core.Configuration
         string Name { get; }
 
         string Architecture { get; set; }
+
+        string Module { get; set; }
+
+        string Loader { get; set; }
     }
 
-    public class TypeLibraryElement : ConfigurationElement, ITypeLibraryElement
+    public class TypeLibraryElement : ITypeLibraryElement
     {
-        [ConfigurationProperty("name", IsRequired = true)]
-        public string Name
-        {
-            get { return (string) this["name"]; }
-            set { this["name"] = value; }
-        }
+        public string Name { get; set; }
 
-        [ConfigurationProperty("arch", IsRequired=false)]
-        public string Architecture
-        {
-            get { return (string) this["arch"]; }
-            set { this["arch"] = value; }
-        }
+        public string Architecture { get; set; }
+
+        public string Module { get; set; }
+
+        public string Loader { get; set; }
     }
 }

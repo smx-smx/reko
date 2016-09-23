@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,11 +37,11 @@ namespace Reko.Arch.M68k
         {
         }
 
-        public override ProcedureSignature Deserialize(SerializedSignature ss, Frame frame)
+        public override FunctionType Deserialize(SerializedSignature ss, Frame frame)
         {
             if (ss == null)
                 return null;
-            var argser = new ArgumentSerializer(this, Architecture, frame, ss.Convention);
+            var argser = new ArgumentDeserializer(this, Architecture, frame, 4, 2);
             Identifier ret = null;
 
             if (ss.ReturnValue != null)
@@ -60,12 +60,17 @@ namespace Reko.Arch.M68k
                 }
             }
 
-            var sig = new ProcedureSignature(ret, args.ToArray());
+            var sig = new FunctionType(ret, args.ToArray());
             return sig;
         }
 
         public override Storage GetReturnRegister(Argument_v1 sArg, int bitSize)
         {
+            if (sArg.Kind == null)
+                throw new NotImplementedException();
+            var reg = sArg.Kind as Register_v1;
+            if (reg != null)
+                return Architecture.GetRegister(reg.Name);
             throw new NotImplementedException();
         }
     }

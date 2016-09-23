@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,22 +21,24 @@
 using Reko.Core.Expressions;
 using Reko.Core.Machine;
 using Reko.Core.Serialization;
+using Reko.Core.Types;
 using System;
 using System.ComponentModel;
 
 namespace Reko.Core
 {
     /// <summary>
-    /// Models a system service. The syscallinfo member indicates how the system service
-    /// is selected (typically by loading specific values in processor registers).
+    /// Models a system service. The syscallinfo member indicates how the
+    /// system service is selected (typically by loading specific values in
+    /// processor registers).
     /// </summary>
-    
     [Designer("Reko.Gui.Design.SystemServiceDesigner,Reko.Gui")]
 	public class SystemService
 	{
+        public string ModuleName;
 		public string Name;
 		public SyscallInfo SyscallInfo;
-		public ProcedureSignature Signature;
+		public FunctionType Signature;
 		public ProcedureCharacteristics Characteristics;
 
 		public ExternalProcedure CreateExternalProcedure(IProcessorArchitecture arch)

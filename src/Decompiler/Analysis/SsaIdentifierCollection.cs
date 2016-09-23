@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -75,7 +75,12 @@ namespace Reko.Analysis
         {
             return GetEnumerator();
         }
-        
+
+        public void Remove(SsaIdentifier sid)
+        {
+            sids.Remove(sid.Identifier);
+        }
+
         public bool TryGetValue(Identifier id, out SsaIdentifier sid)
         {
             return sids.TryGetValue(id, out sid);

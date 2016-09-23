@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,14 +37,15 @@ namespace Reko.Assemblers.M68k
         private M68kArchitecture arch;
         private Address addrBase;
         private IEmitter emitter;
-        private List<EntryPoint> entryPoints;
+        private List<ImageSymbol> entryPoints;
         private Lexer lexer;
         private M68kAssembler asm ;
         private PrimitiveType dataWidth;
 
         public M68kTextAssembler()
         {
-            this.entryPoints = new List<EntryPoint>();
+            this.entryPoints = new List<ImageSymbol>();
+            this.ImageSymbols = new List<ImageSymbol>();
             this.LineNumber = 1;
         }
 
@@ -551,12 +552,12 @@ namespace Reko.Assemblers.M68k
             return Assemble(baseAddress, rdr);
         }
 
-        public LoadedImage GetImage()
+        public MemoryArea GetImage()
         {
-            return new LoadedImage(addrBase, emitter.GetBytes());
+            return new MemoryArea(addrBase, emitter.GetBytes());
         }
 
-        public LoadedImage Image
+        public MemoryArea Image
         {
             get { return GetImage(); }
         }
@@ -566,17 +567,19 @@ namespace Reko.Assemblers.M68k
             get { throw new NotImplementedException(); }
         }
 
-        public ICollection<EntryPoint> EntryPoints
+        public ICollection<ImageSymbol> EntryPoints
         {
             get { return entryPoints; }
         }
 
         public IProcessorArchitecture Architecture { get { return arch; } }
 
-        public Platform Platform
+        public IPlatform Platform
         {
             get { throw new NotImplementedException(); }
         }
+
+        public ICollection<ImageSymbol> ImageSymbols { get; private set; }
 
         public Dictionary<Address, ImportReference> ImportReferences
         {

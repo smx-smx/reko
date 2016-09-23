@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,6 +29,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Diagnostics;
+using Reko.Core.Serialization;
 
 namespace Reko.UnitTests.Arch
 {
@@ -45,9 +46,21 @@ namespace Reko.UnitTests.Arch
 
         private class RewriterHost : IRewriterHost
         {
+            private IProcessorArchitecture arch;
+
+            public RewriterHost(IProcessorArchitecture arch)
+            {
+                this.arch = arch;
+            }
+
             public PseudoProcedure EnsurePseudoProcedure(string name, DataType returnType, int arity)
             {
                 return new PseudoProcedure(name, returnType, arity);
+            }
+
+            public Identifier GetImportedGlobal(Address addrThunk, Address addrInstr)
+            {
+                return null;
             }
 
             public ExternalProcedure GetImportedProcedure(Address addrThunk, Address addrInstr)
@@ -57,14 +70,41 @@ namespace Reko.UnitTests.Arch
 
             public Expression PseudoProcedure(string name, DataType returnType, params Expression[] args)
             {
-                throw new NotImplementedException();
+                var ppp = EnsurePseudoProcedure(name, returnType, args.Length);
+                if (args.Length != ppp.Arity)
+                    throw new ArgumentOutOfRangeException(
+                        string.Format("Pseudoprocedure {0} expected {1} arguments, but was passed {2}.",
+                        ppp.Name,
+                        ppp.Arity,
+                        args.Length));
+
+                return new Application(
+                    new ProcedureConstant(arch.PointerType, ppp),
+                    returnType,
+                    args);
+            }
+
+            public Expression PseudoProcedure(string name, ProcedureCharacteristics c, DataType returnType, params Expression[] args)
+            {
+                var ppp = EnsurePseudoProcedure(name, returnType, args.Length);
+                ppp.Characteristics = c;
+                if (args.Length != ppp.Arity)
+                    throw new ArgumentOutOfRangeException(
+                        string.Format("Pseudoprocedure {0} expected {1} arguments, but was passed {2}.",
+                        ppp.Name,
+                        ppp.Arity,
+                        args.Length));
+
+                return new Application(
+                    new ProcedureConstant(arch.PointerType, ppp),
+                    returnType,
+                    args);
             }
 
             public ExternalProcedure GetInterceptedCall(Address addrImportThunk)
             {
                 throw new NotImplementedException();
             }
-
 
             public void Error(Address address, string message)
             {
@@ -74,7 +114,7 @@ namespace Reko.UnitTests.Arch
 
         protected virtual IRewriterHost CreateRewriterHost()
         {
-            return new RewriterHost();
+            return new RewriterHost(Architecture);
         }
 
         protected void AssertCode(params string[] expected)
@@ -85,7 +125,7 @@ namespace Reko.UnitTests.Arch
             var rewriter = GetInstructionStream(frame, host).GetEnumerator();
             while (i < expected.Length && rewriter.MoveNext())
             {
-                Assert.AreEqual(expected[i], string.Format("{0}|{1}", i, rewriter.Current));
+                Assert.AreEqual(expected[i], string.Format("{0}|{1}|{2}", i, RtlInstruction.FormatClass(rewriter.Current.Class),  rewriter.Current));
                 ++i;
                 var ee = rewriter.Current.Instructions.GetEnumerator();
                 while (i < expected.Length && ee.MoveNext())

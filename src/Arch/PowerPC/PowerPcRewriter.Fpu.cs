@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -33,7 +33,7 @@ namespace Reko.Arch.PowerPC
         {
             if (!instr.setsCR0)
                 return;
-            var cr1 = frame.EnsureFlagGroup(0x2, "cr1", PrimitiveType.Byte);
+            var cr1 = frame.EnsureFlagGroup(arch.cr, 0x2, "cr1", PrimitiveType.Byte);
             emitter.Assign(cr1, emitter.Cond(e));
         }
 
@@ -152,7 +152,7 @@ namespace Reko.Arch.PowerPC
             var op1 = RewriteOperand(instr.op1);
             var op2 = RewriteOperand(instr.op2);
             emitter.SideEffect(
-                PseudoProc("__mtfsf",
+                host.PseudoProcedure("__mtfsf",
                     VoidType.Instance,
                     op2,
                     op1));

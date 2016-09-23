@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -38,7 +38,7 @@ namespace Reko.UnitTests.Arch.M68k
         private IEnumerator<M68kInstruction> CreateDasm(byte[] bytes, uint address)
         {
             Address addr = Address.Ptr32(address);
-            LoadedImage img = new LoadedImage(addr, bytes);
+            MemoryArea img = new MemoryArea(addr, bytes);
             return M68kDisassembler.Create68020(img.CreateBeReader(addr)).GetEnumerator();
         }
 
@@ -66,7 +66,7 @@ namespace Reko.UnitTests.Arch.M68k
 
         private IEnumerator<M68kInstruction> CreateDasm(params ushort[] words)
         {
-            byte[] bytes = words.SelectMany(w => new byte[] { (byte) (w >> 8), (byte) w }).ToArray();
+            byte[] bytes = words.SelectMany(w => new byte[] { (byte)(w >> 8), (byte)w }).ToArray();
             return CreateDasm(bytes, 0x10000000);
         }
 
@@ -114,43 +114,43 @@ namespace Reko.UnitTests.Arch.M68k
         }
 
         [Test]
-        public void Lea()
+        public void M68kdis_Lea()
         {
-            RunTest ("lea\t$0004(a7),a1", 0x43EF, 0x0004);
+            RunTest("lea\t$0004(a7),a1", 0x43EF, 0x0004);
         }
 
         [Test]
-        public void LslD()
+        public void M68kdis_LslD()
         {
             RunTest("lsl.w\t#$02,d1", 0xE549, 0x0004);
         }
 
         [Test]
-        public void AddaW()
+        public void M68kdis_AddaW()
         {
             RunTest("adda.w\td1,a1", 0xD2C1, 0x0004);
         }
 
         [Test]
-        public void Addal()
+        public void M68kdis_Addal()
         {
             RunTest("adda.l\t(a4)+,a5", 0xDBDC);
         }
 
         [Test]
-        public void MoveA()
+        public void M68kdis_MoveA()
         {
             RunTest("movea.l\t(a1),a0", 0x2051, 0x0004);
         }
 
         [Test]
-        public void MoveM()
+        public void M68kdis_MoveM()
         {
             RunTest("movem.l\ta5,-(a7)", 0x48E7, 0x0004);
         }
 
         [Test]
-        public void BraB()
+        public void M68kdis_BraB()
         {
             RunTest("bra\t$1000001C", 0x601A);
         }
@@ -162,19 +162,19 @@ namespace Reko.UnitTests.Arch.M68k
         }
 
         [Test]
-        public void Dbra()
+        public void M68kdis_Dbra()
         {
             RunTest("dbra\td2,$0FFFFFE6", 0x51CA, 0xFFE4);
         }
 
         [Test]
-        public void Moveb()
+        public void M68kdis_Moveb()
         {
             RunTest("move.b\t(a2)+,d2", 0x141A);
         }
 
         [Test]
-        public void ManyMoves()
+        public void M68kdis_ManyMoves()
         {
             dasm = CreateDasm(new byte[] { 0x20, 0x00, 0x20, 0x27, 0x20, 0x40, 0x20, 0x67, 0x20, 0x80, 0x21, 0x40, 0x00, 0x00 }, 0x10000000);
             Assert.AreEqual("move.l\td0,d0", Disassemble().ToString());
@@ -186,13 +186,13 @@ namespace Reko.UnitTests.Arch.M68k
         }
 
         [Test]
-        public void AddB()
+        public void M68kdis_AddB()
         {
             RunTest("add.b\td2,d1", 0xD202);
         }
 
         [Test]
-        public void Eor()
+        public void M68kdis_Eor()
         {
             dasm = CreateDasm(0xB103, 0xB143, 0xB183);
             Assert.AreEqual("eor.b\td0,d3", Disassemble().ToString());
@@ -201,14 +201,14 @@ namespace Reko.UnitTests.Arch.M68k
         }
 
         [Test]
-        public void Bcs()
+        public void M68kdis_Bcs()
         {
             dasm = CreateDasm(0x6572);
             Assert.AreEqual("bcs\t$10000074", Disassemble().ToString());
         }
 
         [Test]
-        public void or_s_with_immediate()
+        public void M68kdis_or_s_with_immediate()
         {
             RunTest("or.b\t#$23,d3", 0x863c, 0x1123);
             RunTest("or.w\t#$1123,d3", 0x867c, 0x1123);
@@ -665,13 +665,19 @@ namespace Reko.UnitTests.Arch.M68k
         [Test]
         public void M68kdis_address_mode()
         {
-            RunTest("move.l\t(-04,a2,d0*2),d2", 0x2432, 0x04fc); 
+            RunTest("move.l\t(-04,a2,d0*2),d2", 0x2432, 0x04fc);
         }
 
         [Test]
         public void M68kdis_movem()
         {
             RunTest("movem.w\t$0004000A,d0-d1", 0x4CB9, 0x0003, 0x0004, 0x000A);    // move.l\t(-04,a2,d0*2),d2",
+        }
+
+        [Test]
+        public void M68kdis_move_addr()
+        {
+            RunTest("move.l\td0,$00FF0F08", 0x23C0, 0x00FF, 0x0F08);    // move.l d0,(dword_FF0F08).l
         }
     }
 }

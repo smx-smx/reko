@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -69,14 +69,14 @@ namespace Reko.Arch.Arm
         {
             var dst = RewriteOp(ops[0]);
             var src = RewriteOp(ops[1]);
-            var flags = frame.EnsureFlagGroup(0x1111, "NZCV", PrimitiveType.Byte);
+            var flags = frame.EnsureFlagGroup(A32Registers.cpsr, 0x1111, "NZCV", PrimitiveType.Byte);
             emitter.Assign(flags, emitter.Cond(
                 emitter.ISub(dst, src)));
         }
 
         private void RewriteDmb()
         {
-            emitter.SideEffect(PseudoProc(
+            emitter.SideEffect(host.PseudoProcedure(
                 "__dmb",
                 VoidType.Instance,
                 Constant.String(
@@ -128,7 +128,7 @@ namespace Reko.Arch.Arm
 
         private void RewriteLdrex()
         {
-            emitter.SideEffect(PseudoProc(
+            emitter.SideEffect(host.PseudoProcedure(
                 "__ldrex",
                 VoidType.Instance,
                 Constant.String(
@@ -144,7 +144,7 @@ namespace Reko.Arch.Arm
             emitter.Assign(dst, ctor(src1, src2));
             if (instr.ArchitectureDetail.UpdateFlags)
             {
-                emitter.Assign(frame.EnsureFlagGroup(0xF, "NZCV", PrimitiveType.Byte), emitter.Cond(dst));
+                emitter.Assign(frame.EnsureFlagGroup(A32Registers.cpsr, 0xF, "NZCV", PrimitiveType.Byte), emitter.Cond(dst));
             }
         }
 
@@ -159,7 +159,7 @@ namespace Reko.Arch.Arm
         {
             var dst = GetReg(ops[0].RegisterValue.Value);
             var src = Constant.Word16((ushort)ops[1].ImmediateValue.Value);
-            emitter.Assign(dst, emitter.Dpb(dst, src, 16, 16));
+            emitter.Assign(dst, emitter.Dpb(dst, src, 16));
         }
 
         private void RewriteMovw()
@@ -171,7 +171,7 @@ namespace Reko.Arch.Arm
 
         private void RewriteMrc()
         {
-            emitter.SideEffect(PseudoProc(
+            emitter.SideEffect(host.PseudoProcedure(
                 "__mrc",
                 VoidType.Instance,
                 Constant.String(
@@ -269,7 +269,7 @@ namespace Reko.Arch.Arm
 
         private void RewriteStrex()
         {
-            emitter.SideEffect(PseudoProc(
+            emitter.SideEffect(host.PseudoProcedure(
                 "__strex",
                 VoidType.Instance,
                 Constant.String(

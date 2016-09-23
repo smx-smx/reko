@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,6 +37,8 @@ namespace Reko.ImageLoaders.Elf
         public uint p_pmemsz;
         public uint p_flags;
         public uint p_align;
+
+        public const int Size = 32;
 
         public static Elf32_PHdr Load(ImageReader rdr)
         {

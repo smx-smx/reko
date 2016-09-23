@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,7 +34,7 @@ namespace Reko.UnitTests.Arch.Sparc
     {
         private static SparcInstruction DisassembleWord(byte[] a)
         {
-            LoadedImage img = new LoadedImage(Address.Ptr32(0x00100000), a);
+            MemoryArea img = new MemoryArea(Address.Ptr32(0x00100000), a);
             return Disassemble(img);
         }
 
@@ -42,11 +42,11 @@ namespace Reko.UnitTests.Arch.Sparc
         {
             var bytes = new byte[4];
             new BeImageWriter(bytes).WriteBeUInt32(0, instr);
-            var img = new LoadedImage(Address.Ptr32(0x00100000), bytes);
+            var img = new MemoryArea(Address.Ptr32(0x00100000), bytes);
             return Disassemble(img);
         }
 
-        private static SparcInstruction Disassemble(LoadedImage img)
+        private static SparcInstruction Disassemble(MemoryArea img)
         {
             var arch = new SparcArchitecture(PrimitiveType.Word32);
             var dasm = new SparcDisassembler(arch, img.CreateBeReader(0U));
@@ -69,6 +69,12 @@ namespace Reko.UnitTests.Arch.Sparc
         public void SparcDis_addcc()
         {
             AssertInstruction(0x8A800004, "addcc\t%g0,%g4,%g5");
+        }
+
+        [Test]
+        public void SparcDis_subcc()
+        {
+            AssertInstruction(0x986060FF, "subx\t%g1,0x000000FF,%o4");
         }
 
         [Test]
@@ -195,6 +201,18 @@ namespace Reko.UnitTests.Arch.Sparc
         public void SparcDis_rdy()
         {
             AssertInstruction(0xA3400000, "rd\t%y,%l1");
+        }
+
+        [Test]
+        public void SparcDis_fcmpes()
+        {
+            AssertInstruction(0x81a80aa2, "fcmpes\t%f0,%f2");
+        }
+
+        [Test]
+        public void SparcDis_ldd()
+        {
+            AssertInstruction(0xd01be000, "ldd\t[%o7+0],%o0");
         }
     }
 }

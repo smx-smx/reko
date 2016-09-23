@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -47,8 +47,10 @@ namespace Reko.ImageLoaders.Hunk
         {
         }
 
-        //$REVIEW: is this a sane value? AmigaOS apparently didn't load at a specific address. Emulators 
-        // seem to like this value.
+        public HunkFile HunkFile { get { return hunkFile; } }
+
+        //$REVIEW: is this a sane value? AmigaOS apparently didn't load at a specific
+        // address. Emulators seem to like this value.
         public override Address PreferredBaseAddress
         {
             get { return Address.Ptr32(0x1000); }
@@ -64,13 +66,16 @@ namespace Reko.ImageLoaders.Hunk
             this.hunkFile = parse.Parse();
             BuildSegments();
             this.firstCodeHunk = parse.FindFirstCodeHunk();
-            var image = new LoadedImage(addrLoad, RelocateBytes(addrLoad));
-
+            var platform = cfgSvc.GetEnvironment("amigaOS").Load(Services, arch);
+            var imageMap = platform.CreateAbsoluteMemoryMap();
+            var mem = new MemoryArea(addrLoad, RelocateBytes(addrLoad));
             return new Program(
-                image,
-                image.CreateImageMap(),
+                new SegmentMap(
+                    mem.BaseAddress,
+                    new ImageSegment(
+                        "code", mem, AccessMode.ReadWriteExecute)),
                 arch,
-                cfgSvc.GetEnvironment("amigaOS").Load(Services, arch));
+                platform);
         }
 
         public bool BuildLoadSegments()
@@ -204,7 +209,6 @@ namespace Reko.ImageLoaders.Hunk
             HunkType.HUNK_NAME
         };
 
-
         //$TODO: move this to HunkFile
         public bool BuildUnit()
         {
@@ -273,13 +277,13 @@ namespace Reko.ImageLoaders.Hunk
                     if (hunk_type == HunkType.HUNK_END)
                     {
                         in_hunk = false;
-                        // contents of hunk
                     }
                     else if (HunkLoader.unit_valid_extra_hunks.Contains(hunk_type))
                     {
+                        // contents of hunk
                         segment.Add(e);
-                        // unecpected hunk?!
                     }
+                    // unexpected hunk?!
                     else
                         throw new BadImageFormatException(string.Format("Unexpected hunk in unit: {0} {1}/{1:X}", e.HunkType, hunk_type));
                 }
@@ -624,12 +628,19 @@ print arg_mem
 
         public override RelocationResults Relocate(Program program, Address addrLoad)
         {
-            var entries = new List<EntryPoint>
+            var sym = new ImageSymbol(addrLoad)
+            {
+                Type = SymbolType.Procedure,
+                ProcessorState = arch.CreateProcessorState()
+            };
+
+            var entries = new List<ImageSymbol>
             {
                 //$TODO: what are the registers on entry?
-                new EntryPoint(addrLoad, arch.CreateProcessorState())
             };
-            return new RelocationResults(entries, new RelocationDictionary());
+            return new RelocationResults(
+                new List<ImageSymbol> { sym },
+                new SortedList<Address, ImageSymbol> { { sym.Address, sym } });
         }
 
         private byte[] RelocateBytes(Address addrLoad)

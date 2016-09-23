@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -36,7 +36,7 @@ namespace Reko.Core.Serialization
     /// file format into a new file, bump the namespace identifier and the class name. You will
     /// also have to modify the ProjectSerializer to handle the new format.</remarks>
     [XmlRoot(ElementName = "project", Namespace = "http://schemata.jklnet.org/Decompiler/v2")]
-    public class Project_v2
+    public class Project_v2 : SerializedProject
     {
         public const string FileExtension = ".dcproject";
 
@@ -62,6 +62,11 @@ namespace Reko.Core.Serialization
 
         [XmlElement("call", typeof(SerializedCall_v1))]
         public List<SerializedCall_v1> UserCalls;
+
+        public override T Accept<T>(ISerializedProjectVisitor<T> visitor)
+        {
+            return visitor.VisitProject_v2(this);
+        }
     }
 
     public abstract class ProjectFile_v2
@@ -166,5 +171,26 @@ namespace Reko.Core.Serialization
 
         [XmlText]
         public string Script;
+    }
+
+    public class DecompilerOutput_v1
+    {
+        [XmlElement("disassembly")]
+        public string DisassemblyFilename;
+
+        /// <summary>
+        /// If not null, specifies the file name for intermediate code.
+        /// </summary>
+        [XmlElement("intermediate-code")]
+        public string IntermediateFilename;
+
+        [XmlElement("output")]
+        public string OutputFilename;
+
+        [XmlElement("types-file")]
+        public string TypesFilename;
+
+        [XmlElement("global-vars")]
+        public string GlobalsFilename;
     }
 }

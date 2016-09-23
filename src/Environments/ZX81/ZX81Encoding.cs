@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -74,7 +74,7 @@ namespace Reko.Environments.ZX81
  */
         private static char[] asciiToZx;
 
-        // '@' used as 'illegal' value since ZX81 apperently had no '@' in its character set.
+        // '@' used as 'illegal' value since ZX81 apparently had no '@' in its character set.
         private static char[] zxToUnicode = new char[]
         {
             ' ', '@', '@', '@',  '@', '@', '@', '@',  '@', '@', '@', '"',  '£', '$', ':', '?',  

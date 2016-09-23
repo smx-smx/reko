@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,6 +20,7 @@
 
 using Reko.Gui.Controls;
 using Reko.Gui.Forms;
+using Reko.Gui.Windows.Controls;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -36,6 +37,7 @@ namespace Reko.Gui.Windows.Forms
         IMainForm
     {
         private ToolStrip toolBar;
+        private ToolStrip projectToolBar;
         private DocumentWindowCollection docWindows;
 
         public MainForm()
@@ -57,6 +59,12 @@ namespace Reko.Gui.Windows.Forms
         {
             this.Controls.Add(toolBar);
             this.toolBar = toolBar;
+        }
+
+        public void AddProjectBrowserToolbar(ToolStrip toolBar)
+        {
+            this.treeBrowser.Parent.Controls.Add(toolBar);
+            this.projectToolBar = toolBar;
         }
 
         public TabControl DocumentTabs
@@ -131,6 +139,11 @@ namespace Reko.Gui.Windows.Forms
         public ToolStrip ToolBar
         {
             get { return toolBar; }
+        }
+
+        public ToolStrip ProjectBrowserToolbar
+        {
+            get { return projectToolBar; }
         }
 
         public DialogResult ShowDialog(Form dialog)

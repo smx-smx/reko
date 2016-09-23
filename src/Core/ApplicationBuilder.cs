@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -47,7 +47,7 @@ namespace Reko.Core
         private Frame frame;
         private CallSite site;
         private Expression callee;
-        private ProcedureSignature sigCallee;
+        private FunctionType sigCallee;
         private bool ensureVariables;
 
         /// <summary>
@@ -64,7 +64,7 @@ namespace Reko.Core
             Frame frame,
             CallSite site,
             Expression callee,
-            ProcedureSignature sigCallee,
+            FunctionType sigCallee,
             bool ensureVariables)
         {
             this.arch = arch;
@@ -75,7 +75,7 @@ namespace Reko.Core
             this.ensureVariables = ensureVariables;
         }
 
-        public virtual List<Expression> BindArguments(Frame frame, ProcedureSignature sigCallee)
+        public virtual List<Expression> BindArguments(Frame frame, FunctionType sigCallee)
         {
             if (sigCallee == null || !sigCallee.ParametersValid)
                 throw new InvalidOperationException("No signature available; application cannot be constructed.");
@@ -99,12 +99,9 @@ namespace Reko.Core
 
         public Identifier BindReturnValue()
         {
-            Identifier idOut = null;
-            if (sigCallee.ReturnValue != null)
-            {
-                idOut = (Identifier) Bind(sigCallee.ReturnValue);
-            }
-            return idOut;
+            if (sigCallee.HasVoidReturn)
+                return null;
+            return (Identifier) Bind(sigCallee.ReturnValue);
         }
 
 		public Expression Bind(Identifier id)
@@ -114,14 +111,23 @@ namespace Reko.Core
             return id.Storage.Accept(this);
 		}
 
+        /// <summary>
+        /// Creates an instruction:
+        ///     a = foo(b)
+        /// or 
+        ///     foo(b)
+        ///  depending on whether the signature returns a value or is of
+        /// type 'void'
+        /// </summary>
+        /// <returns></returns>
         public Instruction CreateInstruction()
         {
             var idOut = BindReturnValue();
-            var dtOut = sigCallee.ReturnValue != null
-                ? sigCallee.ReturnValue.DataType
-                : VoidType.Instance;
+            var dtOut = sigCallee.HasVoidReturn
+                ? VoidType.Instance
+                : sigCallee.ReturnValue.DataType;
             var actuals = BindArguments(frame, sigCallee);
-            var appl = new Application(
+            Expression appl = new Application(
                 callee,
                 dtOut,
                 actuals.ToArray());
@@ -132,6 +138,10 @@ namespace Reko.Core
 			}
 			else
 			{
+                if (idOut.DataType.Size > sigCallee.ReturnValue.DataType.Size)
+                {
+                    appl = new DepositBits(idOut, appl, 0);
+                }
                 return new Assignment(idOut, appl);
 			}
         }
@@ -140,7 +150,12 @@ namespace Reko.Core
 
         public Expression VisitFlagGroupStorage(FlagGroupStorage grf)
         {
-            return frame.EnsureFlagGroup(grf.FlagGroupBits, grf.Name, grf.DataType);
+            return frame.EnsureFlagGroup(grf.FlagRegister, grf.FlagGroupBits, grf.Name, grf.DataType);
+        }
+
+        public Expression VisitFlagRegister(FlagRegister freg)
+        {
+            throw new NotSupportedException();
         }
 
         public Expression VisitFpuStackStorage(FpuStackStorage fpu)
@@ -170,12 +185,12 @@ namespace Reko.Core
 
         public Expression VisitSequenceStorage(SequenceStorage seq)
         {
-            var h = seq.Head.Storage.Accept(this);
-            var t = seq.Tail.Storage.Accept(this);
+            var h = seq.Head.Accept(this);
+            var t = seq.Tail.Accept(this);
             var idHead = h as Identifier;
             var idTail = t as Identifier;
             if (idHead != null && idTail != null)
-                return frame.EnsureSequence(idHead, idTail, PrimitiveType.CreateWord(idHead.DataType.Size + idTail.DataType.Size));
+                return frame.EnsureSequence(idHead.Storage, idTail.Storage, PrimitiveType.CreateWord(idHead.DataType.Size + idTail.DataType.Size));
             throw new NotImplementedException("Handle case when stack parameter is passed.");
         }
 
@@ -183,10 +198,14 @@ namespace Reko.Core
         {
             if (ensureVariables)
                 return frame.EnsureStackVariable(
-                    stack.StackOffset - (site.StackDepthOnEntry + sigCallee.ReturnAddressOnStack),
+                    stack.StackOffset - site.StackDepthOnEntry,
                     stack.DataType);
             else 
-                return arch.CreateStackAccess(frame, stack.StackOffset, stack.DataType);
+                return arch.CreateStackAccess(
+                    frame,
+                    stack.StackOffset - site.SizeOfReturnAddressOnStack,
+                    stack.DataType);
+
         }
 
         public Expression VisitTemporaryStorage(TemporaryStorage temp)

@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -90,6 +90,26 @@ namespace Reko.Arch.X86
             }
         }
 
+        private void RewriteFabs()
+        {
+            emitter.Assign(FpuRegister(0), host.PseudoProcedure("fabs", PrimitiveType.Real64, FpuRegister(0)));
+        }
+
+        private void RewriteFbld()
+        {
+            state.GrowFpuStack(instrCur.Address);
+            emitter.Assign(FpuRegister(0),
+                host.PseudoProcedure("__fbld", PrimitiveType.Real64, SrcOp(instrCur.op1)));
+            WriteFpuStack(0);
+        }
+
+        private void RewriteFbstp()
+        {
+            instrCur.op1.Width = PrimitiveType.Bcd80;
+            emitter.Assign(SrcOp(instrCur.op1), emitter.Cast(instrCur.op1.Width, orw.FpuRegister(0, state)));
+            state.ShrinkFpuStack(1);
+        }
+
         private void EmitFchs()
         {
             emitter.Assign(
@@ -100,7 +120,7 @@ namespace Reko.Arch.X86
 
         private void RewriteFclex()
         {
-            emitter.SideEffect(PseudoProc("__fclex", VoidType.Instance));
+            emitter.SideEffect(host.PseudoProcedure("__fclex", VoidType.Instance));
         }
 
         private void RewriteFcom(int pops)
@@ -116,12 +136,37 @@ namespace Reko.Arch.X86
             state.ShrinkFpuStack(pops);
         }
 
+        private void RewriteFdecstp()
+        {
+            state.ShrinkFpuStack(1);
+            emitter.Nop();
+        }
+
+        private void RewriteFfree()
+        {
+            emitter.SideEffect(
+                host.PseudoProcedure("__ffree", VoidType.Instance, SrcOp(instrCur.op1)));
+        }
+
         private void RewriteFUnary(string name)
         {
             emitter.Assign(
                 orw.FpuRegister(0, state),
-                PseudoProc(name, PrimitiveType.Real64, orw.FpuRegister(0, state)));
+                host.PseudoProcedure(name, PrimitiveType.Real64, orw.FpuRegister(0, state)));
             WriteFpuStack(0);
+        }
+
+        private void RewriteFicom(bool pop)
+        {
+            emitter.Assign(
+                orw.FlagGroup(FlagM.FPUF),
+                emitter.Cond(
+                    emitter.FSub(
+                        orw.FpuRegister(0, state),
+                        emitter.Cast(PrimitiveType.Real64,
+                            SrcOp(instrCur.op1)))));
+            if (pop)
+                state.ShrinkFpuStack(1);
         }
 
         private void RewriteFild()
@@ -134,17 +179,32 @@ namespace Reko.Arch.X86
             WriteFpuStack(0);
         }
 
-        private void RewriteFistp()
+        private void RewriteFincstp()
+        {
+            state.GrowFpuStack(instrCur.Address);
+            emitter.Nop();
+        }
+
+        private void RewriteFist(bool pop)
         {
             instrCur.op1.Width = PrimitiveType.Create(Domain.SignedInt, instrCur.op1.Width.Size);
             emitter.Assign(SrcOp(instrCur.op1), emitter.Cast(instrCur.op1.Width, orw.FpuRegister(0, state)));
-            state.ShrinkFpuStack(1);
+            if (pop)
+                state.ShrinkFpuStack(1);
         }
 
         public void RewriteFld()
         {
             state.GrowFpuStack(instrCur.Address);
-            emitter.Assign(FpuRegister(0), SrcOp(instrCur.op1));
+            var dst = FpuRegister(0);
+            var src = SrcOp(instrCur.op1);
+            if (src.DataType.Size != dst.DataType.Size)
+            {
+                src = emitter.Cast(
+                    PrimitiveType.Create(Domain.Real, dst.DataType.Size),
+                    src);
+            }
+            emitter.Assign(dst, src);
             WriteFpuStack(0);
         }
 
@@ -159,10 +219,27 @@ namespace Reko.Arch.X86
             emitter.Assign(FpuRegister(0), c);
             WriteFpuStack(0);
         }
+
         private void RewriteFldcw()
         {
-            emitter.SideEffect(PseudoProc(
+            emitter.SideEffect(host.PseudoProcedure(
                 "__fldcw",
+                VoidType.Instance,
+                SrcOp(instrCur.op1)));
+        }
+
+        private void RewriteFldenv()
+        {
+            emitter.SideEffect(host.PseudoProcedure(
+                "__fldenv",
+                VoidType.Instance,
+                SrcOp(instrCur.op1)));
+        }
+
+        private void RewriteFstenv()
+        {
+            emitter.SideEffect(host.PseudoProcedure(
+                "__fstenv",
                 VoidType.Instance,
                 SrcOp(instrCur.op1)));
         }
@@ -172,7 +249,17 @@ namespace Reko.Arch.X86
             Expression op1 = FpuRegister(1);
             Expression op2 = FpuRegister(0);
             state.ShrinkFpuStack(1);
-            emitter.Assign(FpuRegister(0), PseudoProc("atan", PrimitiveType.Real64, op1, op2));
+            emitter.Assign(FpuRegister(0), host.PseudoProcedure("atan", PrimitiveType.Real64, op1, op2));
+            WriteFpuStack(0);
+        }
+
+        private void RewriteFprem()
+        {
+            Expression op1 = FpuRegister(1);
+            Expression op2 = FpuRegister(0);
+            state.ShrinkFpuStack(1);
+            emitter.Assign(FpuRegister(0),
+                emitter.Mod(op2, op1));
             WriteFpuStack(0);
         }
 
@@ -182,15 +269,23 @@ namespace Reko.Arch.X86
             emitter.Assign(itmp, FpuRegister(0));
 
             state.GrowFpuStack(instrCur.Address);
-            emitter.Assign(FpuRegister(1), PseudoProc("cos", PrimitiveType.Real64, itmp));
-            emitter.Assign(FpuRegister(0), PseudoProc("sin", PrimitiveType.Real64, itmp));
+            emitter.Assign(FpuRegister(1), host.PseudoProcedure("cos", PrimitiveType.Real64, itmp));
+            emitter.Assign(FpuRegister(0), host.PseudoProcedure("sin", PrimitiveType.Real64, itmp));
             WriteFpuStack(0);
             WriteFpuStack(1);
         }
 
         private void RewriteFst(bool pop)
         {
-            emitter.Assign(SrcOp(instrCur.op1), FpuRegister(0));
+            Expression src = FpuRegister(0);
+            Expression dst = SrcOp(instrCur.op1);
+            if (src.DataType.Size != dst.DataType.Size)
+            {
+                src = emitter.Cast(
+                    PrimitiveType.Create(Domain.Real, dst.DataType.Size),
+                    src);
+            }
+            emitter.Assign(dst, src);
             if (pop)
                 state.ShrinkFpuStack(1);
         }
@@ -198,8 +293,33 @@ namespace Reko.Arch.X86
         private void RewriterFstcw()
         {
 			emitter.Assign(
-                SrcOp(instrCur.op1), 
-                PseudoProc("__fstcw", PrimitiveType.UInt16));
+                SrcOp(instrCur.op1),
+                host.PseudoProcedure("__fstcw", PrimitiveType.UInt16));
+        }
+
+        private void RewriteFrstor()
+        {
+            emitter.SideEffect(
+                host.PseudoProcedure(
+                    "__frstor",
+                    VoidType.Instance,
+                    SrcOp(instrCur.op1)));
+        }
+
+        private void RewriteFsave()
+        {
+            emitter.SideEffect(
+                host.PseudoProcedure(
+                    "__fsave", 
+                    VoidType.Instance, 
+                    SrcOp(instrCur.op1)));
+        }
+
+        private void RewriteFscale()
+        {
+            emitter.Assign(
+                FpuRegister(0),
+                host.PseudoProcedure("scalbn", PrimitiveType.Real64, FpuRegister(0), FpuRegister(1)));
         }
 
         private void RewriteFstsw()
@@ -297,9 +417,14 @@ namespace Reko.Arch.X86
             //$REVIEW: Candidate for idiom search.
             Identifier op1 = FpuRegister(0);
             Identifier op2 = FpuRegister(1);
-            emitter.Assign(op1, emitter.ISub(op2, PseudoProc("lg2", PrimitiveType.Real64, op1)));
+            emitter.Assign(op1, emitter.ISub(op2, host.PseudoProcedure("lg2", PrimitiveType.Real64, op1)));
             state.ShrinkFpuStack(1);
             WriteFpuStack(0);
+        }
+
+        private void RewriteWait()
+        {
+            emitter.SideEffect(host.PseudoProcedure("__wait", VoidType.Instance));
         }
 
         private Identifier FpuRegister(int reg)

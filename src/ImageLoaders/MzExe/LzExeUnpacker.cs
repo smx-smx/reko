@@ -1,7 +1,6 @@
-
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -36,12 +35,12 @@ namespace Reko.ImageLoaders.MzExe
 	public class LzExeUnpacker : ImageLoader
 	{
         private IProcessorArchitecture arch;
-        private Platform platform;
+        private IPlatform platform;
 
 		private int lzHdrOffset;
 		private bool isLz91;
-		private LoadedImage imgLoaded;
-        private ImageMap imageMap;
+		private MemoryArea imgLoaded;
+        private SegmentMap segmentMap;
 		private ushort lzIp;
 		private ushort lzCs;
 
@@ -50,18 +49,18 @@ namespace Reko.ImageLoaders.MzExe
 		public LzExeUnpacker(IServiceProvider services, string filename, byte [] rawImg) : base(services, filename, rawImg)
         {
             var exe = new ExeImageLoader(services, filename, rawImg);
-            this.arch = new IntelArchitecture(ProcessorMode.Real);
-            this.platform = services.RequireService<IConfigurationService>()
-                .GetEnvironment("ms-dos")
+            var cfgSvc = services.RequireService<IConfigurationService>();
+            this.arch = cfgSvc.GetArchitecture("x86-real-16");
+            this.platform = cfgSvc.GetEnvironment("ms-dos")
                 .Load(services, arch);
             Validate(exe);
         }
 
 		public LzExeUnpacker(IServiceProvider services, ExeImageLoader exe, string filename, byte [] rawImg) : base(services, filename, rawImg)
 		{
-            this.arch = new IntelArchitecture(ProcessorMode.Real);
-            this.platform = services.RequireService<IConfigurationService>()
-                .GetEnvironment("ms-dos")
+            var cfgSvc = services.RequireService<IConfigurationService>();
+            this.arch = cfgSvc.GetArchitecture("x86-real-16");
+            this.platform = cfgSvc.GetEnvironment("ms-dos")
                 .Load(services, arch);
             Validate(exe);
 		}
@@ -74,13 +73,13 @@ namespace Reko.ImageLoaders.MzExe
 
             byte[] abC = RawImage;
             int entry = lzHdrOffset + exe.e_ip;
-            if (LoadedImage.CompareArrays(abC, entry, s_sig90, s_sig90.Length))
+            if (MemoryArea.CompareArrays(abC, entry, s_sig90, s_sig90.Length))
             {
                 // Untested binary version
                 isLz91 = false;
                 throw new NotImplementedException("Untested");
             }
-            else if (LoadedImage.CompareArrays(abC, entry, s_sig91, s_sig91.Length))
+            else if (MemoryArea.CompareArrays(abC, entry, s_sig91, s_sig91.Length))
             {
                 isLz91 = true;
             }
@@ -99,35 +98,40 @@ namespace Reko.ImageLoaders.MzExe
 
 			int lzHdrOffset = ((int) exe.e_cparHeader + (int) exe.e_cs) << 4;
 			int entry = lzHdrOffset + exe.e_ip;
-			return (LoadedImage.CompareArrays(rawImg, entry, s_sig91, s_sig91.Length) ||
-					LoadedImage.CompareArrays(rawImg, entry, s_sig90, s_sig90.Length));
+			return (MemoryArea.CompareArrays(rawImg, entry, s_sig91, s_sig91.Length) ||
+					MemoryArea.CompareArrays(rawImg, entry, s_sig90, s_sig90.Length));
 		}
 
 		// Fix up the relocations.
 
 		public override RelocationResults Relocate(Program program, Address addrLoad)
 		{
-			// Seed the scanner with the start location.
+            // Seed the scanner with the start location.
 
-            List<EntryPoint> entryPoints = new List<EntryPoint>() {
-			    new EntryPoint(Address.SegPtr((ushort) (lzCs + addrLoad.Selector), lzIp), arch.CreateProcessorState()),
+            var sym = new ImageSymbol(Address.SegPtr((ushort)(lzCs + addrLoad.Selector), lzIp))
+            {
+                Type = SymbolType.Procedure,
+                ProcessorState = arch.CreateProcessorState()
             };
-            var relocations = new RelocationDictionary();
+            var imageSymbols = new SortedList<Address, ImageSymbol> { { sym.Address, sym } };
+            List<ImageSymbol> entryPoints = new List<ImageSymbol>() { sym };
 			if (isLz91)
 			{
-				Relocate91(RawImage, addrLoad.Selector, imgLoaded, relocations);
+				Relocate91(RawImage, addrLoad.Selector.Value, imgLoaded);
 			}
 			else
 			{
-				Relocate90(RawImage, addrLoad.Selector, imgLoaded, relocations);
+				Relocate90(RawImage, addrLoad.Selector.Value, imgLoaded);
 			}
-            return new RelocationResults(entryPoints, relocations);
+            return new RelocationResults(entryPoints, imageSymbols);
 		}
 
 		// for LZEXE ver 0.90 
-		private  ImageMap Relocate90(byte [] pgmImg, ushort segReloc, LoadedImage pgmImgNew, RelocationDictionary relocations)
-		{
-			int ifile = lzHdrOffset + 0x19D;
+		private  SegmentMap Relocate90(byte [] pgmImg, ushort segReloc, MemoryArea pgmImgNew)
+        {
+            var relocations = pgmImgNew.Relocations;
+
+            int ifile = lzHdrOffset + 0x19D;
 
 			// 0x19d=compressed relocation table address 
 
@@ -157,9 +161,10 @@ namespace Reko.ImageLoaders.MzExe
 
 		// Unpacks the relocation entries in a LzExe 0.91 binary
 
-		private ImageMap Relocate91(byte [] abUncompressed, ushort segReloc, LoadedImage pgmImgNew, RelocationDictionary relocations)
+		private SegmentMap Relocate91(byte [] abUncompressed, ushort segReloc, MemoryArea pgmImgNew)
 		{
             const int CompressedRelocationTableAddress = 0x0158;
+            var relocations = pgmImgNew.Relocations;
 			int ifile = lzHdrOffset + CompressedRelocationTableAddress;
 
 			int rel_off=0;
@@ -185,15 +190,20 @@ namespace Reko.ImageLoaders.MzExe
 				ushort seg = (ushort) (pgmImgNew.ReadLeUInt16((uint)rel_off) + segReloc);
 				pgmImgNew.WriteLeUInt16((uint)rel_off, seg);
 				relocations.AddSegmentReference((uint)rel_off, seg);
-				imageMap.AddSegment(Address.SegPtr(seg, 0), seg.ToString("X4"), AccessMode.ReadWriteExecute);
+				segmentMap.AddSegment(
+                    new ImageSegment(
+                        seg.ToString("X4"),
+                        Address.SegPtr(seg, 0),
+                        this.imgLoaded,
+                        AccessMode.ReadWriteExecute));
 			}
-			return imageMap;
+			return segmentMap;
 		}
 
         public override Program Load(Address addrLoad)
 		{
 			Unpack(RawImage, addrLoad);
-            return new Program(imgLoaded, imageMap, arch, platform);
+            return new Program(segmentMap, arch, platform);
 		}
 
 		public override Address PreferredBaseAddress
@@ -202,7 +212,7 @@ namespace Reko.ImageLoaders.MzExe
             set { throw new NotImplementedException(); }
         }
 
-		public LoadedImage Unpack(byte [] abC, Address addrLoad)
+		public MemoryArea Unpack(byte [] abC, Address addrLoad)
 		{
 			// Extract the LZ stuff.
 
@@ -275,8 +285,8 @@ namespace Reko.ImageLoaders.MzExe
 
 			// Create a new image based on the uncompressed data.
 
-			this.imgLoaded = new LoadedImage(addrLoad, abU);
-            this.imageMap = imgLoaded.CreateImageMap();
+			this.imgLoaded = new MemoryArea(addrLoad, abU);
+            this.segmentMap = imgLoaded.CreateImageMap();
 			return imgLoaded;
 		}
 

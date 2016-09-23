@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Windows.Forms;
+using System.IO;
 
 namespace Reko.Gui.Windows.Controls
 {
@@ -38,35 +39,43 @@ namespace Reko.Gui.Windows.Controls
         // ModelChanged is fired whenever the Model property is set.
         public event EventHandler ModelChanged;
         public event EventHandler<EditorNavigationArgs> Navigate;
+        public event EventHandler SelectionChanged; // Fired whenever the selection changes.
+        public event EventHandler VScrollValueChanged;
 
-        private Brush fgBrush;
-        private Brush bgBrush;
         private StringFormat stringFormat;
-        private SortedList<float, LayoutLine> visibleLines;
+        private TextViewLayout layout;
         private bool ignoreScroll;
+        internal TextPointer cursorPos;
+        internal TextPointer anchorPos;
+        private StyleStack styleStack;
+        private bool dragging;
 
         public TextView()
         {
             InitializeComponent();
 
+            base.DoubleBuffered = true;
+            this.Selection = new TextSelection(this);
             this.model = new EmptyEditorModel();
             this.stringFormat = StringFormat.GenericTypographic;
-            this.ModelChanged += model_ModelChanged;
+            this.layout = new TextViewLayout(model, this.Font);
             this.vScroll.ValueChanged += vScroll_ValueChanged;
         }
 
-        public IServiceProvider Services { get; set; }
-
-        protected override void OnKeyDown(KeyEventArgs e)
+        public IServiceProvider Services { get { return services; } set { services = value; OnServicesChanged(); } }
+        private IServiceProvider services;
+        protected virtual void OnServicesChanged()
         {
-            if (e.KeyData == (Keys.Shift|Keys.F10))
-            {
-                e.Handled = true;
-                ContextMenu.Show(this, new Point(0, 0));
-                return;
-            }
-            base.OnKeyDown(e);
+            ChangeLayout();
         }
+
+        public TextSelection Selection { get; private set; }
+
+        public string StyleClass { get { return styleClass; } set { styleClass = value; StyleClassChanged.Fire(this); } }
+        public event EventHandler StyleClassChanged;
+        private string styleClass;
+
+
 
         /// <summary>
         /// The ClientSize is the client area minus the space taken up by
@@ -87,34 +96,6 @@ namespace Reko.Gui.Windows.Controls
             get { return new Rectangle(new Point(0, 0), ClientSize); }
         }
 
-        private Font GetFont(string styleSelector)
-        {
-            UiStyle style;
-            if (!string.IsNullOrEmpty(styleSelector))
-            {
-                style = GetStyle(styleSelector);
-                if (style != null && style.Font != null)
-                    return style.Font;
-            }
-            return this.Font;
-        }
-
-        private Brush GetForeground(string styleSelector)
-        {
-            UiStyle style = GetStyle(styleSelector);
-            if (style != null && style.Foreground != null)
-                return style.Foreground;
-            return CacheBrush(ref fgBrush, new SolidBrush(ForeColor));
-        }
-
-        private Brush GetBackground(string styleSelector)
-        {
-            UiStyle style = GetStyle(styleSelector);
-            if (style != null && style.Background != null)
-                return style.Background;
-            return CacheBrush(ref bgBrush, new SolidBrush(BackColor));
-        }
-
         /// <summary>
         /// Computes the size of a text span.
         /// </summary>
@@ -130,191 +111,266 @@ namespace Reko.Gui.Windows.Controls
         private SizeF GetSize(TextSpan span, string text, Font font, Graphics g)
         {
             var size = span.GetSize(text, font, g);
-            if (span.Style == "dasm-bytes") //$DEBUG
-                span.Style.ToString();
-            UiStyle style = GetStyle(span.Style);
-            if (style != null && style.Width.HasValue)
+            int? width = styleStack.GetWidth();
+            if (width.HasValue)
             {
-                size.Width = style.Width.Value;
+                size.Width = width.Value;
             }
             return size;
         }
 
-        private UiStyle GetStyle(string styleSelector)
+        private StyleStack GetStyleStack()
         {
-            UiStyle style;
-            if (!string.IsNullOrEmpty(styleSelector) && Services != null)
-            {
-                var uipSvc = Services.RequireService<IUiPreferencesService>();
-                uipSvc.Styles.TryGetValue(styleSelector, out style);
-                return style;
-            }
-            return null;
-        }
-
-        private Cursor GetCursor(string styleSelector)
-        {
-            UiStyle style = GetStyle(styleSelector);
-            if (style != null && style.Cursor != null)
-                return style.Cursor;
-            return Cursors.Default;
-        }
-
-        private Brush CacheBrush(ref Brush brInstance, Brush brNew)
-        {
-            if (brInstance != null)
-                brInstance.Dispose();
-            brInstance = brNew;
-            return brNew;
+            if (styleStack == null)
+                styleStack = new StyleStack(Services.RequireService<IUiPreferencesService>());
+            return styleStack;
         }
 
         protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
-                if (fgBrush != null) fgBrush.Dispose();
-                if (bgBrush != null) bgBrush.Dispose();
+                if (styleStack != null) styleStack.Dispose();
             }
             base.Dispose(disposing);
         }
 
-        protected override void OnMouseMove(MouseEventArgs e)
+        private void SetCaret()
         {
-            var span = GetSpan(e.Location);
-            if (span != null)
+            //$TODO: want a cross-platform caret
+        }
+
+        private void ClearCaret()
+        {
+        }
+
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            if (e.KeyData == (Keys.Shift | Keys.F10))
             {
-                this.Cursor = GetCursor(span.Style);
+                e.Handled = true;
+                ContextMenu.Show(this, new Point(0, 0));
+                return;
             }
-            else
-            {
-                this.Cursor = Cursors.Default;
-            }
-            base.OnMouseMove(e);
+            base.OnKeyDown(e);
+        }
+
+        protected override void OnLostFocus(EventArgs e)
+        {
+            ClearCaret();
+            base.OnLostFocus(e);
         }
 
         protected override void OnMouseDown(MouseEventArgs e)
         {
             Capture = true;
-            Focus();
+            var pos = ClientToLogicalPosition(e.Location);
+            if (!IsSelectionEmpty() &&
+                IsInsideSelection(pos))
+            {
+                // if down-click is done on a selection, the user may want 
+                // to drag it.
+                dragging = true;
+            }
+            else if (layout.ComparePositions(pos, cursorPos) != 0)
+            {
+                Focus();
+
+                // User clicked somewhere other than the current cursor
+                // position, so we need to move it.
+                dragging = false;
+                this.cursorPos = pos;
+                if ((Control.ModifierKeys & Keys.Shift) == 0)
+                    this.anchorPos = pos;
+                SetCaret();
+                Invalidate();
+            }
             base.OnMouseDown(e);
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            if (Capture && !dragging)
+            {
+                // We're extending the selection
+                var pos = ClientToLogicalPosition(e.Location);
+                if (layout.ComparePositions(cursorPos, pos) != 0)
+                {
+                    this.cursorPos = pos;
+                    Invalidate();
+                }
+            }
+            else
+            {
+                // Not captured, so rat is just floating over us.
+                // Show the right cursor.
+                var span = GetSpan(e.Location);
+                if (span != null)
+                {
+                    GetStyleStack().PushStyle(StyleClass);
+                    styleStack.PushStyle(span.Style);
+                    this.Cursor = styleStack.GetCursor(this);
+                    styleStack.PopStyle();
+                    styleStack.PopStyle();
+                }
+                else
+                {
+                    this.Cursor = Cursors.Default;
+                }
+            }
+            base.OnMouseMove(e);
         }
 
         protected override void OnMouseUp(MouseEventArgs e)
         {
             if (Capture)
             {
-                var span = GetSpan(e.Location);
-                if (span != null && span.Tag != null)
+                var pos = ClientToLogicalPosition(e.Location);
+                if (dragging)
                 {
-                    Navigate.Fire(this, new EditorNavigationArgs(span.Tag));
+                    cursorPos = anchorPos = pos;
+                    var span = GetSpan(e.Location);
+                    if (span != null && span.Tag != null)
+                    {
+                        Navigate.Fire(this, new EditorNavigationArgs(span.Tag));
+                    }
+                    Invalidate();
                 }
+                else
+                {
+                    if (IsSelectionEmpty())
+                    {
+                        var span = GetSpan(e.Location);
+                        if (span != null && span.Tag != null)
+                        {
+                            Navigate.Fire(this, new EditorNavigationArgs(span.Tag));
+                        }
+                    }
+                    SelectionChanged.Fire(this);
+                }
+                Capture = false;
             }
             base.OnMouseUp(e);
         }
 
         protected override void OnMouseWheel(MouseEventArgs e)
         {
-            model.MoveTo(model.CurrentPosition, (e.Delta < 0 ? 1 : -1));
-            RecomputeLayout();
-            UpdateScrollbar();
-            OnScroll();
-            Invalidate();
+            var wheelChange = 3;
+            var newValue = vScroll.Value +
+                (e.Delta < 0 ? wheelChange : -wheelChange);
+            vScroll.Value = Math.Max(
+                Math.Min(newValue, vScroll.Maximum),
+                vScroll.Minimum);
         }
 
         protected override void OnPaint(PaintEventArgs e)
         {
-            foreach (var line in visibleLines.Values)
+            if (Services == null)
             {
-                PaintLine(line, e.Graphics);
+                Debug.Print("TextView.OnPaint: Services property must be set");
+                return;
             }
+            GetStyleStack().PushStyle(StyleClass);
+            var painter = new TextViewPainter(layout, e.Graphics, ForeColor, BackColor, Font, styleStack);
+            painter.SetSelection(GetStartSelection(), GetEndSelection());
+
+            painter.PaintGdi();
+            GetStyleStack().PopStyle();
         }
 
-        /// <summary>
-        /// Line of spans.
-        /// </summary>
-        private class LayoutLine
+        // Disable background painting to avoid the horrible flicker.
+        // We draw our own background anyway.
+        protected override void OnPaintBackground(PaintEventArgs pevent)
         {
-            public RectangleF Extent;
-            public LayoutSpan[] Spans;
         }
 
-        /// <summary>
-        /// Horizontal span of text
-        /// </summary>
-        protected class LayoutSpan
+        public TextPointer GetStartSelection()
         {
-            public RectangleF Extent;
-            public string Text;
-            public string Style;
-            public object Tag;
-            public int ContextMenuID;
+            if (layout.ComparePositions(cursorPos, anchorPos) <= 0)
+                return cursorPos;
+            else
+                return anchorPos;
+        }
+
+        public TextPointer GetEndSelection()
+        {
+            if (layout.ComparePositions(cursorPos, anchorPos) > 0)
+                return cursorPos;
+            else
+                return anchorPos;
+        }
+
+        public bool IsSelectionEmpty()
+        {
+            return  layout.ComparePositions(cursorPos, anchorPos) == 0;
+        }
+
+        internal bool IsInsideSelection(TextPointer pos)
+        {
+            return
+                layout.ComparePositions(GetStartSelection(), pos) <= 0 &&
+                layout.ComparePositions(pos, GetEndSelection()) < 0;
+        }
+
+        public void ClearSelection()
+        {
+            anchorPos = cursorPos;
+            Invalidate();
         }
 
         /// <summary>
-        /// Computes the layout of all visibile text spans and stores them the 
-        /// member variable 'visibleLines'.
+        /// Computes the layout of all visible text spans and stores them the 
+        /// member variable 'visibleLines'. This includes a final partial item on the end.
         /// </summary>
         /// <param name="g"></param>
         protected void ComputeLayout(Graphics g)
         {
-            float cyLine = GetLineHeight();
-            this.visibleLines = new SortedList<float, LayoutLine>();
-            SizeF szClient = new SizeF(ClientSize);
-            var rcLine = new RectangleF(0, 0, szClient.Width, cyLine);
-            
-            // Get the lines.
-            int cVisibleLines = (int) Math.Ceiling(szClient.Height / cyLine);
-            var lines = model != null ? model.GetLineSpans(cVisibleLines) : new TextSpan[0][];
-            int iLine = 0;
-            while (rcLine.Top < szClient.Height && 
-                   iLine < lines.Length)
-            {
-                var line = lines[iLine];
-                var ll = new LayoutLine { 
-                    Extent = rcLine,
-                    Spans = ComputeSpanLayouts(line, rcLine, g)
-                };
-                this.visibleLines.Add(rcLine.Top, ll);
-                ++iLine;
-                rcLine.Offset(0, cyLine);
-            }
-        }
-
-        /// <summary>
-        /// Computes the layout for a line of spans.
-        /// </summary>
-        /// <param name="spans"></param>
-        /// <param name="rcLine"></param>
-        /// <param name="g"></param>
-        /// <returns></returns>
-        private LayoutSpan[] ComputeSpanLayouts(IEnumerable<TextSpan> spans, RectangleF rcLine, Graphics g)
-        {
-            var spanLayouts = new List<LayoutSpan>();
-            var pt = new PointF(rcLine.Left, rcLine.Top);
-            foreach (var span in spans)
-            {
-                var text = span.GetText();
-                var font = GetFont(span.Style);
-                var szText = GetSize(span, text, font, g);
-                var rc = new RectangleF(pt, szText);
-                spanLayouts.Add(new LayoutSpan
-                {
-                    Extent = rc,
-                    Style = span.Style,
-                    Text = text,
-                    ContextMenuID = span.ContextMenuID,
-                    Tag = span.Tag,
-                });
-                pt.X = pt.X + szText.Width;
-            }
-            return spanLayouts.ToArray();
+            var m = model ?? new EmptyEditorModel();
+            var oldPos = m.CurrentPosition;
+            GetStyleStack().PushStyle(StyleClass);
+            this.layout = TextViewLayout.VisibleLines(m, ClientSize, g, Font, GetStyleStack());
+            GetStyleStack().PopStyle();
+            m.MoveToLine(oldPos, 0);
         }
 
         protected override void OnResize(EventArgs e)
         {
-            int visibleWholeLines = (int) Math.Floor(Height / GetLineHeight());
-            OnModelChanged();
+            ChangeLayout();
             base.OnResize(e);
+        }
+
+        private TextPointer ClientToLogicalPosition(Point pt)
+        {
+            using (var g = CreateGraphics())
+            {
+                GetStyleStack().PushStyle(StyleClass);
+                var ptr = layout.ClientToLogicalPosition(g, pt, styleStack);
+                styleStack.PopStyle();
+                return ptr;
+            }
+        }
+
+        private RectangleF LogicalPositionToClient(TextPointer pos)
+        {
+            using (var g = CreateGraphics())
+            {
+                GetStyleStack().PushStyle(StyleClass);
+                var ptr = layout.LogicalPositionToClient(g, pos, styleStack);
+                styleStack.PopStyle();
+                return ptr;
+            }
+        }
+
+        public Point GetAnchorTopPoint()
+        {
+            var rect = LogicalPositionToClient(anchorPos);
+            return new Point((int)rect.Left, (int)rect.Top);
+        }
+
+        public Point GetAnchorMiddlePoint()
+        {
+            var rect = LogicalPositionToClient(anchorPos);
+            return new Point((int)rect.Left, (int)((rect.Top + rect.Bottom) / 2));
         }
 
         /// <summary>
@@ -324,7 +380,7 @@ namespace Reko.Gui.Windows.Controls
         /// <returns></returns>
         protected LayoutSpan GetSpan(Point pt)
         {
-            foreach (var line in this.visibleLines.Values)
+            foreach (var line in this.layout.LayoutLines)
             {
                 if (line.Extent.Contains(pt))
                     return FindSpan(pt, line);
@@ -332,38 +388,49 @@ namespace Reko.Gui.Windows.Controls
             return null;
         }
 
-        private LayoutSpan FindSpan(Point ptMouse, LayoutLine line)
+        private LayoutSpan FindSpan(Point ptClient, LayoutLine line)
         {
             foreach (var span in line.Spans)
             {
-                if (span.Extent.Contains(ptMouse))
+                if (span.ContentExtent.Contains(ptClient))
                     return span;
             }
             return null;
         }
 
-        private void PaintLine(LayoutLine line, Graphics g)
-        {
-            foreach (var span in line.Spans)
-            {
-                var text = span.Text;
-                if (span.Style == "link")   //$DEBUG
-                    span.Style.ToString();
-                var font = GetFont(span.Style);
-                var fg = GetForeground(span.Style);
-                var bg = GetBackground(span.Style);
-                g.FillRectangle(bg, span.Extent);
-                g.DrawString(text, font, fg, span.Extent, stringFormat);
-            }
-        }
-
         /// <summary>
         /// The Model provides text spans that the TextView uses to render itself.
         /// </summary>
-        public TextViewModel Model { get { return model; } set { this.model = value; vScroll.Value = 0; OnModelChanged(); ModelChanged.Fire(this); } }
+        public TextViewModel Model { get { return model; } set { this.model = value; OnModelChanged(EventArgs.Empty); }  }
         private TextViewModel model;
-        protected virtual void OnModelChanged()
+        protected virtual void OnModelChanged(EventArgs e)
         {
+            this.cursorPos = new TextPointer
+            {
+                Line = model.CurrentPosition,
+                Span = 0,
+                Character = 0
+            };
+            this.anchorPos = cursorPos;
+            ChangeLayout();
+            UpdateScrollbar();
+            ModelChanged.Fire(this);
+        }
+
+        /// <summary>
+        /// Recomputes the spans and scrollbars of the TextView.
+        /// </summary>
+        protected void ChangeLayout()
+        {
+            if (Services == null)
+                return;
+
+            // Need to recompute the layout first so we can count
+            // the fully visible lines.
+            var g = CreateGraphics();
+            ComputeLayout(g);
+            g.Dispose();
+
             int visibleLines = GetFullyVisibleLines();
             vScroll.Minimum = 0;
             if (model != null)
@@ -376,10 +443,6 @@ namespace Reko.Gui.Windows.Controls
             {
                 vScroll.Enabled = false;
             }
-            var g = CreateGraphics();
-            ComputeLayout(g);
-            g.Dispose();
-
             Invalidate();
         }
 
@@ -397,31 +460,20 @@ namespace Reko.Gui.Windows.Controls
             return span.Tag;
         }
 
-        /// <summary>
-        /// Returns the number of visible lines, including any partially visible ones.
-        /// </summary>
-        /// <returns></returns>
-        private int GetVisibleLines()
-        {
-            float lines = ClientSize.Height / GetLineHeight();
-            return (int) Math.Ceiling(lines);
-        }
-
         private int GetFullyVisibleLines()
         {
-            float lines = ClientSize.Height / GetLineHeight();
-            return (int) Math.Floor(lines);
+            int cLines = layout.LayoutLines.Count;
+            if (cLines == 0)
+                return 0;
+            if (layout.LayoutLines[cLines - 1].Extent.Bottom > ClientRectangle.Bottom)
+                return cLines - 1;
+            else
+                return cLines;
         }
 
-        private float GetLineHeight()
-        {
-            return this.Font.Height;
-        }
-
-        
         void model_ModelChanged(object sender, EventArgs e)
         {
-            OnModelChanged();
+            ChangeLayout();
         }
 
         void vScroll_ValueChanged(object sender, EventArgs e)
@@ -431,7 +483,12 @@ namespace Reko.Gui.Windows.Controls
             model.SetPositionAsFraction(vScroll.Value, vScroll.Maximum);
             RecomputeLayout();
             OnScroll();
-            Invalidate();
+        }
+
+        protected override void OnFontChanged(EventArgs e)
+        {
+            RecomputeLayout();
+            base.OnFontChanged(e);
         }
 
         /// <summary>
@@ -439,21 +496,92 @@ namespace Reko.Gui.Windows.Controls
         /// </summary>
         protected virtual void OnScroll()
         {
+            VScrollValueChanged.Fire(this);
         }
 
-        protected void RecomputeLayout()
+        public void RecomputeLayout()
         {
+            Invalidate();
+            if (services == null)
+                return;
             var g = CreateGraphics();
             ComputeLayout(g);
             g.Dispose();
+        }
+
+        internal void SaveSelectionToStream(Stream stream)
+        {
+            var modelPos = model.CurrentPosition;
+            try
+            {
+                var writer = new StreamWriter(stream, Encoding.Unicode);
+                var start = GetStartSelection();
+                var end = GetEndSelection();
+                if (layout.ComparePositions(start, end) == 0)
+                    return;
+                model.MoveToLine(start.Line, 0);
+                var spans = model.GetLineSpans(1);
+                var line = start.Line;
+                int iSpan = start.Span;
+                int iChar = start.Character;
+                for (;;)
+                {
+                    var span = (iSpan < spans[0].TextSpans.Length) ?
+                        spans[0].TextSpans[iSpan] : null;
+                    if (span != null)
+                    {
+                        if (model.ComparePositions(spans[0].Position, end.Line) == 0 &&
+                            iSpan == end.Span)
+                        {
+                            writer.Write(span.GetText().Substring(iChar, end.Character - iChar));
+                            writer.Flush();
+                            return;
+                        }
+                        else {
+                            writer.Write(span.GetText().Substring(iChar));
+                        }
+                    }
+                    ++iSpan;
+                    iChar = 0;
+                    if (iSpan >= spans[0].TextSpans.Length)
+                    {
+                        writer.WriteLine();
+                        if (model.ComparePositions(
+                            spans[0].Position, end.Line) >= 0)
+                        {
+                            writer.Flush();
+                            return;
+                        }
+                        spans = model.GetLineSpans(1);
+                        if (spans.Length == 0)
+                        {
+                            writer.Flush();
+                            return;
+                        }
+                        line = spans[0].Position;
+                        iSpan = 0;
+                    }
+                }
+            }
+            finally
+            {
+                model.MoveToLine(modelPos, 0);
+            }
         }
 
         internal void UpdateScrollbar()
         {
             var frac = model.GetPositionAsFraction();
             this.ignoreScroll = true;
-            vScroll.Value = (int)(Math.BigMul(frac.Item1, model.LineCount) / frac.Item2);
+            vScroll.Value = (int)(Math.BigMul(frac.Item1, vScroll.Maximum) / frac.Item2);
             this.ignoreScroll = false;
+        }
+
+        public void InvalidateModel()
+        {
+            RecomputeLayout();
+            UpdateScrollbar();
+            Invalidate();
         }
     }
 

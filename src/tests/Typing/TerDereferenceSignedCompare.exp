@@ -19,15 +19,15 @@ void proc1()
 proc1_entry:
 	// succ:  l1
 l1:
-	ds2 = ds;
-	ds->f5400 = (ds->*ds->ptr5404).w0004 < 0x0014;
-	(ds2->*ds2->ptr5404).w0004 = 0x0000;
+	ds2 = ds
+	ds->f5400 = (ds->*ds->ptr5404).w0004 < 0x0014
+	(ds2->*ds2->ptr5404).w0004 = 0x0000
 	return
 	// succ:  proc1_exit
 proc1_exit:
 
 // Equivalence classes ////////////
-Eq_1: (struct "Eq_1")
+Eq_1: (struct "Globals")
 	globals_t (in globals : (ptr (struct "Globals")))
 Eq_2: (segment "Eq_2" (5400 bool f5400) (5404 (memptr (ptr Eq_2) Eq_5) ptr5404))
 	T_2 (in ds : selector)
@@ -39,7 +39,7 @@ Eq_5: (struct "Eq_5" (4 ci16 w0004))
 globals_t: (in globals : (ptr (struct "Globals")))
   Class: Eq_1
   DataType: (ptr Eq_1)
-  OrigDataType: (ptr (struct))
+  OrigDataType: (ptr (struct "Globals"))
 T_2: (in ds : selector)
   Class: Eq_2
   DataType: (ptr Eq_2)

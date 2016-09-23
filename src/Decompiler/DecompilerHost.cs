@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,6 +22,8 @@ using Reko.Core.Configuration;
 using Reko.Core;
 using System;
 using System.IO;
+using System.Threading;
+using Reko.Core.Output;
 
 namespace Reko
 {
@@ -30,7 +32,7 @@ namespace Reko
 	/// </summary>
 	public interface DecompilerHost
 	{
-        void WriteDisassembly(Program program, Action<TextWriter> writer);
+        void WriteDisassembly(Program program, Action<Formatter> writer);
         void WriteIntermediateCode(Program program, Action<TextWriter> writer);
         void WriteTypes(Program program, Action<TextWriter> writer);
         void WriteDecompiledCode(Program program, Action<TextWriter> writer);
@@ -46,6 +48,10 @@ namespace Reko
 	{
         public static readonly DecompilerHost Instance = new NullDecompilerHost();
 
+        public NullDecompilerHost()
+        {
+        }
+
 		#region DecompilerHost Members
 
         public IConfigurationService Configuration
@@ -53,9 +59,9 @@ namespace Reko
             get { throw new NotImplementedException(); }
         }
 
-        public void WriteDisassembly(Program program, Action<TextWriter> writer)
+        public void WriteDisassembly(Program program, Action<Formatter> writer)
         {
-            writer(TextWriter.Null);
+            writer(new NullFormatter());
         }
 
         public void WriteIntermediateCode(Program program, Action<TextWriter> writer)
@@ -77,6 +83,7 @@ namespace Reko
         {
             writer(TextWriter.Null);
         }
+
         #endregion
     }
 }

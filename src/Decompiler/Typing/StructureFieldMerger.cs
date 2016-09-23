@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -101,7 +101,6 @@ namespace Reko.Typing
                     null,
                     types.ToArray());
             }
-
         }
 
         private StructureType FindStructureToFitIn(StructureField field,int commonOffset, List<StructureType> types)
@@ -139,7 +138,8 @@ namespace Reko.Typing
                     yield return overlappingFields;
                     overlappingFields = new List<StructureField>();
                 }
-                AddFieldToCluster(new StructureField(field.Offset,  field.DataType,field.Name), overlappingFields);
+                //$REVIEW: what happens if a field has a user-given name?
+                AddFieldToCluster(new StructureField(field.Offset,  field.DataType), overlappingFields);
             }
             if (overlappingFields.Count > 0)
                 yield return overlappingFields;
@@ -153,11 +153,19 @@ namespace Reko.Typing
                 overlappingFields.Add(field);
                 return;
             }
-            UnionType u = (UnionType) eq.DataType;
-            foreach (UnionAlternative alt in u.Alternatives.Values)
+            UnionType u = eq.DataType as UnionType;
+            if (u != null)
             {
-                StructureField f = new StructureField(field.Offset, alt.DataType);
-                overlappingFields.Add(f);
+                foreach (UnionAlternative alt in u.Alternatives.Values)
+                {
+                    StructureField f = new StructureField(field.Offset, alt.DataType);
+                    overlappingFields.Add(f);
+                }
+            }
+            else
+            {
+                overlappingFields.Add(field);
+                return;
             }
         }
 

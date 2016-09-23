@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -59,6 +59,7 @@ namespace Reko.Gui.Windows.Controls
         public ImageMapView ImageMapView { get { return imageMapControl1; } }
         public MemoryControl MemoryView { get { return this.memCtrl; } }
         public DisassemblyControl DisassemblyView { get { return this.dasmCtrl; } }
+        public ByteMapView ByteMapView { get { return this.byteMapView; } }
 
         IButton INavigableControl<Address>.BackButton { get { return btnBackWrapped; } }
         IButton INavigableControl<Address>.ForwardButton { get { return btnFwdWrapped; } }

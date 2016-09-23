@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -45,7 +45,7 @@ namespace Reko.UnitTests.Core
         [SetUp]
         public void Setup()
         {
-            sp = new RegisterStorage("sp", 42, PrimitiveType.Pointer32);
+            sp = new RegisterStorage("sp", 42, 0, PrimitiveType.Pointer32);
             arch = new FakeArchitecture();
             arch.StackRegister = sp;
 
@@ -76,6 +76,7 @@ namespace Reko.UnitTests.Core
         {
             #region IProcessorArchitecture Members
 
+            public string Name { get; set; }
             public string Description { get; set; }
 
             public IEnumerable<MachineInstruction> CreateDisassembler(ImageReader imageReader)
@@ -93,12 +94,7 @@ namespace Reko.UnitTests.Core
                 throw new NotImplementedException();
             }
 
-            public Reko.Core.Lib.BitSet CreateRegisterBitset()
-            {
-                throw new NotImplementedException();
-            }
-
-            public IEnumerable<Address> CreatePointerScanner(ImageMap map, ImageReader rdr, IEnumerable<Address> knownLinAddrs, PointerScannerFlags flags)
+            public IEnumerable<Address> CreatePointerScanner(SegmentMap map, ImageReader rdr, IEnumerable<Address> knownLinAddrs, PointerScannerFlags flags)
             {
                 throw new NotImplementedException();
             }
@@ -113,14 +109,29 @@ namespace Reko.UnitTests.Core
                 throw new NotImplementedException();
             }
 
-            public ImageReader CreateImageReader(LoadedImage image, Address addr)
+            public ImageReader CreateImageReader(MemoryArea image, Address addr)
             {
                 return new LeImageReader(image, addr);
             }
 
-            public ImageReader CreateImageReader(LoadedImage image, ulong offset)
+            public ImageReader CreateImageReader(MemoryArea image, Address addrBegin, Address addrEnd)
+            {
+                return new LeImageReader(image, addrBegin, addrEnd);
+            }
+
+            public ImageReader CreateImageReader(MemoryArea image, ulong offset)
             {
                 return new LeImageReader(image, offset);
+            }
+
+            public ImageWriter CreateImageWriter()
+            {
+                return new LeImageWriter();
+            }
+
+            public ImageWriter CreateImageWriter(MemoryArea mem, Address addr)
+            {
+                return new LeImageWriter(mem, addr);
             }
 
             public ProcedureSerializer CreateProcedureSerializer(ISerializedTypeVisitor<DataType> typeLoader, string defaultCc)
@@ -132,7 +143,6 @@ namespace Reko.UnitTests.Core
             {
                 return null;
             }
-
 
             public RegisterStorage GetRegister(int i)
             {
@@ -213,6 +223,46 @@ namespace Reko.UnitTests.Core
                 return Address.TryParse32(txtAddress, out addr);
             }
 
+            public Address MakeSegmentedAddress(Constant seg, Constant offset)
+            {
+                throw new NotImplementedException();
+            }
+
+            public RegisterStorage GetSubregister(RegisterStorage reg, int offset, int width)
+            {
+                throw new NotImplementedException();
+            }
+
+            public RegisterStorage GetPart(RegisterStorage reg, DataType width)
+            {
+                throw new NotImplementedException();
+            }
+
+            public IEnumerable<RegisterStorage> GetAliases(RegisterStorage reg)
+            {
+                throw new NotImplementedException();
+            }
+
+            public RegisterStorage GetWidestSubregister(RegisterStorage reg, HashSet<RegisterStorage> bits)
+            {
+                throw new NotImplementedException();
+            }
+
+            public void RemoveAliases(ISet<RegisterStorage> ids, RegisterStorage reg)
+            {
+                throw new NotImplementedException();
+            }
+
+            public void LoadUserOptions(Dictionary<string, object> options)
+            {
+                throw new NotImplementedException();
+            }
+
+            public Dictionary<string, object> SaveUserOptions()
+            {
+                throw new NotImplementedException();
+            }
+
             #endregion
         }
 
@@ -259,7 +309,7 @@ namespace Reko.UnitTests.Core
                 throw new NotImplementedException();
             }
 
-            public override void OnProcedureLeft(ProcedureSignature procedureSignature)
+            public override void OnProcedureLeft(FunctionType procedureSignature)
             {
                 throw new NotImplementedException();
             }
@@ -269,9 +319,8 @@ namespace Reko.UnitTests.Core
                 throw new NotImplementedException();
             }
 
-            public override void OnAfterCall(Identifier stackReg, ProcedureSignature sigCallee, ExpressionVisitor<Expression> eval)
+            public override void OnAfterCall(FunctionType sigCallee)
             {
-                throw new NotImplementedException();
             }
 
             #endregion

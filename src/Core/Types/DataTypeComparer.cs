@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,8 +25,8 @@ using System.Diagnostics;
 namespace Reko.Core.Types
 {
 	/// <summary>
-	/// Compares two data types to see if they are equal or
-	/// less than each other.
+	/// Imposes a total ordering of DataTypes and compares two data types to 
+    /// see if they are equal or less than each other.
 	/// </summary>
 	public class DataTypeComparer : IComparer<DataType>, IDataTypeVisitor<int>
 	{
@@ -42,33 +42,54 @@ namespace Reko.Core.Types
         private const int TRef =   9;
         private const int TVar =   10;
 		private const int EqClass= 11;
-        private const int Code = 12;
-		private const int Unk =    13;
-        private const int Void =   14;
+        private const int Code =   12;
+        private const int Ref =    13;
+        private const int Unk =    14;
+        private const int Void =   15;
 
-		public DataTypeComparer()
-		{
-		}
+        private IDictionary<Tuple<DataType, DataType>, int> compareResult;
 
-		public int Compare(DataType x, DataType y)
-		{
-			return Compare(x, y, 0);
-		}
+        public DataTypeComparer()
+        {
+            this.compareResult = new Dictionary<Tuple<DataType, DataType>, int>();
+        }
 
-		/// <summary>
-		/// Implements a partial ordering on data types, where 
-		/// primitives &lt; pointers &lt; arrays &lt; structs &lt; unions
-		/// </summary>
-		/// <remarks>
-		/// </remarks>
-		/// <param name="x"></param>
-		/// <param name="y"></param>
-		/// <returns></returns>
-		public int Compare(DataType x, DataType y, int count)
-		{
-			if (count > 20)
-				throw new ApplicationException("Way too deep");     //$DEBUG
-			int prioX = x.Accept(this);
+        /// <summary>
+        /// Implements a partial ordering on data types, where 
+        /// primitives &lt; pointers &lt; arrays &lt; structs &lt; unions
+        /// </summary>
+        /// <remarks>
+        /// </remarks>
+        /// <param name="x"></param>
+        /// <param name="y"></param>
+        /// <returns></returns>
+        public int Compare(DataType x, DataType y)
+        {
+            return Compare(x, y, 0);
+        }
+
+        public int Compare(DataType x, DataType y, int count)
+        {
+            var typePair = new Tuple<DataType, DataType>(x, y);
+
+            int d;
+
+            // avoid infinite recursion
+            if (compareResult.TryGetValue(typePair, out d))
+                return d;
+
+            compareResult[typePair] = 0;
+            d = CompareInternal(x, y, count);
+            compareResult[typePair] = d;
+
+            return d;
+        }
+
+        public int CompareInternal(DataType x, DataType y, int count)
+        {
+            if (count > 20)
+                throw new ApplicationException("Way too deep");     //$BUG: discover why datatypes recurse so deep.
+            int prioX = x.Accept(this);
 			int prioY = y.Accept(this);
 			int dPrio = prioX - prioY;
 			if (dPrio != 0)
@@ -113,10 +134,7 @@ namespace Reko.Core.Types
             TypeReference tr_y = y as TypeReference;
             if (tr_x != null && tr_y != null)
             {
-                var d = StringComparer.InvariantCulture.Compare(tr_x.Name, tr_y.Name);
-                if (d != 0)
-                    return d;
-                return Compare(tr_x.Referent, tr_y.Referent, ++count);
+                return StringComparer.InvariantCulture.Compare(tr_x.Name, tr_y.Name);
             }
 
 			EquivalenceClass ex = x as EquivalenceClass;
@@ -188,8 +206,8 @@ namespace Reko.Core.Types
 			++count;
             for (int i = 0; i < x.Alternatives.Count; ++i)
             {
-				UnionAlternative ax = x.Alternatives.Values[0];
-                UnionAlternative ay = y.Alternatives.Values[0];
+				UnionAlternative ax = x.Alternatives.Values[i];
+                UnionAlternative ay = y.Alternatives.Values[i];
 				d = Compare(ax.DataType, ay.DataType, count);
 				if (d != 0)
 					return d;
@@ -252,17 +270,17 @@ namespace Reko.Core.Types
 
         public int Compare(FunctionType x, FunctionType y, int count)
         {
-            int d = x.ArgumentTypes.Length - y.ArgumentTypes.Length;
+            int d = x.Parameters.Length - y.Parameters.Length;
             if (d != 0)
                 return d;
             ++count;
-            for (int i = 0; i < x.ArgumentTypes.Length; ++i)
+            for (int i = 0; i < x.Parameters.Length; ++i)
             {
-                d = Compare(x.ArgumentTypes[i], y.ArgumentTypes[i], count);
+                d = Compare(x.Parameters[i].DataType, y.Parameters[i].DataType, count);
                 if (d != 0)
                     return d;
             }
-            return Compare(x.ReturnType, y.ReturnType, count);
+            return Compare(x.ReturnValue.DataType, y.ReturnValue.DataType, count);
         }
 
 		#region IDataTypeVisitor Members /////////////////////////////////////////
@@ -271,6 +289,11 @@ namespace Reko.Core.Types
 		{
 			return Array;
 		}
+
+        public int VisitClass(ClassType ct)
+        {
+            throw new NotImplementedException();
+        }
 
         public int VisitCode(CodeType c)
         {
@@ -316,6 +339,11 @@ namespace Reko.Core.Types
 		{
 			return Ptr;
 		}
+
+        public int VisitReference(ReferenceTo refTo)
+        {
+            return Ref;
+        }
 
         public int VisitTypeReference(TypeReference typeref)
         {

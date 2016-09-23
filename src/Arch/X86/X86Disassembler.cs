@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -32,75 +32,341 @@ namespace Reko.Arch.X86
 	/// <summary>
 	/// Intel x86 opcode disassembler 
 	/// </summary>
-	public partial class X86Disassembler : DisassemblerBase<IntelInstruction>
+	public partial class X86Disassembler : DisassemblerBase<X86Instruction>
 	{
-        private IntelInstruction instrCur;
+        private class X86LegacyCodeRegisterExtension
+        {
+            const byte MAGIC = 0x40;
+            const byte MAGIC_MASK = 0xf0;
+            internal static X86LegacyCodeRegisterExtension Disabled = new X86LegacyCodeRegisterExtension(0);
+            
+            byte val;
+
+            internal X86LegacyCodeRegisterExtension(byte value)
+            {
+                this.val = value;
+            }
+            internal X86LegacyCodeRegisterExtension(byte magic, bool wide, bool modrm_reg, bool sib_idx, bool modrm_rm)
+            {
+                this.ByteValue = (byte)((this.val & 0xf) | ((magic & 0xf) << 4));
+                this.FlagWideValue = wide;
+                this.FlagTargetModrmRegister = modrm_reg;
+                this.FlagTargetSIBIndex = sib_idx;
+                this.FlagTargetModrmRegOrMem = modrm_rm;
+            }
+
+            internal byte ByteValue { get; set; }
+            internal bool IsActive()
+            {
+                return this.val != 0;
+            }
+            internal bool FlagWideValue
+            {
+                get
+                {
+                    return ((this.val & 0x8) == 0x8);
+                }
+                set
+                {
+                    if (value)
+                    {
+                        this.val = (byte)(this.val | 0x8);
+                    }
+                    else
+                    {
+                        this.val = (byte)(this.val & ~0x8);
+                    }
+                }
+            }
+            internal bool FlagTargetModrmRegister
+            {
+                get
+                {
+                    return ((this.val & 0x4) == 0x4);
+                }
+                set
+                {
+                    if (value)
+                    {
+                        this.val = (byte)(this.val | 0x4);
+                    }
+                    else
+                    {
+                        this.val = (byte)(this.val & ~0x4);
+                    }
+                }
+            }
+            internal bool FlagTargetModrmRegOrMem
+            {
+                get
+                {
+                    return ((this.val & 0x1) == 0x1);
+                }
+                set
+                {
+                    if (value)
+                    {
+                        this.val = (byte)(this.val | 0x1);
+                    }
+                    else
+                    {
+                        this.val = (byte)(this.val & ~0x1);
+                    }
+                }
+            }
+            internal bool FlagTargetSIBIndex
+            {
+                get
+                {
+                    return ((this.val & 0x2) == 0x2);
+                }
+                set
+                {
+                    if (value)
+                    {
+                        this.val = (byte)(this.val | 0x2);
+                    }
+                    else
+                    {
+                        this.val = (byte)(this.val & ~0x2);
+                    }
+                }
+            }
+        }
+        private class X86InstructionDecodeInfo
+        {
+            bool isModRegMemActive;
+            byte modRegMemByte;
+
+            bool isSegmentOverrideActive;
+            RegisterStorage segmentOverride;
+
+            bool isRegisterExtensionActive;
+            X86LegacyCodeRegisterExtension registerExtension;
+
+            bool repetitionPrefixF2;
+            bool repetitionPrefixF3;
+
+            bool sizeOverridePrefix;
+
+            internal X86InstructionDecodeInfo()
+            {
+                this.Reset();
+            }
+
+            internal void Reset()
+            {
+                this.isModRegMemActive = false;
+                this.modRegMemByte = 0;
+
+                this.isSegmentOverrideActive = false;
+                this.segmentOverride = RegisterStorage.None;
+
+                // We do not reset isRegisterExtensionPrefixEnabled as that is set by the processor mode
+                this.isRegisterExtensionActive = false;
+                this.registerExtension = X86LegacyCodeRegisterExtension.Disabled;
+
+                this.repetitionPrefixF2 = false;
+                this.repetitionPrefixF3 = false;
+
+                this.sizeOverridePrefix = false;
+            }
+
+            internal bool IsSegmentOverrideActive()
+            {
+                return this.isSegmentOverrideActive;
+            }
+            internal RegisterStorage SegmentOverride
+            {
+                get
+                {
+                    return this.isSegmentOverrideActive ? this.segmentOverride : RegisterStorage.None;
+                }
+                set
+                {
+                    this.isSegmentOverrideActive = true;
+                    this.segmentOverride = value;
+                }
+            }
+
+            internal bool IsRegisterExtensionActive()
+            {
+                return this.isRegisterExtensionActive;
+            }
+            internal X86LegacyCodeRegisterExtension RegisterExtension
+            {
+                get
+                {
+                    return this.registerExtension;
+                }
+            }
+            internal byte RegisterExtensionPrefixByte
+            {
+                get
+                {
+                    return this.isRegisterExtensionActive ? this.registerExtension.ByteValue : (byte)0;
+                }
+                set
+                {
+                    this.isRegisterExtensionActive = true;
+                    this.registerExtension = new X86LegacyCodeRegisterExtension(value);
+                }
+            }
+
+            internal bool IsModRegMemByteActive()
+            {
+                return this.isModRegMemActive;
+            }
+            internal byte ModRegMemByte
+            {
+                get
+                {
+                    if (!this.isModRegMemActive)
+                    {
+                        throw new InvalidOperationException("The modrm byte was accessed without checking for validity. Check the code.");
+                    }
+                    return this.modRegMemByte;
+                }
+                set
+                {
+                    this.isModRegMemActive = true;
+                    this.modRegMemByte = value;
+                }
+            }
+
+            internal bool RepetitionPrefixF2
+            {
+                get
+                {
+                    return this.repetitionPrefixF2;
+                }
+                set
+                {
+                    if (!value)
+                    {
+                        throw new ArgumentException("In what case is it reasonable to not call Reset() instead???");
+                    }
+                    this.repetitionPrefixF2 = value;
+                }
+            }
+            internal bool RepetitionPrefixF3
+            {
+                get
+                {
+                    return this.repetitionPrefixF3;
+                }
+                set
+                {
+                    if (!value)
+                    {
+                        throw new ArgumentException("In what case is it reasonable to not call Reset() instead???");
+                    }
+                    this.repetitionPrefixF3 = value;
+                }
+            }
+            internal bool SizeOverridePrefix
+            {
+                get
+                {
+                    return this.sizeOverridePrefix;
+                }
+                set
+                {
+                    if (!value)
+                    {
+                        throw new ArgumentException("In what case is it reasonable to not call Reset() instead???");
+                    }
+                    this.sizeOverridePrefix = value;
+                }
+            }
+        };
+        
+        private ProcessorMode mode;
+        private X86Instruction instrCur;
 		private PrimitiveType dataWidth;
 		private PrimitiveType addressWidth;
 		private PrimitiveType defaultDataWidth;
 		private PrimitiveType defaultAddressWidth;
-		private byte modrm;
-		private bool isModrmValid;
-		private RegisterStorage segmentOverride;
 		private ImageReader	rdr;
-        private bool useRexPrefix;
-        private byte rexPrefix;
-        private bool dataSizeOverride;
-        private bool f2PrefixSeen;
-        private bool f3PrefixSeen;
+
+        bool isRegisterExtensionEnabled;
+
+        private X86InstructionDecodeInfo currentDecodingContext;
 
 		/// <summary>
-		/// Creates a disassember that uses the specified reader to fetch bytes from the program image.
+		/// Creates a disassembler that uses the specified reader to fetch bytes from the program image.
         /// </summary>
 		/// <param name="width">Default address and data widths. PrimitiveType.Word16 for 
         /// 16-bit operation, PrimitiveType.Word32 for 32-bit operation.</param>
 		public X86Disassembler(
+            ProcessorMode mode,
             ImageReader rdr,
             PrimitiveType defaultWordSize,
             PrimitiveType defaultAddressSize,
             bool useRexPrefix)
 		{
+            this.mode = mode;
 			this.rdr = rdr;
 			this.defaultDataWidth = defaultWordSize;
 			this.defaultAddressWidth = defaultAddressSize;
-            this.useRexPrefix = useRexPrefix;
+            this.isRegisterExtensionEnabled = useRexPrefix;
+            this.currentDecodingContext = new X86InstructionDecodeInfo();
         }
+
+        /// <summary>
+        /// If set, then x86 instruction section
+        /// </summary>
+        public bool Emulate8087 { get; set; }
 
         /// <summary>
         /// Disassembles the current instruction. The address is incremented
         /// to point at the first address after the instruction and returned to the caller.
         /// </summary>
         /// <returns>A single disassembled instruction.</returns>
-        public override IntelInstruction DisassembleInstruction()
+        public override X86Instruction DisassembleInstruction()
         {
             if (!rdr.IsValid)
                 return null;
             var addr = rdr.Address;
-
             dataWidth = defaultDataWidth;
             addressWidth = defaultAddressWidth;
-            isModrmValid = false;
-            rexPrefix = 0;
-            segmentOverride = RegisterStorage.None;
+
+            // Reset the state of the currentInstruction
+            this.currentDecodingContext.Reset();
+
             byte op;
             if (!rdr.TryReadByte(out op))
                 return null;
-            instrCur = s_aOpRec[op].Decode(this, op, "");
+            try
+            {
+                instrCur = s_aOpRec[op].Decode(this, op, "");
+            }
+            catch (Exception ex)
+            {
+                throw new AddressCorrelatedException(addr, ex, "An exception occurred when disassembling x86 code.");
+            }
             if (instrCur == null)
-                return null;
+            {
+                return new X86Instruction(Opcode.illegal, dataWidth, addressWidth) 
+                { Address = addr };
+            }
             instrCur.Address = addr;
             instrCur.Length = (int)(rdr.Address - addr);
             return instrCur;
         }
 
-        private IntelRegister RegFromBitsRexW(int bits, PrimitiveType dataWidth)
+        private RegisterStorage RegFromBitsRexW(int bits, PrimitiveType dataWidth)
         {
-            return GpRegFromBits((bits & 7) | ((rexPrefix & 8)), dataWidth);
+            int reg_bits = bits & 7;
+            reg_bits |= this.currentDecodingContext.RegisterExtension.FlagWideValue ? 8 : 0;
+            return GpRegFromBits(reg_bits, dataWidth);
         }
 
         private RegisterStorage RegFromBitsRexR(int bits, PrimitiveType dataWidth, Func<int, PrimitiveType, RegisterStorage> fnReg)
         {
-            return fnReg((bits & 7) | ((rexPrefix & 4) << 1), dataWidth);
+            int reg_bits = bits & 7;
+            reg_bits |= this.currentDecodingContext.RegisterExtension.FlagTargetModrmRegister ? 8 : 0;
+            return fnReg(reg_bits, dataWidth);
         }
 
         private RegisterStorage MmxRegFromBits(int bits, PrimitiveType dataWidth)
@@ -123,15 +389,19 @@ namespace Reko.Arch.X86
 
         private RegisterStorage RegFromBitsRexX(int bits, PrimitiveType dataWidth, Func<int, PrimitiveType, RegisterStorage> fnReg)
         {
-            return fnReg((bits & 7) | ((rexPrefix & 2) << 2), dataWidth);
+            int reg_bits = bits & 7;
+            reg_bits |= this.currentDecodingContext.RegisterExtension.FlagTargetSIBIndex ? 8 : 0;
+            return fnReg(reg_bits, dataWidth);
         }
 
         private RegisterStorage RegFromBitsRexB(int bits, PrimitiveType dataWidth, Func<int, PrimitiveType, RegisterStorage> fnReg)
         {
-            return fnReg((bits & 7) | ((rexPrefix & 1) << 3), dataWidth);
+            int reg_bits = bits & 7;
+            reg_bits |= this.currentDecodingContext.RegisterExtension.FlagTargetModrmRegOrMem ? 8 : 0;
+            return fnReg(reg_bits, dataWidth);
         }
 
-        private IntelRegister GpRegFromBits(int bits, PrimitiveType dataWidth)
+        private RegisterStorage GpRegFromBits(int bits, PrimitiveType dataWidth)
 		{
             int bitSize = dataWidth.BitSize;
 			switch (bitSize)
@@ -143,10 +413,10 @@ namespace Reko.Arch.X86
 				case 1: return Registers.cl;
 				case 2: return Registers.dl;
 				case 3: return Registers.bl;
-				case 4: return rexPrefix != 0 ? Registers.spl : (IntelRegister) Registers.ah;
-                case 5: return rexPrefix != 0 ? Registers.bpl : (IntelRegister) Registers.ch;
-                case 6: return rexPrefix != 0 ? Registers.sil : (IntelRegister) Registers.dh;
-                case 7: return rexPrefix != 0 ? Registers.dil : (IntelRegister) Registers.bh;
+                case 4: return this.currentDecodingContext.IsRegisterExtensionActive() ? Registers.spl : Registers.ah;
+                case 5: return this.currentDecodingContext.IsRegisterExtensionActive() ? Registers.bpl : Registers.ch;
+                case 6: return this.currentDecodingContext.IsRegisterExtensionActive() ? Registers.sil : Registers.dh;
+                case 7: return this.currentDecodingContext.IsRegisterExtensionActive() ? Registers.dil : Registers.bh;
                 case 8: return Registers.r8b;
                 case 9: return Registers.r9b;
                 case 10: return Registers.r10b;
@@ -248,7 +518,7 @@ namespace Reko.Arch.X86
             throw new NotImplementedException();
         }
 
-		public static IntelRegister SegFromBits(int bits)
+		public static RegisterStorage SegFromBits(int bits)
 		{
 			switch (bits&0x7)
 			{
@@ -278,7 +548,7 @@ namespace Reko.Arch.X86
         /// </summary>
 		public abstract class OpRec
 		{
-            public abstract IntelInstruction Decode(X86Disassembler disasm, byte op, string opFormat);
+            public abstract X86Instruction Decode(X86Disassembler disasm, byte op, string opFormat);
 		}
 
 		/// <summary>
@@ -305,7 +575,7 @@ namespace Reko.Arch.X86
 				Flags = flags;
 			}
 
-			public override IntelInstruction Decode(X86Disassembler disasm, byte op, string opFormat)
+			public override X86Instruction Decode(X86Disassembler disasm, byte op, string opFormat)
 			{
                 return disasm.DecodeOperands(opcode, op, opFormat + format);
 			}
@@ -326,7 +596,7 @@ namespace Reko.Arch.X86
                 this.oprec64 = oprec64;
             }
 
-            public override IntelInstruction Decode(X86Disassembler disasm, byte op, string opFormat)
+            public override X86Instruction Decode(X86Disassembler disasm, byte op, string opFormat)
             {
                 if (disasm.defaultAddressWidth.BitSize == 64)
                     return oprec64.Decode(disasm, op, opFormat);
@@ -342,12 +612,12 @@ namespace Reko.Arch.X86
             {
             }
 
-            public override IntelInstruction Decode(X86Disassembler disasm, byte op, string opFormat)
+            public override X86Instruction Decode(X86Disassembler disasm, byte op, string opFormat)
             {
-                if (disasm.useRexPrefix)
+                if (disasm.isRegisterExtensionEnabled)
                 {
-                    disasm.rexPrefix = op;
-                    if ((op & 8) != 0)
+                    disasm.currentDecodingContext.RegisterExtensionPrefixByte = op;
+                    if (disasm.currentDecodingContext.RegisterExtension.FlagWideValue)
                     {
                         disasm.dataWidth = PrimitiveType.Word64;
                     }
@@ -368,9 +638,9 @@ namespace Reko.Arch.X86
                 this.seg = seg;
 			}
 
-			public override IntelInstruction Decode(X86Disassembler disasm, byte op, string opFormat)
+			public override X86Instruction Decode(X86Disassembler disasm, byte op, string opFormat)
 			{
-                disasm.segmentOverride = SegFromBits(seg);
+                disasm.currentDecodingContext.SegmentOverride = SegFromBits(seg);
                 op = disasm.rdr.ReadByte();
                 return s_aOpRec[op].Decode(disasm, op, opFormat);
 			}
@@ -387,7 +657,7 @@ namespace Reko.Arch.X86
                 this.format = format;
             }
 
-            public override IntelInstruction Decode(X86Disassembler disasm, byte op, string opFormat)
+            public override X86Instruction Decode(X86Disassembler disasm, byte op, string opFormat)
             {
                 int grp = Group - 1;
                 byte modRm;
@@ -412,7 +682,7 @@ namespace Reko.Arch.X86
                 this.regInstrs = regInstrs;
             }
 
-            public override IntelInstruction Decode(X86Disassembler disasm, byte op, string opFormat)
+            public override X86Instruction Decode(X86Disassembler disasm, byte op, string opFormat)
             {
                 byte modRm;
                 if (!disasm.TryEnsureModRM(out modRm))
@@ -426,7 +696,7 @@ namespace Reko.Arch.X86
         
         public class FpuOpRec : OpRec
         {
-            public override IntelInstruction Decode(X86Disassembler disasm, byte op, string opFormat)
+            public override X86Instruction Decode(X86Disassembler disasm, byte op, string opFormat)
             {
                 byte modRM;
                 if (!disasm.TryEnsureModRM(out modRM))
@@ -447,7 +717,7 @@ namespace Reko.Arch.X86
 
         public class TwoByteOpRec : OpRec
         {
-            public override IntelInstruction Decode(X86Disassembler disasm, byte op, string opFormat)
+            public override X86Instruction Decode(X86Disassembler disasm, byte op, string opFormat)
             {
                 op = disasm.rdr.ReadByte();
                 return s_aOpRec0F[op].Decode(disasm, op, "");
@@ -456,7 +726,7 @@ namespace Reko.Arch.X86
 
         public class ThreeByteOpRec : OpRec
         {
-            public override IntelInstruction Decode(X86Disassembler disasm, byte op, string opFormat)
+            public override X86Instruction Decode(X86Disassembler disasm, byte op, string opFormat)
             {
                 switch (op)
                 {
@@ -468,13 +738,14 @@ namespace Reko.Arch.X86
                 }
             }
         }
+
         public class F2ByteOpRec : OpRec
         {
-            public override IntelInstruction Decode(X86Disassembler disasm, byte op, string opFormat)
+            public override X86Instruction Decode(X86Disassembler disasm, byte op, string opFormat)
             {
                 if (disasm.rdr.PeekByte(0) == 0x0F)
                 {
-                    disasm.f2PrefixSeen = true;
+                    disasm.currentDecodingContext.RepetitionPrefixF2 = true;
                     if (!disasm.rdr.TryReadByte(out op))
                         return null;
                     return s_aOpRec[op].Decode(disasm, op, opFormat);
@@ -485,12 +756,12 @@ namespace Reko.Arch.X86
 
         public class F3ByteOpRec : OpRec
         {
-            public override IntelInstruction Decode(X86Disassembler disasm, byte op, string opFormat)
+            public override X86Instruction Decode(X86Disassembler disasm, byte op, string opFormat)
             {
                 byte b = disasm.rdr.PeekByte(0);
                 if (b == 0x0F)
                 {
-                    disasm.f3PrefixSeen = true;
+                    disasm.currentDecodingContext.RepetitionPrefixF3 = true;
                     if (!disasm.rdr.TryReadByte(out op))
                         return null;
                     return s_aOpRec[op].Decode(disasm, op, opFormat);
@@ -506,9 +777,9 @@ namespace Reko.Arch.X86
 
         public class ChangeDataWidth : OpRec
         {
-            public override IntelInstruction Decode(X86Disassembler disasm, byte op, string opFormat)
+            public override X86Instruction Decode(X86Disassembler disasm, byte op, string opFormat)
             {
-                disasm.dataSizeOverride = true;
+                disasm.currentDecodingContext.SizeOverridePrefix = true;
                 disasm.dataWidth = (disasm.dataWidth == PrimitiveType.Word16)
                         ? PrimitiveType.Word32
                         : PrimitiveType.Word16;
@@ -519,7 +790,7 @@ namespace Reko.Arch.X86
 
         public class ChangeAddressWidth : OpRec
         {
-            public override IntelInstruction Decode(X86Disassembler disasm, byte op, string opFormat)
+            public override X86Instruction Decode(X86Disassembler disasm, byte op, string opFormat)
             {
                 disasm.addressWidth = (disasm.addressWidth == PrimitiveType.Word16)
                         ? PrimitiveType.Word32
@@ -584,26 +855,48 @@ namespace Reko.Arch.X86
                 this.opF2Fmt = null;
             }
 
-            public override IntelInstruction Decode(X86Disassembler disasm, byte op, string opFormat)
+            public override X86Instruction Decode(X86Disassembler disasm, byte op, string opFormat)
             {
-                if (disasm.f2PrefixSeen)
+                if (disasm.currentDecodingContext.RepetitionPrefixF2)
                     return disasm.DecodeOperands(this.opF2, op, opF2Fmt);
-                else if (disasm.f3PrefixSeen)
+                else if (disasm.currentDecodingContext.RepetitionPrefixF3)
                     return disasm.DecodeOperands(this.opF3, op, opF3Fmt);
-                else if (disasm.dataSizeOverride)
+                else if (disasm.currentDecodingContext.SizeOverridePrefix)
                 {
-                    if (disasm.useRexPrefix && (disasm.rexPrefix & 8) != 0)
+                    if (disasm.isRegisterExtensionEnabled && disasm.currentDecodingContext.RegisterExtension.FlagWideValue)
                         return disasm.DecodeOperands(this.op66Wide, op, op66Fmt);
                     else
                         return disasm.DecodeOperands(this.op66, op, op66Fmt);
                 }
                 else
                 {
-                    if (disasm.useRexPrefix && (disasm.rexPrefix & 8) != 0)
+                    if (disasm.isRegisterExtensionEnabled && disasm.currentDecodingContext.RegisterExtension.FlagWideValue)
                         return disasm.DecodeOperands(this.opWide, op, opFmt);
                     else
                         return disasm.DecodeOperands(this.op, op, opFmt);
                 }
+            }
+        }
+
+        public class InterruptOpRec : SingleByteOpRec
+        {
+            public InterruptOpRec(Opcode op, string fmt) : base(op, fmt)
+            {
+            }
+
+            public override X86Instruction Decode(X86Disassembler disasm, byte op, string opFormat)
+            {
+                var instr = base.Decode(disasm, op, opFormat);
+                if (disasm.Emulate8087)
+                {
+                    var imm = (ImmediateOperand)instr.op1;
+                    var vector = imm.Value.ToByte();
+                    if (disasm.IsEmulated8087Vector(vector))
+                    {
+                        return disasm.RewriteEmulated8087Instruction(vector);
+                    }
+                }
+                return instr;
             }
         }
 
@@ -613,20 +906,21 @@ namespace Reko.Arch.X86
 		/// <returns></returns>
 		private bool TryEnsureModRM(out byte modRm)
 		{
-            if (!isModrmValid)
+            if (!this.currentDecodingContext.IsModRegMemByteActive())
             {
-                if (!rdr.TryReadByte(out this.modrm))
+                byte modrm = 0;
+                if (!rdr.TryReadByte(out modrm))
                 {
                     modRm = 0;
                     return false;
                 }
-                isModrmValid = true;
+                this.currentDecodingContext.ModRegMemByte = modrm;
             }
-            modRm = this.modrm;
+            modRm = this.currentDecodingContext.ModRegMemByte;
             return true;
 		}
 
-        private IntelInstruction DecodeOperands(Opcode opcode, byte op, string strFormat)
+        private X86Instruction DecodeOperands(Opcode opcode, byte op, string strFormat)
         {
             MachineOperand pOperand;
             PrimitiveType width = null;
@@ -643,8 +937,6 @@ namespace Reko.Arch.X86
                 ImmediateOperand immOp;
                 MemoryOperand memOp;
                 X86AddressOperand addrOp;
-                int offset;
-
                 char chFmt = strFormat[i++];
                 switch (chFmt)
                 {
@@ -658,15 +950,22 @@ namespace Reko.Arch.X86
                     ++i;
                     ushort off = rdr.ReadLeUInt16();
                     ushort seg = rdr.ReadLeUInt16();
-                    pOperand = addrOp = new X86AddressOperand(Address.SegPtr(seg, off));
+                    var addr = mode.CreateSegmentedAddress(seg, off);
+                    if (addr == null)
+                        return null;
+                    pOperand = addrOp = new X86AddressOperand(addr);
                     break;
                 case 'E':		// memory or register operand specified by mod & r/m fields.
                     width = OperandWidth(strFormat[i++]);
-                    pOperand = DecodeModRM(width, segmentOverride, GpRegFromBits);
+                    pOperand = DecodeModRM(width, this.currentDecodingContext.SegmentOverride, GpRegFromBits);
+                    if (pOperand == null)
+                        return null;
                     break;
                 case 'Q':		// memory or register MMX operand specified by mod & r/m fields.
                     width = OperandWidth(strFormat[i++]);
-                    pOperand = DecodeModRM(width, segmentOverride, MmxRegFromBits);
+                    pOperand = DecodeModRM(width, this.currentDecodingContext.SegmentOverride, MmxRegFromBits);
+                    if (pOperand == null)
+                        return null;
                     break;
                 case 'G':		// register operand specified by the reg field of the modRM byte.
                     width = OperandWidth(strFormat[i++]);
@@ -691,11 +990,13 @@ namespace Reko.Arch.X86
                     }
                     ++i;
                     pOperand = CreateImmediateOperand(width, dataWidth);
+                    if (pOperand == null)
+                        return null;
                     break;
                 case 'J':		// Relative ("near") jump.
                     width = OperandWidth(strFormat[i++]);
-                    offset = rdr.ReadLeSigned(width);
-                    ulong uAddr = (ulong) ((long)rdr.Address.Offset + (long)offset);
+                    long jOffset = rdr.ReadLeSigned(width);
+                    ulong uAddr = (ulong) ((long)rdr.Address.Offset + jOffset);
                     if (defaultAddressWidth.BitSize == 64)      //$REVIEW: not too keen on the switch statement here.
                         pOperand = AddressOperand.Ptr64(uAddr);
                     else if (defaultAddressWidth.BitSize == 32)
@@ -705,12 +1006,14 @@ namespace Reko.Arch.X86
                     break;
                 case 'M':		// modRM may only refer to memory.
                     width = OperandWidth(strFormat[i++]);
-                    pOperand = DecodeModRM(dataWidth, segmentOverride, GpRegFromBits);
+                    pOperand = DecodeModRM(dataWidth, this.currentDecodingContext.SegmentOverride, GpRegFromBits);
+                    if (pOperand is RegisterOperand)
+                        return null;
                     break;
                 case 'O':		// Offset of the operand is encoded directly after the opcode.
                     width = OperandWidth(strFormat[i++]);
                     pOperand = memOp = new MemoryOperand(width, rdr.ReadLe(addressWidth));
-                    memOp.SegOverride = segmentOverride;
+                    memOp.SegOverride = this.currentDecodingContext.SegmentOverride;
                     break;
                 case 'S':		// Segment register encoded by reg field of modRM byte.
                     ++i;        // Skip over the 'w'.
@@ -726,7 +1029,7 @@ namespace Reko.Arch.X86
                     break;
                 case 'W':		// memory or XMM operand specified by mod & r/m fields.
                     width = SseOperandWidth(strFormat, ref i);
-                    pOperand = DecodeModRM(width, segmentOverride, XmmRegFromBits);
+                    pOperand = DecodeModRM(width, this.currentDecodingContext.SegmentOverride, XmmRegFromBits);
                     break;
                 case 'a':		// Implicit use of accumulator.
                     pOperand = new RegisterOperand(RegFromBitsRexW(0, OperandWidth(strFormat[i++])));
@@ -765,7 +1068,7 @@ namespace Reko.Arch.X86
                     ops.Add(pOperand);
                 }
             }
-            return new IntelInstruction(opcode, iWidth, addressWidth, ops.ToArray());
+            return new X86Instruction(opcode, iWidth, addressWidth, ops.ToArray());
         }
 
 		/// <summary>
@@ -809,7 +1112,7 @@ namespace Reko.Arch.X86
                 dataWidth = PrimitiveType.Word64;
                 break;
             case 'y':
-                dataWidth = (useRexPrefix && (rexPrefix & 8) != 0) ? PrimitiveType.Word64: PrimitiveType.Word32;
+                dataWidth = (this.isRegisterExtensionEnabled && this.currentDecodingContext.RegisterExtension.FlagWideValue) ? PrimitiveType.Word64: PrimitiveType.Word32;
                 break;
             case 'z':
                 dataWidth = this.dataWidth.BitSize == 64 ? PrimitiveType.Int32 : this.dataWidth;
@@ -835,14 +1138,14 @@ namespace Reko.Arch.X86
                     ? PrimitiveType.Word128
                     : PrimitiveType.Word256;
             case 'y':
-                return dataSizeOverride
+                return this.currentDecodingContext.SizeOverridePrefix
                     ? PrimitiveType.Word128
                     : PrimitiveType.Word64;
             default: throw new NotImplementedException(string.Format("Unknown operand width {0}", fmt[i-1]));
             }
         }
 
-		private static IntelRegister [] s_ma16Base = 
+		private static RegisterStorage [] s_ma16Base = 
 		{
 			Registers.bx,
 			Registers.bx,
@@ -868,7 +1171,10 @@ namespace Reko.Arch.X86
 
 		public ImmediateOperand CreateImmediateOperand(PrimitiveType immWidth, PrimitiveType instrWidth)
 		{
-			return new ImmediateOperand(rdr.ReadLe(immWidth));
+            Constant c;
+            if (!rdr.TryReadLe(immWidth, out c))
+                return null;
+			return new ImmediateOperand(c);
 		}
 
 		private MachineOperand DecodeModRM(PrimitiveType dataWidth, RegisterStorage segOverride, Func<int, PrimitiveType, RegisterStorage> regFn)
@@ -877,8 +1183,8 @@ namespace Reko.Arch.X86
             if (!TryEnsureModRM(out modRm))
                 return null;
 
-			int  rm = this.modrm & 0x07;
-			int  mod = this.modrm >> 6;
+			int  rm = this.currentDecodingContext.ModRegMemByte & 0x07;
+			int  mod = this.currentDecodingContext.ModRegMemByte >> 6;
 
 			RegisterStorage b;
             RegisterStorage idx;
@@ -957,10 +1263,12 @@ namespace Reko.Arch.X86
 
 				if (rm == 0x04)
 				{
-					// We have SIB'ness, your majesty!
+                    // We have SIB'ness, your majesty!
 
-					byte sib = rdr.ReadByte();
-					if (((this.modrm & 0xC0) == 0) && ((sib & 0x7) == 5))
+                    byte sib;
+                    if (!rdr.TryReadByte(out sib))
+                        return null;
+					if (((this.currentDecodingContext.ModRegMemByte & 0xC0) == 0) && ((sib & 0x7) == 5))
 					{
 						offsetWidth = PrimitiveType.Word32;
 						b = RegisterStorage.None;
@@ -976,11 +1284,19 @@ namespace Reko.Arch.X86
 				}
 			}
 
-			// Now fetch the offset if there was any.
+            // Now fetch the offset if there was any.
 
-			Constant offset = (offsetWidth != null)
-			    ? rdr.ReadLe(offsetWidth)
-			    : Constant.Invalid;
+            Constant offset;
+            if (offsetWidth != null)
+            {
+                if (!rdr.IsValidOffset(rdr.Offset + (uint)offsetWidth.Size -1))
+                    return null;
+                offset = rdr.ReadLe(offsetWidth);
+            }
+            else
+            {
+                offset = Constant.Invalid;
+            }
 
             return new MemoryOperand(dataWidth, offset)
             {

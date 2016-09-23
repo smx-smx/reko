@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -43,9 +43,9 @@ namespace Reko.UnitTests.Arch.Intel
         }
 
         [Test]
-        public void OnBeforeCall_DecrementStackRegister()
+        public void X86St_OnBeforeCall_DecrementStackRegister()
         {
-            var arch = new IntelArchitecture(ProcessorMode.Protected32);
+            var arch = new X86ArchitectureFlat32();
             var state = new X86State(arch);
             var esp = CreateId(Registers.esp);
             state.SetRegister(Registers.esp, Constant.Word32(-4));
@@ -56,30 +56,9 @@ namespace Reko.UnitTests.Arch.Intel
         }
 
         [Test]
-        public void StackUnderflow_ReportError()
+        public void X86St_Simple()
         {
-            var arch = new IntelArchitecture(ProcessorMode.Protected32);
-            string reportedError = null;
-            var state = new X86State(arch)
-            {
-                ErrorListener = (err) => { reportedError = err; }
-            };
-            state.OnProcedureEntered();
-            state.SetRegister(Registers.esp, Constant.Word32(-4)); // Push only 4 bytes
-            var esp = CreateId(Registers.esp);
-            var site = state.OnBeforeCall(esp, 4);
-            state.OnAfterCall(esp, new ProcedureSignature
-            {
-                StackDelta = 16,                        // ...but pop 16 bytes
-            },
-            new Reko.Evaluation.ExpressionSimplifier(state)); //$TODO: hm. Move simplification out of state.
-            Assert.IsNotNull(reportedError);
-        }
-
-        [Test]
-        public void Simple()
-        {
-            var arch = new IntelArchitecture(ProcessorMode.Real);
+            var arch = new X86ArchitectureReal();
 
             X86State st = new X86State(arch);
             st.SetRegister(Registers.cs, Constant.Word16(0xC00));
@@ -93,12 +72,94 @@ namespace Reko.UnitTests.Arch.Intel
         }
 
         [Test]
-        public void AreEqual()
+        public void X86St_SetAhRegisterFileValue()
         {
-            var arch = new IntelArchitecture(ProcessorMode.Real);
-            X86State st1 = new X86State(arch);
-            X86State st2 = new X86State(arch);
-            Assert.IsTrue(st1.HasSameValues(st2));
+            var state = new X86State(new X86ArchitectureFlat64());
+            state.SetRegister(Registers.ah, Constant.Byte(0x3A));
+            Assert.IsFalse(state.IsValid(Registers.ax));
+            Assert.IsTrue(state.IsValid(Registers.ah));
         }
+
+        [Test]
+        public void X86St_SetAhThenAl()
+        {
+            var state = new X86State(new X86ArchitectureFlat64());
+            state.SetRegister(Registers.ah, Constant.Byte(0x12));
+            state.SetRegister(Registers.al, Constant.Byte(0x34));
+            Assert.IsTrue(state.IsValid(Registers.ax));
+            Assert.IsTrue(state.IsValid(Registers.al));
+            Assert.IsTrue(state.IsValid(Registers.ah));
+        }
+
+        [Test]
+        public void X86St_SetBp()
+        {
+            var state = new X86State(new X86ArchitectureFlat64());
+            state.SetRegister(Registers.bp, Constant.Word16(0x1234));
+            Assert.IsFalse(state.IsValid(Registers.ebp));
+            Assert.IsTrue(state.IsValid(Registers.bp));
+        }
+
+        [Test]
+        public void X86St_SetCx()
+        {
+            var state = new X86State(new X86ArchitectureFlat64());
+            state.SetRegister(Registers.cx, Constant.Word16(0x1234));
+            Assert.AreEqual(0x1234, (int)state.GetRegister(Registers.cx).ToUInt16());
+            Assert.AreEqual(0x34, (int)state.GetRegister(Registers.cl).ToByte());
+            Assert.AreEqual(0x12, (int)state.GetRegister(Registers.ch).ToByte());
+            Assert.IsTrue(state.IsValid(Registers.cx));
+            Assert.IsTrue(state.IsValid(Registers.cl));
+            Assert.IsTrue(state.IsValid(Registers.ch));
+        }
+
+        [Test]
+        public void X86St_SetEsi()
+        {
+            var state = new X86State(new X86ArchitectureFlat64());
+            state.SetRegister(Registers.esi, Constant.Word32(0x12345678));
+            Assert.AreEqual(0x12345678, (long)state.GetRegister(Registers.esi).ToUInt64());
+            Assert.AreEqual(0x5678, (int)state.GetRegister(Registers.si).ToUInt32());
+        }
+
+        [Test]
+        public void X86St_SetEdx()
+        {
+            var state = new X86State(new X86ArchitectureFlat64());
+            state.SetRegister(Registers.edx, Constant.Word32(0x12345678));
+            Assert.AreEqual(0x12345678, (long)state.GetRegister(Registers.edx).ToUInt64());
+            Assert.AreEqual(0x5678, (int)state.GetRegister(Registers.dx).ToUInt32());
+            Assert.AreEqual(0x78, (int)state.GetRegister(Registers.dl).ToUInt32());
+            Assert.AreEqual(0x56, (int)state.GetRegister(Registers.dh).ToUInt32());
+        }
+
+        [Test]
+        public void X86St_SetCxSymbolic_Invalid()
+        {
+            var ctx = new Dictionary<Storage, Expression> {
+                { Registers.cl, Constant.Byte(0) }
+            };
+            var state = new X86State(new X86ArchitectureFlat64());
+            state.SetRegister(Registers.cx, Constant.Invalid);
+            Assert.IsFalse(state.IsValid(Registers.cx));
+            Assert.IsFalse(state.IsValid(Registers.cl));
+            Assert.IsFalse(state.IsValid(Registers.ch));
+            Assert.IsFalse(state.IsValid(Registers.ecx));
+        }
+
+        [Test]
+        public void X86St_SetDhSymbolic_Invalid()
+        {
+            var ctx = new Dictionary<Storage, Expression> {
+                { Registers.dl, Constant.Byte(3) }
+            };
+            var state = new X86State(new X86ArchitectureFlat64());
+            state.SetRegister(Registers.dh, Constant.Invalid);
+            Assert.IsFalse(state.IsValid(Registers.dh));
+            Assert.IsFalse(state.IsValid(Registers.dx));
+            Assert.IsFalse(state.IsValid(Registers.edx));
+            Assert.AreEqual("0x03", ctx[Registers.dl].ToString());
+        }
+
     }
 }

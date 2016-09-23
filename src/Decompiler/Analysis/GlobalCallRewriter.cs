@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,9 +18,10 @@
  */
 #endregion
 
+using Reko.Core.Services;
 using System;
 using System.Collections.Generic;
-using BitSet = Reko.Core.Lib.BitSet;
+using System.Linq;
 using CallRewriter = Reko.Core.CallRewriter;
 using FpuStackStorage = Reko.Core.FpuStackStorage;
 using Frame = Reko.Core.Frame;
@@ -30,26 +31,26 @@ using PrimtiveType = Reko.Core.Types.PrimitiveType;
 using Procedure = Reko.Core.Procedure;
 using Program = Reko.Core.Program;
 using RegisterStorage = Reko.Core.RegisterStorage;
-using ReturnInstruction = Reko.Core.Code.ReturnInstruction;
 using SignatureBuilder = Reko.Core.SignatureBuilder;
-using StackArgumentStorage= Reko.Core.StackArgumentStorage;
-using Statement = Reko.Core.Statement;
+using StackArgumentStorage = Reko.Core.StackArgumentStorage;
 using UseInstruction = Reko.Core.Code.UseInstruction;
 
 namespace Reko.Analysis
 {
 	/// <summary>
-	/// Rewrites a program, based on summary live-in and live-out information, so that all
-	/// CALL codes are converted into procedure calls, with the appropriate parameter lists.
+	/// Rewrites a program, based on summary live-in and live-out
+    /// information, so that all CALL codes are converted into procedure 
+    /// calls, with the appropriate parameter lists.
 	/// </summary>
 	/// <remarks>
-	/// Call Rewriting should take place before SSA conversion and dead code removal.
+	/// Call Rewriting should take place before SSA conversion and dead 
+    /// code removal.
 	/// </remarks>
 	public class GlobalCallRewriter : CallRewriter
 	{
 		private ProgramDataFlow mpprocflow;
 
-		public GlobalCallRewriter(Program prog, ProgramDataFlow mpprocflow) : base(prog)
+		public GlobalCallRewriter(Program program, ProgramDataFlow mpprocflow, DecompilerEventListener eventListener) : base(program, eventListener)
 		{
 			this.mpprocflow = mpprocflow;
 		}
@@ -98,51 +99,38 @@ namespace Reko.Analysis
 		private void AdjustLiveOut(ProcedureFlow flow)
 		{
 			flow.grfLiveOut &= flow.grfTrashed;
-			flow.LiveOut &= flow.TrashedRegisters;
+			flow.LiveOut.IntersectWith(flow.TrashedRegisters);
 		}
 
-		public static void Rewrite(Program prog, ProgramDataFlow summaries)
+		public static void Rewrite(
+            Program program, 
+            ProgramDataFlow summaries,
+            DecompilerEventListener eventListener)
 		{
-			GlobalCallRewriter crw = new GlobalCallRewriter(prog, summaries);
-			foreach (Procedure proc in prog.Procedures.Values)
+			GlobalCallRewriter crw = new GlobalCallRewriter(program, summaries, eventListener);
+			foreach (Procedure proc in program.Procedures.Values)
 			{
-				ProcedureFlow flow = (ProcedureFlow) crw.mpprocflow[proc];
-                flow.Dump(prog.Architecture);
+                if (eventListener.IsCanceled())
+                    return;
+				ProcedureFlow flow = crw.mpprocflow[proc];
+                flow.Dump(program.Architecture);
 				crw.AdjustLiveOut(flow);
 				crw.EnsureSignature(proc, flow);
 				crw.AddUseInstructionsForOutArguments(proc);
 			}
 
-			foreach (Procedure proc in prog.Procedures.Values)
+			foreach (Procedure proc in program.Procedures.Values)
 			{
-				crw.RewriteCalls(proc, prog.Architecture);
+                if (eventListener.IsCanceled())
+                    return;
+                crw.RewriteCalls(proc);
 				crw.RewriteReturns(proc);
 			}
 		}
 
-
 		/// <summary>
-		/// Having identified the return variable -- if any, rewrite all 
-		/// return statements to return that variable.
-		/// </summary>
-		/// <param name="proc"></param>
-        private void RewriteReturns(Procedure proc)
-        {
-            Identifier idRet = proc.Signature.ReturnValue;
-            if (idRet == null)
-                return;
-            foreach (Statement stm in proc.Statements)
-            {
-                var ret = stm.Instruction as ReturnInstruction;
-                if (ret != null)
-                {
-                    ret.Expression = idRet;
-                }
-            }
-        }
-
-		/// <summary>
-		/// Creates a signature for this procedure, and ensures that all registers accessed by the procedure are in the procedure
+		/// Creates a signature for this procedure, and ensures that all 
+        /// registers accessed by the procedure are in the procedure
 		/// Frame.
 		/// </summary>
 		public void EnsureSignature(Procedure proc, ProcedureFlow flow)
@@ -150,20 +138,21 @@ namespace Reko.Analysis
 			if (proc.Signature != null && proc.Signature.ParametersValid)
 				return;
 
-			SignatureBuilder sb = new SignatureBuilder(proc, Program.Architecture);
-			Frame frame = proc.Frame;
+			var sb = new SignatureBuilder(proc, Program.Architecture);
+			var frame = proc.Frame;
 			if (flow.grfLiveOut != 0)
 			{
 				sb.AddFlagGroupReturnValue(flow.grfLiveOut, frame);
 			}
 
             var implicitRegs = Program.Platform.CreateImplicitArgumentRegisters();
-            BitSet mayUse = flow.MayUse - implicitRegs;
-			foreach (int r in mayUse)
+            var mayUse = new HashSet<RegisterStorage>(flow.MayUse);
+            mayUse.ExceptWith(implicitRegs);
+			foreach (var reg in mayUse.OrderBy(r => r.Number))
 			{
-				if (!IsSubRegisterOfRegisters(r, mayUse))
+				if (!IsSubRegisterOfRegisters(reg, mayUse))
 				{
-					sb.AddRegisterArgument(r);
+					sb.AddRegisterArgument(reg);
 				}
 			}
 
@@ -177,12 +166,13 @@ namespace Reko.Analysis
 				sb.AddFpuStackArgument(de.Key, de.Value);
 			}
 
-            BitSet liveOut = flow.LiveOut - implicitRegs;
-			foreach (int r in liveOut)
+            var liveOut = new HashSet<RegisterStorage>(flow.LiveOut);
+            liveOut.ExceptWith(implicitRegs);
+			foreach (var r in liveOut.OrderBy(r => r.Number))
 			{
 				if (!IsSubRegisterOfRegisters(r, liveOut))
 				{
-					sb.AddArgument(frame.EnsureRegister(Program.Architecture.GetRegister(r)), true);
+					sb.AddOutParam(frame.EnsureRegister(r));
 				}
 			}
 
@@ -191,7 +181,7 @@ namespace Reko.Analysis
 				int i = de.Key;
 				if (i <= proc.Signature.FpuStackOutArgumentMax)
 				{
-					sb.AddArgument(frame.EnsureFpuStackVariable(i, de.Value.DataType), true);
+					sb.AddOutParam(frame.EnsureFpuStackVariable(i, de.Value.DataType));
 				}
 			}
 
@@ -242,14 +232,11 @@ namespace Reko.Analysis
 		/// <param name="r"></param>
 		/// <param name="regs"></param>
 		/// <returns></returns>
-		private bool IsSubRegisterOfRegisters(int r, BitSet regs)
+		private bool IsSubRegisterOfRegisters(RegisterStorage rr, HashSet<RegisterStorage> regs)
 		{
-            var rr = Program.Architecture.GetRegister(r);
-            if (rr == null)
-                return false;
-			foreach (int r2 in regs)
+			foreach (var r2 in regs)
 			{
-				if (rr.IsSubRegisterOf(Program.Architecture.GetRegister(r2)))
+				if (rr.IsSubRegisterOf(r2))
 					return true;
 			}
 			return false;

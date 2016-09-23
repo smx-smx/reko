@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,6 +30,7 @@ using System.Windows.Forms;
 namespace Reko.UnitTests.Gui.Windows
 {
     [TestFixture]
+    [Category(Categories.UserInterface)]
     public class DisassemblyViewInteractorTests
     {
         private DisassemblyViewInteractor interactor;
@@ -91,7 +92,6 @@ namespace Reko.UnitTests.Gui.Windows
         public void DviSupportMarkProcedure()
         {
             var status = new CommandStatus();
-            var text = new CommandText();
             var ret = interactor.QueryStatus(new CommandID(CmdSets.GuidReko, CmdIds.ActionMarkProcedure), status, null);
             Assert.IsTrue(ret);
             Assert.AreEqual(MenuStatus.Enabled | MenuStatus.Visible, status.Status);

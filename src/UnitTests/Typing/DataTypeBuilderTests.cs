@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -42,7 +42,7 @@ namespace Reko.UnitTests.Typing
         private EquivalenceClassBuilder eqb;
         private DataTypeBuilder dtb;
         private FakeArchitecture arch;
-        private Program prog;
+        private Program program;
 
         [SetUp]
         public void SetUp()
@@ -52,17 +52,17 @@ namespace Reko.UnitTests.Typing
             aen = new ExpressionNormalizer(PrimitiveType.Pointer32);
             eqb = new EquivalenceClassBuilder(factory, store);
             arch = new FakeArchitecture();
-            prog = new Program();
-            prog.Architecture = arch;
-            prog.Platform = new DefaultPlatform(null, arch);
-            dtb = new DataTypeBuilder(factory, store, prog.Platform);
+            program = new Program();
+            program.Architecture = arch;
+            program.Platform = new DefaultPlatform(null, arch);
+            dtb = new DataTypeBuilder(factory, store, program.Platform);
         }
 
         protected override void RunTest(Program prog, string outputFile)
         {
             aen.Transform(prog);
             eqb.Build(prog);
-            TypeCollector trco = new TypeCollector(factory, store, prog);
+            TypeCollector trco = new TypeCollector(factory, store, prog, new FakeDecompilerEventListener());
             trco.CollectTypes();
             dtb.BuildEquivalenceClassDataTypes();
             Verify(prog, outputFile);
@@ -105,7 +105,6 @@ namespace Reko.UnitTests.Typing
             {
                 Identifier i = Local32("i");
                 Identifier r = Local32("r");
-                Identifier r2 = Local16("r2");
                 Store(IAdd(IAdd(r, 20), SMul(i, 10)), 0);
                 Return(Load(PrimitiveType.Word16,
                     IAdd(IAdd(r, 16), SMul(i, 10))));
@@ -113,7 +112,6 @@ namespace Reko.UnitTests.Typing
         }
 
         [Test]
-        [Ignore("scanning-development")]
         public void DtbArrayLoopMock()
         {
             var pb = new Mocks.ProgramBuilder();
@@ -176,24 +174,15 @@ namespace Reko.UnitTests.Typing
             Expression e = m.Array(PrimitiveType.Word32, m.Seq(ds, m.Word16(0x300)), m.IMul(bx, 8));
             e.Accept(eqb);
 
-            TraitCollector coll = new TraitCollector(factory, store, dtb, prog);
+            TraitCollector coll = new TraitCollector(factory, store, dtb, program);
             e.Accept(coll);
             Verify("Typing/DtbArrayAccess2.txt");
         }
 
         [Test]
-        [Ignore("Frame pointers require escape and alias analysis.")]
-        public void DtbFramePointer()
-        {
-            ProgramBuilder mock = new ProgramBuilder();
-            mock.Add(new FramePointerFragment(factory));
-            RunTest(mock, "Typing/DtbFramePointer.txt");
-            throw new NotImplementedException();
-        }
-
-        [Test]
         public void DtbFnPointerMock()
         {
+            //$TODO: find out where pfn_0 is comingfrom.
             ProgramBuilder mock = new ProgramBuilder();
             mock.Add(new FnPointerFragment());
             RunTest(mock, "Typing/DtbFnPointerMock.txt");
@@ -220,7 +209,7 @@ namespace Reko.UnitTests.Typing
             ass1.Accept(eqb);
             ass2.Accept(eqb);
             ass3.Accept(eqb);
-            TraitCollector trco = new TraitCollector(factory, store, dtb, prog);
+            TraitCollector trco = new TraitCollector(factory, store, dtb, program);
             trco.VisitAssignment(ass1);
             trco.VisitAssignment(ass2);
             trco.VisitAssignment(ass3);
@@ -238,7 +227,7 @@ namespace Reko.UnitTests.Typing
             Assignment ass2 = new Assignment(x, MemLoad(pfoo, 4, PrimitiveType.Word32));
             ass1.Accept(eqb);
             ass2.Accept(eqb);
-            TraitCollector trco = new TraitCollector(factory, store, dtb, prog);
+            TraitCollector trco = new TraitCollector(factory, store, dtb, program);
             trco.VisitAssignment(ass1);
             trco.VisitAssignment(ass2);
             dtb.BuildEquivalenceClassDataTypes();
@@ -256,7 +245,7 @@ namespace Reko.UnitTests.Typing
             Assignment ass2 = new Assignment(baz, MemLoad(foo, 4, PrimitiveType.Word16));
             ass1.Accept(eqb);
             ass2.Accept(eqb);
-            TraitCollector trco = new TraitCollector(factory, store, dtb, prog);
+            TraitCollector trco = new TraitCollector(factory, store, dtb, program);
             trco.VisitAssignment(ass1);
             trco.VisitAssignment(ass2);
             dtb.BuildEquivalenceClassDataTypes();
@@ -286,15 +275,15 @@ namespace Reko.UnitTests.Typing
                 Constant.Word32(0x0010040),
                 false);
 
-            prog.InductionVariables.Add(i, iv);
-            prog.InductionVariables.Add(i2, iv2);
-            prog.Platform = new DefaultPlatform(null, arch);
-            TraitCollector trco = new TraitCollector(factory, store, dtb, prog);
+            program.InductionVariables.Add(i, iv);
+            program.InductionVariables.Add(i2, iv2);
+            program.Platform = new DefaultPlatform(null, arch);
+            TraitCollector trco = new TraitCollector(factory, store, dtb, program);
 
-            prog.Globals.Accept(eqb);
+            program.Globals.Accept(eqb);
             load.Accept(eqb);
             ld2.Accept(eqb);
-            prog.Globals.Accept(trco);
+            program.Globals.Accept(trco);
             load.Accept(trco);
             ld2.Accept(trco);
             dtb.BuildEquivalenceClassDataTypes();
@@ -422,6 +411,7 @@ namespace Reko.UnitTests.Typing
         }
 
         [Test]
+        [Ignore("Re-enable when new SSA is in place")]
         public void DtbReg00012()
         {
             RunTest16("Fragments/regressions/r00012.asm", "Typing/DtbReg00012.txt");
@@ -458,7 +448,7 @@ namespace Reko.UnitTests.Typing
             {
                 Identifier arg1 = m.Local32("arg1");
                 Identifier ret = m.Register(1);
-                m.Procedure.Signature = new ProcedureSignature(ret, new Identifier[] { arg1 });
+                m.Procedure.Signature = new FunctionType(ret, new Identifier[] { arg1 });
                 m.Procedure.Signature.Parameters[0] = arg1;
                 m.Assign(ret, m.IAdd(arg1, 1));
                 m.Return(ret);
@@ -481,7 +471,7 @@ namespace Reko.UnitTests.Typing
             pp.Add("Fn2", m =>
             {
                 Identifier arg1 = m.Local32("arg1");
-                m.Procedure.Signature = new ProcedureSignature(null, new Identifier[] { arg1 });
+                m.Procedure.Signature = FunctionType.Action(new Identifier[] { arg1 });
                 m.Store(m.IAdd(arg1, 8), m.Int32(0x23));
                 m.Return();
             });
@@ -493,7 +483,6 @@ namespace Reko.UnitTests.Typing
         public void DtbSignedCompare()
         {
             ProcedureBuilder m = new ProcedureBuilder();
-            Identifier p = m.Local32("p");
             Identifier ds = m.Local16("ds");
             ds.DataType = PrimitiveType.SegmentSelector;
             Identifier ds2 = m.Local16("ds2");
@@ -522,19 +511,6 @@ namespace Reko.UnitTests.Typing
             RunTest(prog.BuildProgram(), "Typing/DtbSequenceWithSegment.txt");
         }
 
-        [Test]
-        public void DtbArrayConstantPointers()
-        {
-            ProgramBuilder pp = new ProgramBuilder();
-            pp.Add("Fn", m =>
-            {
-                Identifier a = m.Local32("a");
-                Identifier i = m.Local32("i");
-                m.Assign(a, 0x00123456);		// array pointer
-                m.Store(m.IAdd(a, m.IMul(i, 8)), m.Int32(42));
-            });
-            RunTest(pp.BuildProgram(), "Typing/DtbArrayConstantPointers.txt");
-        }
 
         [Test]
         public void DtbCallTable()

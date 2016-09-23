@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,6 +31,8 @@ namespace Reko.Core.Rtl
         T VisitCall(RtlCall call);
         T VisitGoto(RtlGoto go);
         T VisitIf(RtlIf rtlIf);
+        T VisitInvalid(RtlInvalid invalid);
+        T VisitNop(RtlNop rtlNop);
         T VisitReturn(RtlReturn ret);
         T VisitSideEffect(RtlSideEffect side);
     }

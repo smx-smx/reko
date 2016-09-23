@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -76,7 +76,7 @@ namespace Reko.UnitTests.Scanning.Dfa
             dfab.ExtendWithEos();
             dfab.BuildNodeSets();
             dfab.BuildAutomaton();
-            Debug.WriteLine(dfab.ParseTree.ToString());
+            //Debug.WriteLine(dfab.ParseTree.ToString());
             Assert.IsTrue(dfab.States[2].Starts);
         }
 
@@ -87,7 +87,6 @@ namespace Reko.UnitTests.Scanning.Dfa
             dfab.ExtendWithEos();
             dfab.BuildNodeSets();
             dfab.BuildAutomaton();
-            Debug.WriteLine(dfab.ParseTree.ToString());
             Assert.AreEqual(2, dfab.States.Length, "Should have 2 states");
             Assert.AreEqual(1, dfab.Transitions[0, 0xAF]);
         }

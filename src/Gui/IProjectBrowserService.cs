@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,10 +30,13 @@ namespace Reko.Gui
     {
         event EventHandler<FileDropEventArgs> FileDropped;
 
+        Program CurrentProgram { get; }
+
         /// <summary>
         /// The currently selected object in the project browser tree.
         /// </summary>
         object SelectedObject { get; set; }
+
 
         /// <summary>
         /// Loads a project into the project browser and starts listening to changes. 

@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -39,6 +39,7 @@ namespace Reko.Core.Operators
         public static readonly BinaryOperator FSub = new FSubOperator();
         public static readonly BinaryOperator FMul = new FMulOperator();
         public static readonly BinaryOperator FDiv = new FDivOperator();
+        public static readonly UnaryOperator FNeg = new FNegOperator();
 
         public static readonly BinaryOperator And = new AndOperator();
 		public static readonly BinaryOperator Or = new OrOperator();
@@ -56,10 +57,12 @@ namespace Reko.Core.Operators
 		public static readonly BinaryOperator Le = new LeOperator();
 		public static readonly BinaryOperator Ge = new GeOperator();
 
-		public static readonly BinaryOperator Rlt = new RltOperator();
-		public static readonly BinaryOperator Rgt = new RgtOperator();
-		public static readonly BinaryOperator Rle = new RleOperator();
-		public static readonly BinaryOperator Rge = new RgeOperator();
+        public static readonly BinaryOperator Feq= new ReqOperator();
+        public static readonly BinaryOperator Fne = new RneOperator();
+        public static readonly BinaryOperator Flt = new RltOperator();
+		public static readonly BinaryOperator Fgt = new RgtOperator();
+		public static readonly BinaryOperator Fle = new RleOperator();
+		public static readonly BinaryOperator Fge = new RgeOperator();
 
 		public static readonly BinaryOperator Ult = new UltOperator();
 		public static readonly BinaryOperator Ugt = new UgtOperator();

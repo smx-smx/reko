@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@ using System.IO;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Reko.Core.Output;
 
 namespace Reko.UnitTests.Assemblers.M68k
 {
@@ -65,9 +66,11 @@ namespace Reko.UnitTests.Assemblers.M68k
                 Dumper dumper = new Dumper(prog.Architecture);
                 dumper.ShowAddresses = true;
                 dumper.ShowCodeBytes = true;
-                dumper.DumpData(prog.Image, prog.Image.BaseAddress, prog.Image.Bytes.Length, fut.TextWriter);
+                var mem = prog.SegmentMap.Segments.Values.First().MemoryArea;
+                var formatter = new TextFormatter(fut.TextWriter);
+                dumper.DumpData(prog.SegmentMap, mem.BaseAddress, mem.Bytes.Length, formatter);
                 fut.TextWriter.WriteLine();
-                dumper.DumpAssembler(prog.Image, prog.Image.BaseAddress, prog.Image.BaseAddress + prog.Image.Bytes.Length, fut.TextWriter);
+                dumper.DumpAssembler(prog.SegmentMap, mem.BaseAddress, mem.EndAddress, formatter);
                 if (prog.ImportReferences.Count > 0)
                 {
                     var list = new SortedList<Address, ImportReference>(prog.ImportReferences);

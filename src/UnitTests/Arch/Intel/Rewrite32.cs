@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,13 +24,14 @@ using Reko.Assemblers.x86;
 using Reko.Core;
 using Reko.Core.Configuration;
 using Reko.Core.Services;
-using Reko.Environments.Win32;
+using Reko.Environments.Windows;
 using Reko.Scanning;
 using Reko.UnitTests.Mocks;
 using Rhino.Mocks;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 
 namespace Reko.UnitTests.Arch.Intel
 {
@@ -40,13 +41,14 @@ namespace Reko.UnitTests.Arch.Intel
         private MockRepository mr;
         private Win32Platform win32;
         private IntelArchitecture arch;
+        private IServiceProvider services;
 
         [SetUp]
         public void Setup()
         {
             mr = new MockRepository();
-            var services = mr.Stub<IServiceProvider>();
-            var tlSvc = mr.Stub<ITypeLibraryLoaderService>();
+            this.services = mr.Stub<IServiceProvider>();
+            var tlSvc = new TypeLibraryLoaderServiceImpl(services);
             var configSvc = mr.StrictMock<IConfigurationService>();
             var win32env = new OperatingEnvironmentElement
             {
@@ -57,21 +59,18 @@ namespace Reko.UnitTests.Arch.Intel
                 }
             };
             configSvc.Stub(c => c.GetEnvironment("win32")).Return(win32env);
-            configSvc.Stub(c => c.GetPath(null)).IgnoreArguments()
-                .Do(new Func<string, string>(s => s));
+            configSvc.Stub(c => c.GetInstallationRelativePath(null)).IgnoreArguments()
+                .Do(new Func<string[], string>(s => string.Join("/", s)));
             services.Stub(s => s.GetService(typeof(ITypeLibraryLoaderService))).Return(tlSvc);
             services.Stub(s => s.GetService(typeof(IConfigurationService))).Return(configSvc);
-            tlSvc.Stub(t => t.LoadLibrary(null, null)).IgnoreArguments()
-                .Do(new Func<Platform, string, TypeLibrary>((p, n) =>
-                {
-                    var lib = TypeLibrary.Load(p, Path.ChangeExtension(n, ".xml"));
-                    return lib;
-                }));
+            services.Stub(s => s.GetService(typeof(DecompilerEventListener))).Return(new FakeDecompilerEventListener());
+            services.Stub(s => s.GetService(typeof(CancellationTokenSource))).Return(null);
+            services.Stub(s => s.GetService(typeof(IFileSystemService))).Return(new FileSystemServiceImpl());
+            services.Stub(s => s.GetService(typeof(IDiagnosticsService))).Return(new FakeDiagnosticsService());
             services.Replay();
-            tlSvc.Replay();
             configSvc.Replay();
-            arch = new IntelArchitecture(ProcessorMode.Protected32);
-            win32 = new Reko.Environments.Win32.Win32Platform(services, arch);
+            arch = new X86ArchitectureFlat32();
+            win32 = new Reko.Environments.Windows.Win32Platform(services, arch);
         }
 
 		[Test]
@@ -137,7 +136,7 @@ namespace Reko.UnitTests.Arch.Intel
 		private void RunTest(string sourceFile, string outputFile)
 		{
 			Program program;
-            var asm = new X86TextAssembler(new X86ArchitectureFlat32());
+            var asm = new X86TextAssembler(services, new X86ArchitectureFlat32());
             using (StreamReader rdr = new StreamReader(FileUnitTester.MapTestPath(sourceFile)))
             {
                 program = asm.Assemble(Address.Ptr32(0x10000000), rdr);
@@ -150,12 +149,11 @@ namespace Reko.UnitTests.Arch.Intel
             var project = new Project { Programs = { program } };
             Scanner scan = new Scanner(
                 program,
-                new Dictionary<Address, ProcedureSignature>(),
-                new ImportResolver(project),
-                new FakeDecompilerEventListener());
+                new ImportResolver(project, program, new FakeDecompilerEventListener()),
+                services);
             foreach (var ep in asm.EntryPoints)
             {
-                scan.EnqueueEntryPoint(ep);
+                scan.EnqueueImageSymbol(ep, true);
             }
             scan.ScanImage();
 

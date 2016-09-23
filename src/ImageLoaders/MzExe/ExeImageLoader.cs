@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -35,28 +35,28 @@ namespace Reko.ImageLoaders.MzExe
         private ImageLoader ldrDeferred;
         private IServiceProvider services;
 
-		public ushort	e_magic;                     // Magic number
-		public ushort   e_cbLastPage;                // Bytes on last page of file
-		public ushort   e_cpImage;                   // Pages in file
-		public ushort   e_cRelocations;              // Relocations
+		public ushort	e_magic;                     // 0000 - Magic number
+		public ushort   e_cbLastPage;                // 0002 - Bytes on last page of file
+		public ushort   e_cpImage;                   // 0004 - Pages in file
+		public ushort   e_cRelocations;              // 0006 - Relocations
 
-		public ushort   e_cparHeader;                // Size of header in paragraphs
-		public ushort   e_minalloc;                  // Minimum extra paragraphs needed
-		public ushort   e_maxalloc;                  // Maximum extra paragraphs needed
-		public ushort   e_ss;                        // Initial (relative) SS value
+		public ushort   e_cparHeader;                // 0008 - Size of header in paragraphs
+		public ushort   e_minalloc;                  // 000A - Minimum extra paragraphs needed
+		public ushort   e_maxalloc;                  // 000C - Maximum extra paragraphs needed
+		public ushort   e_ss;                        // 000E - Initial (relative) SS value
 
-		public ushort   e_sp;                        // Initial SP value
-		public ushort   e_csum;                      // Checksum
-		public ushort   e_ip;                        // Initial IP value
-		public ushort   e_cs;                        // Initial (relative) CS value
+		public ushort   e_sp;                        // 0010 - Initial SP value
+		public ushort   e_csum;                      // 0012 - Checksum
+		public ushort   e_ip;                        // 0014 - Initial IP value
+		public ushort   e_cs;                        // 0016 - Initial (relative) CS value
 
-		public ushort   e_lfaRelocations;			 // File address of relocation table
-		public ushort   e_ovno;                      // Overlay number
-		public ushort [] e_res;                      // Reserved words
-		public ushort   e_oemid;                     // OEM identifier (for e_oeminfo)
-		public ushort   e_oeminfo;                   // OEM information; e_oemid specific
-		public ushort [] e_res2;                     // Reserved words
-		public uint     e_lfanew;                    // File address of new exe header
+		public ushort   e_lfaRelocations;			 // 0018 - File address of relocation table
+		public ushort   e_ovno;                      // 001A - Overlay number
+		public ushort [] e_res;                      // 001C - Reserved words
+		public ushort   e_oemid;                     // 0024 - OEM identifier (for e_oeminfo)
+		public ushort   e_oeminfo;                   // 0026 - OEM information; e_oemid specific
+		public ushort [] e_res2;                     // 0028 - Reserved words
+		public uint     e_lfanew;                    // 003C - File address of new exe header
 
 		private const int MarkZbikowski = (('Z' << 8) | 'M');		// 'MZ' magic number expressed in little-endian.
 
@@ -95,8 +95,9 @@ namespace Reko.ImageLoaders.MzExe
 		}
 
 		/// <summary>
-		/// Loads a Microsoft .EXE file. There are several widely varying sub-formats,
-		/// so we need to discover what flavour it is before we can proceed.
+		/// Loads a Microsoft .EXE file. There are several widely varying 
+        /// sub-formats, so we need to discover what flavour it is before we
+        /// can proceed.
 		/// </summary>
         public override Program Load(Address addrLoad)
 		{
@@ -105,9 +106,9 @@ namespace Reko.ImageLoaders.MzExe
 
         private ImageLoader CreateDeferredLoader()
         {
-            // The image may have been packed. We ask the unpacker service whether
-            // it can determine if the image is packed, and if so provide us with an
-            // image loader that knows how to do unpacking.
+            // The image may have been packed. We ask the unpacker service 
+            // whether it can determine if the image is packed, and if so 
+            // provide us with an image loader that knows how to do unpacking.
 
             var loaderSvc = services.RequireService<IUnpackerService>();
             if (IsPortableExecutable)
@@ -123,7 +124,8 @@ namespace Reko.ImageLoaders.MzExe
             else if (IsNewExecutable)
             {
                 // http://support.microsoft.com/kb/65122
-                throw new NotImplementedException("NE executable loading not implemented.");
+                var neLdr = new NeImageLoader(services, Filename, base.RawImage, e_lfanew);
+                return neLdr;
             }
             else
             {

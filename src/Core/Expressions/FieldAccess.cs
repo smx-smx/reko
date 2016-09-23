@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,19 +25,20 @@ using System;
 namespace Reko.Core.Expressions
 {
     /// <summary>
-    /// Models an access to the field of a record, like the Pascal expression a.field.
-    /// The <paramref name="expr"/> is expected to be a structure type. If it is a pointer type,
-    /// that is the expression should be a^.field (as expressed in Pascal), remember to first "wrap" it in
+    /// Models an access to the field of a record, like the Pascal expression
+    /// a.field. The <paramref name="expr"/> is expected to be a structure
+    /// type. If it is a pointer type, that is the expression should be 
+    /// a^.field (as expressed in Pascal), remember to first "wrap" it in
     /// a <code>Dereference</code> instance.
     /// </summary>
 	public class FieldAccess : Expression
 	{
 		public Expression Structure;
-		public string FieldName;
+		public Field Field;
 
-		public FieldAccess(DataType fieldType, Expression expr, string fieldName) : base(fieldType)
+		public FieldAccess(DataType fieldType, Expression expr, Field field) : base(fieldType)
 		{
-			this.Structure = expr; this.FieldName = fieldName;
+			this.Structure = expr; this.Field = field;
 		}
 
         public override T Accept<T, C>(ExpressionVisitor<T, C> v, C context)
@@ -57,7 +58,7 @@ namespace Reko.Core.Expressions
 
 		public override Expression CloneExpression()
 		{
-			return new FieldAccess(DataType, Structure.CloneExpression(), FieldName);
+			return new FieldAccess(DataType, Structure.CloneExpression(), Field);
 		}
 
 		public override Expression Invert()

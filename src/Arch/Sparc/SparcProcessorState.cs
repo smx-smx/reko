@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@
 #endregion
 
 using Reko.Core;
+using Reko.Core.Code;
 using Reko.Core.Expressions;
 using Reko.Core.Lib;
 using Reko.Core.Machine;
@@ -34,7 +35,7 @@ namespace Reko.Arch.Sparc
     public class SparcProcessorState : ProcessorState
     {
         private SparcArchitecture arch;
-        private uint[] regs;
+        private ulong[] regs;
         private bool[] valid;
         private uint flags;
         private uint validFlags;
@@ -42,7 +43,7 @@ namespace Reko.Arch.Sparc
         public SparcProcessorState(SparcArchitecture arch)
         {
             this.arch = arch;
-            this.regs = new uint[32];
+            this.regs = new ulong[32];
             this.valid = new bool[32];
         }
 
@@ -70,32 +71,37 @@ namespace Reko.Arch.Sparc
                 return Constant.Invalid;
         }
 
-        public override void SetRegister(RegisterStorage r, Constant v)
+        public override void SetRegister(RegisterStorage reg, Constant v)
         {
-            throw new NotImplementedException();
+            if (v.IsValid)
+            {
+                valid[reg.Number] = false;
+            }
+            else
+            {
+                valid[reg.Number] = true;
+                regs[reg.Number] = v.ToUInt64();
+            }
         }
 
         public override void SetInstructionPointer(Address addr)
         {
-            throw new NotImplementedException();
         }
 
         public override void OnProcedureEntered()
         {
-            throw new NotImplementedException();
         }
 
-        public override void OnProcedureLeft(ProcedureSignature procedureSignature)
+        public override void OnProcedureLeft(FunctionType procedureSignature)
         {
-            throw new NotImplementedException();
         }
 
-        public override Core.Code.CallSite OnBeforeCall(Identifier stackReg, int returnAddressSize)
+        public override CallSite OnBeforeCall(Identifier stackReg, int returnAddressSize)
         {
-            throw new NotImplementedException();
+            return new CallSite(0, 0);
         }
 
-        public override void OnAfterCall(Identifier stackReg, ProcedureSignature sigCallee, ExpressionVisitor<Expression> eval)
+        public override void OnAfterCall(FunctionType sigCallee)
         {
         }
     }

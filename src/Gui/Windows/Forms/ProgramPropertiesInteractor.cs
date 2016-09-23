@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -44,23 +44,34 @@ namespace Reko.Gui.Windows.Forms
 
         private void dlg_Load(object sender, EventArgs e)
         {
-            var loadedScript = dlg.Program.OnLoadedScript;
+            var loadedScript = dlg.Program.User.OnLoadedScript;
             if (loadedScript != null)
             {
                 dlg.EnableScript.Checked = loadedScript.Enabled;
                 dlg.LoadScript.Text = loadedScript.Script;
             }
-            dlg.HeuristicScanning.Checked = dlg.Program.Options.HeuristicScanning;
+            dlg.Heuristics.Items.AddRange(new object[]
+                {
+                    "(None)",
+                    "Shingle heuristic"
+                });
+            if (dlg.Program.User.Heuristics.Count == 0)
+                dlg.Heuristics.SelectedIndex = 0;
+            else
+                dlg.Heuristics.SelectedItem = dlg.Program.User.Heuristics.First();
         }
 
         void OkButton_Click(object sender, EventArgs e)
         {
-            dlg.Program.OnLoadedScript = new Core.Serialization.Script_v2
+            dlg.Program.User.OnLoadedScript = new Core.Serialization.Script_v2
             {
                 Enabled = dlg.EnableScript.Checked,
                 Script = dlg.LoadScript.Text,
             };
-            dlg.Program.Options.HeuristicScanning = dlg.HeuristicScanning.Checked;
+            if (dlg.Heuristics.SelectedIndex != 0)
+                dlg.Program.User.Heuristics.Add((string)dlg.Heuristics.SelectedItem);
+            else
+                dlg.Program.User.Heuristics.Clear();
         }
     }
 }

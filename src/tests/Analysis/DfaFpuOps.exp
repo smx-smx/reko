@@ -2,7 +2,7 @@
 // stackDelta: 0; fpuStackDelta: 0; fpuMaxParam: -1
 // MayUse:  ds
 // LiveOut:
-// Trashed: SCZO bx bl bh
+// Trashed: SCZO bh bl bx ebx rbx
 // Preserved: sp
 // fn0C00_0000
 // Return size: 0
@@ -20,8 +20,8 @@ fn0C00_0000_exit:
 // stackDelta: 0; fpuStackDelta: 0; fpuMaxParam: -1
 // MayUse:  ds
 // LiveOut:
-// Trashed: bx bl bh
-// Preserved: sp bp
+// Trashed: bh bl bx ebx rbx
+// Preserved: bp sp
 // Stack args: Stack +0002(16) Stack +0004(16)
 // fn0C00_0010
 // Return size: 0
@@ -50,8 +50,8 @@ void fn0C00_0037(selector ds)
 fn0C00_0037_entry:
 	// succ:  l0C00_0037
 l0C00_0037:
-	Mem3[ds:0x0400:real64] = 0
-	Mem6[ds:0x0408:int32] = (int32) 1
+	Mem3[ds:0x0400:real64] = 0.0
+	Mem6[ds:0x0408:int32] = (int32) 1.0
 	return
 	// succ:  fn0C00_0037_exit
 fn0C00_0037_exit:

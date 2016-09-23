@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -105,7 +105,7 @@ namespace Reko.Evaluation
             var inserted = d.InsertedBits.Accept(this);
             if (inserted == Constant.Invalid)
                 return inserted;
-            return new DepositBits(source, inserted, d.BitPosition, d.BitCount);
+            return new DepositBits(source, inserted, d.BitPosition);
         }
 
         public Expression VisitDereference(Dereference deref)
@@ -138,7 +138,13 @@ namespace Reko.Evaluation
 
         public Expression VisitMkSequence(MkSequence seq)
         {
-            throw new NotImplementedException();
+            var lo = seq.Tail.Accept(this);
+            if (lo == Constant.Invalid)
+                return lo;
+            var hi = seq.Head.Accept(this);
+            if (hi == Constant.Invalid)
+                return hi;
+            return new MkSequence(seq.DataType, hi, lo);
         }
 
         public Expression VisitOutArgument(OutArgument outArg)

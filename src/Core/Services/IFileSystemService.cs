@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,16 +25,83 @@ using System.Text;
 
 namespace Reko.Core.Services
 {
+    /// <summary>
+    /// Abstracts away file system accesses.
+    /// </summary>
     public interface IFileSystemService
     {
+        Stream CreateFileStream(string filename, FileMode mode);
         Stream CreateFileStream(string filename, FileMode mode, FileAccess access);
+        Stream CreateFileStream(string filename, FileMode mode, FileAccess access, FileShare share);
+        bool FileExists(string filePath);
+        string MakeRelativePath(string fromPath, string toPath);
+        byte[] ReadAllBytes(string filePath);
     }
 
     public class FileSystemServiceImpl : IFileSystemService
     {
+        private char sepChar;
+
+        public FileSystemServiceImpl()
+        {
+            this.sepChar = Path.DirectorySeparatorChar;
+        }
+
+        public FileSystemServiceImpl(char sepChar)
+        {
+            this.sepChar = sepChar;
+        }
+
+        public Stream CreateFileStream(string filename, FileMode mode)
+        {
+            return new FileStream(filename, mode);
+        }
+
         public Stream CreateFileStream(string filename, FileMode mode, FileAccess access)
         {
             return new FileStream(filename, mode, access);
         }
+
+        public Stream CreateFileStream(string filename, FileMode mode, FileAccess access, FileShare share)
+        {
+            return new FileStream(filename, mode, access, share);
+        }
+
+        public bool FileExists(string filePath)
+        {
+            return File.Exists(filePath);
+        }
+
+        public string MakeRelativePath(string fromPath, string toPath)
+        {
+            int iLastDir = -1;
+            int i;
+            for (i = 0; i < fromPath.Length && i < toPath.Length; ++i)
+            {
+                if (fromPath[i] != toPath[i])
+                    break;
+                if (fromPath[i] == this.sepChar)
+                    iLastDir = i + 1;
+            }
+            var sb = new StringBuilder();
+            if (iLastDir <= 1)
+                return toPath;
+            for (i = iLastDir; i < fromPath.Length; ++i)
+            {
+                if (fromPath[i] == this.sepChar)
+                {
+                    sb.Append("..");
+                    sb.Append(sepChar);
+                }
+            }
+            sb.Append(toPath.Substring(iLastDir));
+            return sb.ToString();
+        }
+
+        public byte[] ReadAllBytes(string filePath)
+        {
+            return File.ReadAllBytes(filePath);
+        }
+        
     }
 }

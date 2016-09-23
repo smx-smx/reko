@@ -2,7 +2,7 @@
 	LiveOut:  
 	MayUseIn:  ds
 	BypassIn: 
-	Trashed:   SCZO bx bl bh
+	Trashed:   SCZO bh bl bx ebx rbx
 	Preserved: sp
 // fn0C00_0000
 void fn0C00_0000()
@@ -36,8 +36,8 @@ fn0C00_0000_exit:
 	LiveOut:   ds
 	MayUseIn:  ds
 	BypassIn: 
-	Trashed:   bx bl bh
-	Preserved: sp bp
+	Trashed:   bh bl bx ebx rbx
+	Preserved: bp sp
 // fn0C00_0010
 void fn0C00_0010()
 // SymbolicIn: sp:fp
@@ -93,9 +93,9 @@ fn0C00_0037_entry:
 // SymbolicIn: sp:fp
 l0C00_0037:
 	sp = fp
-	rLoc1 = 0
+	rLoc1 = 0.0
 	Mem0[ds:0x0400:real64] = rLoc1
-	rLoc1 = 1
+	rLoc1 = 1.0
 	Mem0[ds:0x0408:int32] = (int32) rLoc1
 	return
 // DataOut:

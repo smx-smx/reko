@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -77,7 +77,6 @@ namespace Reko.UnitTests.Analysis
 			}
 
 			Block block = proc.EntryBlock.Succ[0];
-			block.Write(Console.Out);
 			Assert.AreEqual("Mem3[0x10000000:word32] = a + b", block.Statements[0].Instruction.ToString());
 			Assert.AreEqual("Mem4[0x10000004:word32] = a", block.Statements[1].Instruction.ToString());
 
@@ -125,11 +124,16 @@ namespace Reko.UnitTests.Analysis
 			this.proc = proc;
 			Aliases alias = new Aliases(proc, arch);
 			alias.Transform();
-			SsaTransform sst = new SsaTransform(new ProgramDataFlow(), proc, proc.CreateBlockDominatorGraph());
+			SsaTransform sst = new SsaTransform(
+                new ProgramDataFlow(),
+                proc,
+                null,
+                proc.CreateBlockDominatorGraph(),
+                new HashSet<RegisterStorage>());
 			ssa = sst.SsaState;
-			ConditionCodeEliminator cce = new ConditionCodeEliminator(ssa.Identifiers, platform);
+			ConditionCodeEliminator cce = new ConditionCodeEliminator(ssa, platform);
 			cce.Transform();
-			ValuePropagator vp = new ValuePropagator(ssa.Identifiers, proc);
+			ValuePropagator vp = new ValuePropagator(arch, ssa);
 			vp.Transform();
 			DeadCode.Eliminate(proc, ssa);
 			Coalescer coa = new Coalescer(proc, ssa);
@@ -140,7 +144,6 @@ namespace Reko.UnitTests.Analysis
 			sla2 = new SsaLivenessAnalysis2(proc, ssa.Identifiers);
 			sla2.Analyze();
 		}
-
 
 		public class SimpleMock : ProcedureBuilder
 		{

@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -45,7 +45,7 @@ namespace Reko.UnitTests.Evaluation
         [SetUp]
         public void Setup()
         {
-            arch = new IntelArchitecture(ProcessorMode.Protected32);
+            arch = new X86ArchitectureFlat32();
             frame = new Frame(arch.FramePointerType);
         }
 
@@ -268,7 +268,8 @@ namespace Reko.UnitTests.Evaluation
             Identifier flag = null;
             RunBlockTest(delegate(ProcedureBuilder m)
             {
-                flag = m.Frame.EnsureFlagGroup(0x3, "SZ", PrimitiveType.Byte);
+                var flags = arch.GetFlagGroup(0x03).FlagRegister;
+                flag = m.Frame.EnsureFlagGroup(flags, 0x3, "SZ", PrimitiveType.Byte);
                 m.Assign(flag, 0x03);
             });
             Assert.AreEqual(0x03, ctx.TrashedFlags);

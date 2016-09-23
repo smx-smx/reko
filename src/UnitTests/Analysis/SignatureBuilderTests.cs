@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,10 +34,10 @@ namespace Reko.UnitTests.Analysis
 		[Test]
 		public void TestGrfWithOneBit()
 		{
-			IProcessorArchitecture arch = new IntelArchitecture(ProcessorMode.Real);
+			IProcessorArchitecture arch = new X86ArchitectureReal();
 			SignatureBuilder sb = new SignatureBuilder(null, arch);
             sb.AddFlagGroupReturnValue((uint) FlagM.CF, arch.CreateFrame());
-			ProcedureSignature sig = sb.BuildSignature();
+			FunctionType sig = sb.BuildSignature();
 			Assert.AreEqual("bool", sig.ReturnValue.DataType.ToString());
 		}
 	}

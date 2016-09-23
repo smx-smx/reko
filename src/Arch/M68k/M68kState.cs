@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -32,6 +32,7 @@ namespace Reko.Arch.M68k
 {
     public class M68kState : ProcessorState
     {
+        const int RegisterCount = 32;
         private M68kArchitecture arch;
         private uint[] values;
         private bool[] isValid;
@@ -39,8 +40,8 @@ namespace Reko.Arch.M68k
         public M68kState(M68kArchitecture arch)
         {
             this.arch = arch;
-            this.values = new uint[16];
-            this.isValid = new bool[16];
+            this.values = new uint[RegisterCount];
+            this.isValid = new bool[RegisterCount];
         }
 
         public M68kState(M68kState orig) : base(orig)
@@ -92,46 +93,17 @@ namespace Reko.Arch.M68k
         {
         }
 
-        public override void OnProcedureLeft(ProcedureSignature sig)
+        public override void OnProcedureLeft(FunctionType sig)
         {
         }
 
         public override CallSite OnBeforeCall(Identifier stackReg, int returnAddressSize)
         {
-            if (returnAddressSize > 0)
-            {
-                var spVal = GetValue(Registers.a7);
-                SetValue(
-                    arch.StackRegister,
-                    new BinaryExpression(
-                        Operator.ISub,
-                        spVal.DataType,
-                        stackReg,
-                        Constant.Create(
-                            PrimitiveType.CreateWord(returnAddressSize),
-                            returnAddressSize)));
-            }
             return new CallSite(returnAddressSize, 0);
         }
 
-        public override void OnAfterCall(Identifier sp, ProcedureSignature sigCallee, ExpressionVisitor<Expression> eval)
+        public override void OnAfterCall(FunctionType sigCallee)
         {
-            var spReg = (RegisterStorage) sp.Storage;
-            var spVal = GetValue(spReg);
-            var stackOffset = SetValue(
-                spReg,
-                new BinaryExpression(
-                    Operator.IAdd,
-                    spVal.DataType,
-                    sp,
-                    Constant.Create(
-                        PrimitiveType.CreateWord(spReg.DataType.Size),
-                        sigCallee.StackDelta)).Accept(eval));
-            if (stackOffset.IsValid)
-            {
-                if (stackOffset.ToInt32() > 0)
-                    ErrorListener("Possible stack underflow detected.");
-            }
         }
 
         #endregion

@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,10 +25,12 @@ using Reko.Core;
 using Reko.Core.Configuration;
 using Reko.Core.Expressions;
 using Reko.Core.Operators;
+using Reko.Core.Services;
 using Reko.Core.Types;
 using Reko.Loading;
 using Reko.Scanning;
 using Reko.UnitTests.Mocks;
+using Rhino.Mocks;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.Design;
@@ -42,32 +44,38 @@ namespace Reko.UnitTests.Typing
 	/// </summary>
 	public abstract class TypingTestBase
 	{
-		protected Program RewriteFile16(string relativePath) { return RewriteFile(relativePath, Address.SegPtr(0xC00, 0)); }
+        protected ServiceContainer sc;
+
+        protected Program RewriteFile16(string relativePath) { return RewriteFile(relativePath, Address.SegPtr(0xC00, 0)); }
 
 		protected Program RewriteFile32(string relativePath) { return RewriteFile(relativePath, Address.Ptr32(0x00100000)); }
 
 		protected Program RewriteFile(string relativePath, Address addrBase)
 		{
-            var services = new ServiceContainer();
+            sc = new ServiceContainer();
             var config = new FakeDecompilerConfiguration();
-            services.AddService<IConfigurationService>(config);
-            ILoader ldr = new Loader(services);
+            var eventListener = new FakeDecompilerEventListener();
+            sc.AddService<IConfigurationService>(config);
+            sc.AddService<DecompilerHost>(new FakeDecompilerHost());
+            sc.AddService<DecompilerEventListener>(eventListener);
+            sc.AddService<IFileSystemService>(new FileSystemServiceImpl());
+            ILoader ldr = new Loader(sc);
             var program = ldr.AssembleExecutable(
                 FileUnitTester.MapTestPath(relativePath),
-                new X86TextAssembler(new IntelArchitecture(ProcessorMode.Real)),
+                new X86TextAssembler(sc, new X86ArchitectureReal()),
                 addrBase);
-            program.Platform = new DefaultPlatform(services, program.Architecture);
-            var ep = new EntryPoint(program.Image.BaseAddress, program.Architecture.CreateProcessorState());
+            program.Platform = new DefaultPlatform(sc, program.Architecture);
+            var ep = new ImageSymbol(program.SegmentMap.BaseAddress);
             var project = new Project { Programs = { program } };
-			var scan = new Scanner(
+            var scan = new Scanner(
                 program,
-                new Dictionary<Address, ProcedureSignature>(),
-                new ImportResolver(project),
-                new FakeDecompilerEventListener());
-			scan.EnqueueEntryPoint(ep);
+                new ImportResolver(project, program, eventListener),
+                sc);
+			scan.EnqueueImageSymbol(ep, true);
 			scan.ScanImage();
 
-			var dfa = new DataFlowAnalysis(program, new FakeDecompilerEventListener());
+            var importResolver = new ImportResolver(project, program, eventListener);
+            var dfa = new DataFlowAnalysis(program, importResolver, eventListener);
 			dfa.AnalyzeProgram();
             return program;
 		}
@@ -76,18 +84,21 @@ namespace Reko.UnitTests.Typing
         {
             var svc = new ServiceContainer();
             var cfg = new FakeDecompilerConfiguration();
+            var eventListener = new FakeDecompilerEventListener();
             svc.AddService<IConfigurationService>(cfg);
+            svc.AddService<DecompilerEventListener>(eventListener);
+            svc.AddService<DecompilerHost>(new FakeDecompilerHost());
             ILoader ldr = new Loader(svc);
             var imgLoader = new DchexLoader(FileUnitTester.MapTestPath( hexFile), svc, null);
-            var img = imgLoader.Load(null);
-            var program = new Program(img.Image, img.Image.CreateImageMap(), img.Architecture, img.Platform);
+            var program = imgLoader.Load(null);
             var project = new Project { Programs = { program } };
-            var ep = new EntryPoint(program.Image.BaseAddress, program.Architecture.CreateProcessorState());
-            var scan = new Scanner(program, new Dictionary<Address, ProcedureSignature>(), new ImportResolver(project), new FakeDecompilerEventListener());
-            scan.EnqueueEntryPoint(ep);
+            var ep = new ImageSymbol(program.ImageMap.BaseAddress);
+            var importResolver = new ImportResolver(project, program, eventListener);
+            var scan = new Scanner(program, importResolver, svc);
+            scan.EnqueueImageSymbol(ep, true);
             scan.ScanImage();
 
-            var dfa = new DataFlowAnalysis(program, new FakeDecompilerEventListener());
+            var dfa = new DataFlowAnalysis(program, null, eventListener);
             dfa.AnalyzeProgram();
             RunTest(program, outputFile);
         }
@@ -104,14 +115,15 @@ namespace Reko.UnitTests.Typing
         
         protected void RunTest(ProgramBuilder mock, string outputFile)
         {
-            Program prog = mock.BuildProgram();
-            DataFlowAnalysis dfa = new DataFlowAnalysis(prog, new FakeDecompilerEventListener());
+            Program program = mock.BuildProgram();
+            var importResolver = MockRepository.GenerateStub<IImportResolver>();
+            DataFlowAnalysis dfa = new DataFlowAnalysis(program, importResolver, new FakeDecompilerEventListener());
             dfa.DumpProgram();
             dfa.BuildExpressionTrees();
-            RunTest(prog, outputFile);
+            RunTest(program, outputFile);
         }
 
-        protected void RunTest(Action<ProcedureBuilder> pg, string outputFile)
+        protected virtual void RunTest(Action<ProcedureBuilder> pg, string outputFile)
         {
             ProcedureBuilder m = new ProcedureBuilder();
             pg(m);

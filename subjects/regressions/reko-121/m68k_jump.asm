@@ -1,0 +1,6 @@
+;;; Segment .text (00000000)
+;;; Segment reserved_1 (00400000)
+;;; Segment reserved_2 (00800000)
+;;; Segment z80reserved (00A00000)
+;;; Segment .io (00A10000)
+;;; Segment .data (00E00000)

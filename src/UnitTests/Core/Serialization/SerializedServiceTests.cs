@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,9 +23,11 @@ using Reko.Arch.X86;
 using Reko.Core;
 using Reko.Core.Expressions;
 using Reko.Core.Serialization;
+using Reko.Core.Services;
 using Reko.Core.Types;
 using Reko.Environments.Msdos;
 using System;
+using System.ComponentModel.Design;
 using System.IO;
 using System.Xml;
 using System.Xml.Serialization;
@@ -38,24 +40,36 @@ namespace Reko.UnitTests.Core.Serialization
 		private IProcessorArchitecture arch;
 		private SerializedService svc;
         private MsdosPlatform platform;
+        private ServiceContainer sc;
 
-		[SetUp]
+        [SetUp]
 		public void Setup()
 		{
-            this.arch = new IntelArchitecture(ProcessorMode.Real);
-            this.platform = new MsdosPlatform(null, arch);
+            this.sc = new ServiceContainer();
+            sc.AddService<IFileSystemService>(new FileSystemServiceImpl());
+            this.arch = new X86ArchitectureReal();
+            this.platform = new MsdosPlatform(sc, arch);
 
-			svc = new SerializedService();
-			svc.Name = "msdos_ioctl_get_device_info";
-			svc.SyscallInfo = new SerializedSyscallInfo();
-			svc.SyscallInfo.Vector = "21";
-			svc.SyscallInfo.RegisterValues = new SerializedRegValue[2];
-			svc.SyscallInfo.RegisterValues[0] = new SerializedRegValue("ah", "44");
-			svc.SyscallInfo.RegisterValues[1] = new SerializedRegValue("al", "00");
-			svc.Signature = new SerializedSignature();
-            ArgumentSerializer argSer = new ArgumentSerializer(null, arch, null, null);
-            svc.Signature.ReturnValue = argSer.Serialize(new Identifier("C", PrimitiveType.Bool, 
-                new FlagGroupStorage((uint) FlagM.CF, "C", PrimitiveType.Byte)));
+            ArgumentSerializer argSer = new ArgumentSerializer(null, arch, null, 0);
+
+            svc = new SerializedService
+            {
+                Name = "msdos_ioctl_get_device_info",
+                SyscallInfo = new SerializedSyscallInfo
+                {
+                    Vector = "21",
+                    RegisterValues = new[] {
+                        new SerializedRegValue("ah", "44"),
+                        new SerializedRegValue("al", "00"),
+                    }
+                },
+                Signature = new SerializedSignature
+                {
+                    ReturnValue = argSer.Serialize(
+                        new Identifier("C", PrimitiveType.Bool,
+                        new FlagGroupStorage(Registers.eflags, (uint)FlagM.CF, "C", PrimitiveType.Byte)))
+                }
+            };
 		}
 
 		[Test]
@@ -74,7 +88,7 @@ namespace Reko.UnitTests.Core.Serialization
 		[Test]
 		public void SserBuild()
 		{
-			SystemService ssvc = svc.Build(platform);
+			SystemService ssvc = svc.Build(platform, new TypeLibrary());
 			
 			Assert.AreEqual(svc.Name, ssvc.Name);
 			Assert.AreEqual(0x21, ssvc.SyscallInfo.Vector);

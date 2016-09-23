@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  .
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -36,6 +36,7 @@ namespace Reko.Gui
 
         void SetList(string name, IEnumerable<string> values);
         void Set(string name, object value);
+        void Delete(string name);
 
         void Load();        // Load settings from their persistent location
         void Save();        // Save settings to their persistent location

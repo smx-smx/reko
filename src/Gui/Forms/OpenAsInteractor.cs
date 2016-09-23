@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -39,11 +39,13 @@ namespace Reko.Gui.Forms
             dlg.Load += dlg_Load;
             dlg.BrowseButton.Click += BrowseButton_Click;
             dlg.AddressTextBox.TextChanged += AddressTextBox_TextChanged;
+            dlg.RawFileTypes.TextChanged += RawFileTypes_TextChanged;
         }
 
         private void dlg_Load(object sender, EventArgs e)
         {
             var dcCfg = dlg.Services.RequireService<IConfigurationService>();
+            PopulateRawFiles(dcCfg);
             PopulateArchitectures(dcCfg);
             PopulatePlatforms(dcCfg);
             dlg.AddressTextBox.Text = "0";
@@ -51,7 +53,11 @@ namespace Reko.Gui.Forms
 
         private void EnableControls()
         {
-            dlg.OkButton.Enabled = dlg.FileName.Text.Length > 0;
+            var unknownRawFileFormat = ((ListOption)dlg.RawFileTypes.SelectedValue).Value == null;
+            dlg.Platforms.Enabled = unknownRawFileFormat;
+            dlg.Architectures.Enabled = unknownRawFileFormat;
+            dlg.AddressTextBox.Enabled = unknownRawFileFormat;
+            dlg.OkButton.Enabled = dlg.FileName.Text.Length > 0 || !unknownRawFileFormat;
         }
 
         private void PopulatePlatforms(IConfigurationService dcCfg)
@@ -59,16 +65,33 @@ namespace Reko.Gui.Forms
             var noneOption = new ListOption
             {
                 Text = "(None)",
-                Value = typeof(DefaultPlatform).AssemblyQualifiedName
+                Value = null,
             };
             var platforms = new ListOption[] { noneOption }
                 .Concat(
                     dcCfg.GetEnvironments()
                     .OfType<OperatingEnvironment>()
                     .OrderBy(p => p.Description)
-                    .Where(p => !string.IsNullOrEmpty(p.TypeName))
-                    .Select(p => new ListOption { Text = p.Description, Value = p.TypeName }));
+                    .Where(p => !string.IsNullOrEmpty(p.Name))
+                    .Select(p => new ListOption { Text = p.Description, Value = p }));
             dlg.Platforms.DataSource = new ArrayList(platforms.ToArray());
+        }
+
+        private void PopulateRawFiles(IConfigurationService dcCfg)
+        {
+            var unknownOption = new ListOption
+            {
+                Text = "(Unknown)",
+                Value = null,
+            };
+            var rawFiles = new ListOption[] { unknownOption }
+                .Concat(
+                    dcCfg.GetRawFiles()
+                    .OfType<RawFileElement>()
+                    .OrderBy(p => p.Description)
+                    .Where(p => !string.IsNullOrEmpty(p.Name))
+                    .Select(p => new ListOption { Text = p.Description, Value = p }));
+            dlg.RawFileTypes.DataSource = new ArrayList(rawFiles.ToArray());
         }
 
         private void PopulateArchitectures(IConfigurationService dcCfg)
@@ -76,7 +99,7 @@ namespace Reko.Gui.Forms
             var archs = dcCfg.GetArchitectures()
                 .OfType<Architecture>()
                 .OrderBy(a => a.Description)
-                .Select(a => new ListOption { Text = a.Description, Value = a.TypeName });
+                .Select(a => new ListOption { Text = a.Description, Value = a.Name });
             dlg.Architectures.DataSource = new ArrayList(archs.ToArray());
         }
 
@@ -89,6 +112,11 @@ namespace Reko.Gui.Forms
         }
 
         void AddressTextBox_TextChanged(object sender, EventArgs e)
+        {
+            EnableControls();
+        }
+
+        private void RawFileTypes_TextChanged(object sender, EventArgs e)
         {
             EnableControls();
         }

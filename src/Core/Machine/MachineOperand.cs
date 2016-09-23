@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -68,8 +68,15 @@ namespace Reko.Core.Machine
 
         public static string FormatValue(Constant c)
         {
-            if (((PrimitiveType)c.DataType).Domain == Domain.SignedInt)
+            var pt = (PrimitiveType)c.DataType;
+            if (pt.Domain == Domain.SignedInt)
+            {
                 return FormatSignedValue(c);
+            }
+            else if (pt.Domain == Domain.Real)
+            {
+                return c.ToReal64().ToString("G");
+            }
             else
                 return FormatUnsignedValue(c);
         }
@@ -108,8 +115,13 @@ namespace Reko.Core.Machine
         {
             var s = FormatValue(value);
             var pt = value.DataType as PrimitiveType;
-            if (pt != null && pt.Domain == Domain.Pointer)
-                writer.WriteAddress(s, Address.FromConstant(value));    //$TODO: add WriteAddress(string, Constant) to MachineINstructionWriter
+            if (pt != null)
+            {
+                if (pt.Domain == Domain.Pointer)
+                    writer.WriteAddress(s, Address.FromConstant(value));
+                else
+                    writer.Write(s);
+            }
             else if (value.DataType is Pointer)
                 writer.WriteAddress(s, Address.FromConstant(value));
             else 
@@ -150,6 +162,11 @@ namespace Reko.Core.Machine
         {
             return new ImmediateOperand(Constant.Int16(value));
         }
+
+        public static MachineOperand Word16(ushort value)
+        {
+            return new ImmediateOperand(Constant.Word16(value));
+        }
     }
 
     /// <summary>
@@ -162,6 +179,8 @@ namespace Reko.Core.Machine
         protected AddressOperand(Address a, PrimitiveType type)
             : base(type)
         {
+            if (a == null)
+                throw new ArgumentNullException("a");
             Address = a;
         }
 

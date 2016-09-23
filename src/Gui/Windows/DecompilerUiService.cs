@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,6 +24,8 @@ using Reko.Gui.Windows.Forms;
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Diagnostics;
+using System.Threading;
 using System.Windows.Forms;
 
 namespace Reko.Gui.Windows
@@ -54,11 +56,27 @@ namespace Reko.Gui.Windows
             return dlgr == DialogResult.Yes;
         }
 
+        #if DEBUG
+        private Thread GetControlOwnerThread(Control ctrl)
+        {
+            if (ctrl.InvokeRequired)
+                return (Thread)ctrl.Invoke(new Func<Thread>(() => GetControlOwnerThread(ctrl)));
+            else
+                return System.Threading.Thread.CurrentThread;
+        }
+        #endif
+
         private DialogResult ShowModalDialog(Form dlg)
         {
+#if DEBUG
+            Thread ownthr = GetControlOwnerThread(dlg);
+#else
+            Thread ownthr = null;
+#endif
             return (DialogResult)
                 form.Invoke(new Func<Form, DialogResult>(delegate(Form dlgToShow)
                 {
+                    Debug.Assert(ownthr == System.Threading.Thread.CurrentThread);
                     return dlgToShow.ShowDialog(form);
                 }), dlg);
         }
@@ -116,8 +134,7 @@ namespace Reko.Gui.Windows
                 { MessageBox.Show(form, s.ToString(), "Reko decompiler", MessageBoxButtons.OK, MessageBoxIcon.Error); }),
                 sb);
         }
-        #endregion
-
+#endregion
 
         public void ShowMessage(string msg)
         {

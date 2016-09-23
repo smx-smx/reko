@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -39,7 +39,7 @@ namespace Reko.Evaluation
             this.arch = arch;
             this.Frame = frame;
             this.RegisterState = new Dictionary<Storage, Expression>();
-            this.StackState = new Map<int, Expression>();
+            this.StackState = new SortedList<int, Expression>();
             this.TemporaryState = new Dictionary<Storage, Expression>();
             this.setter = new StorageValueSetter(this);
         }
@@ -49,7 +49,7 @@ namespace Reko.Evaluation
             this.arch = old.arch;
             this.Frame = old.Frame;
             this.RegisterState = new Dictionary<Storage, Expression>(old.RegisterState);
-            this.StackState = new Map<int, Expression>(old.StackState);
+            this.StackState = new SortedList<int, Expression>(old.StackState);
             this.TemporaryState = new Dictionary<Storage, Expression>(old.TemporaryState);
             this.TrashedFlags = old.TrashedFlags;
             this.setter = new StorageValueSetter(this);
@@ -58,7 +58,7 @@ namespace Reko.Evaluation
         //$REVIEW: make all states a single collection indexed by storage, and eliminate the map?
 
         public Dictionary<Storage, Expression> RegisterState { get; private set; }
-        public Map<int, Expression> StackState { get; private set; }
+        public SortedList<int, Expression> StackState { get; private set; }
         public Dictionary<Storage, Expression> TemporaryState { get; private set; }
         public uint TrashedFlags { get; set; }
         public Frame Frame { get; private set; }
@@ -200,6 +200,11 @@ namespace Reko.Evaluation
             return null;
         }
 
+        public Expression MakeSegmentedAddress(Constant seg, Constant off)
+        {
+            return arch.MakeSegmentedAddress(seg, off);
+        }
+
         public void RemoveIdentifierUse(Identifier id)
         {
         }
@@ -232,11 +237,15 @@ namespace Reko.Evaluation
             return false;
         }
         
+        /// <summary>
+        /// Update the symbolic context with all the registers
+        /// modified by calling the function.
+        /// </summary>
+        /// <param name="pf"></param>
         public void UpdateRegistersTrashedByProcedure(ProcedureFlow pf)
         {
-            foreach (int r in pf.TrashedRegisters)
+            foreach (var reg in pf.TrashedRegisters)
             {
-                var reg = arch.GetRegister(r);
                 Constant c;
                 if (!pf.ConstantRegisters.TryGetValue(reg, out c))
                 {
@@ -304,6 +313,11 @@ namespace Reko.Evaluation
                 return grf;
             }
 
+            public Storage VisitFlagRegister(FlagRegister freg)
+            {
+                return freg;
+            }
+
             public Storage VisitFpuStackStorage(FpuStackStorage fpu)
             {
                 return fpu;
@@ -367,7 +381,8 @@ namespace Reko.Evaluation
 
             public Storage VisitStackArgumentStorage(StackArgumentStorage stack)
             {
-                throw new NotImplementedException();
+                ctx.StackState[stack.StackOffset] = value;
+                return stack;
             }
 
             public Storage VisitTemporaryStorage(TemporaryStorage temp)

@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,10 +24,12 @@ using System.Collections.Generic;
 namespace Reko.Core.Lib
 {
 	/// <summary>
-	/// Encapsulates Tarjan's algorithm for finding strongly connected components in a directed graph.
+	/// Encapsulates Tarjan's algorithm for finding strongly connected
+    /// components (SCC's) in a directed graph.
 	/// </summary>
 	/// <remarks>
-	/// The algorithm itself is generic, and uses the graph and processScc procedures to perform the 
+	/// The algorithm itself is generic, and uses the graph and 
+    /// processScc procedure to perform the 
     /// actual work.
 	/// </remarks>
 	public class SccFinder<T>

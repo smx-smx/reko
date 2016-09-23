@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,8 +25,9 @@ using System.Collections.Generic;
 namespace Reko.Core
 {
 	/// <summary>
-	/// Abstract base class for image loaders. These examine a raw image, and generate a new,
-    /// relocated image.
+	/// Abstract base class for image loaders. These examine a raw image, and 
+    /// generate a Program after carrying out relocations, resolving external
+    /// symbols etc.
 	/// </summary>
 	public abstract class ImageLoader
 	{

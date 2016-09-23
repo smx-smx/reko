@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -137,13 +137,14 @@ namespace Reko.Core.Code
         {
         }
 
-		public virtual void VisitApplication(Application appl)
-		{
-			for (int i = 0; i < appl.Arguments.Length; ++i)
-			{
-				appl.Arguments[i].Accept(this);
-			}
-		}
+        public virtual void VisitApplication(Application appl)
+        {
+            appl.Procedure.Accept(this);
+            for (int i = 0; i < appl.Arguments.Length; ++i)
+            {
+                appl.Arguments[i].Accept(this);
+            }
+        }
 
 		public virtual void VisitArrayAccess(ArrayAccess acc)
 		{

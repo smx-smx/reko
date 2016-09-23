@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,18 +28,13 @@ namespace Reko.Core.Serialization
 {
     public class MemberPointer_v1 : SerializedType
     {
-        public SerializedTypeReference DeclaringClass;
+        public TypeReference_v1 DeclaringClass;
         public SerializedType MemberType;
         public int Size;
 
         public override T Accept<T>(ISerializedTypeVisitor<T> visitor)
         {
             return visitor.VisitMemberPointer(this);
-        }
-
-        public override DataType BuildDataType(TypeFactory factory)
-        {
-            throw new NotImplementedException();
         }
     }
 }

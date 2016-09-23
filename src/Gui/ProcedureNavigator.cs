@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,9 +31,11 @@ namespace Reko.Gui
     public class ProcedureNavigator : ICodeLocation
     {
         private IServiceProvider sp;
+        private Program program;
 
-        public ProcedureNavigator(Procedure proc, IServiceProvider sp)
+        public ProcedureNavigator(Program program, Procedure proc, IServiceProvider sp)
         {
+            this.program = program;
             this.Procedure = proc;
             this.sp = sp;
         }
@@ -51,7 +53,7 @@ namespace Reko.Gui
         {
             var codeSvc = sp.GetService<ICodeViewerService>();
             if (codeSvc != null)
-                codeSvc.DisplayProcedure(Procedure);
+                codeSvc.DisplayProcedure(program, Procedure);
         }
         #endregion
 

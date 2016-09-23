@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,20 +37,22 @@ namespace Reko.UnitTests.Arch.Intel
 		private IntelArchitecture arch;
         private X86State state;
 		private Procedure proc;
-        private IntelInstruction instr;
+        private X86Instruction instr;
 
 		[TestFixtureSetUp]
 		public void Setup()
 		{
-			arch = new IntelArchitecture(ProcessorMode.Real);
-            var image = new LoadedImage(Address.Ptr32(0x10000), new byte[4]);
+			arch = new X86ArchitectureReal();
+            var mem = new MemoryArea(Address.Ptr32(0x10000), new byte[4]);
 			var prog = new Program(
-                image,
-                image.CreateImageMap(),
+                new SegmentMap(
+                    mem.BaseAddress,
+                    new ImageSegment(
+                        "code", mem, AccessMode.ReadWriteExecute)),
                 arch,
-                null);
+                new DefaultPlatform(null, arch));
 			var procAddress = Address.Ptr32(0x10000000);
-            instr = new IntelInstruction(Opcode.nop, PrimitiveType.Word16, PrimitiveType.Word16)
+            instr = new X86Instruction(Opcode.nop, PrimitiveType.Word16, PrimitiveType.Word16)
             {
                 Address = procAddress,
             };

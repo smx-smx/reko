@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -59,7 +59,12 @@ namespace Reko.Scanning
 
         public Identifier VisitFlagGroupStorage(FlagGroupStorage flags)
         {
-            return frame.EnsureFlagGroup(flags.FlagGroupBits, flags.Name, id.DataType);
+            return frame.EnsureFlagGroup(flags.FlagRegister, flags.FlagGroupBits, flags.Name, id.DataType);
+        }
+
+        public Identifier VisitFlagRegister(FlagRegister freg)
+        {
+            return frame.EnsureRegister(freg);
         }
 
         public Identifier VisitFpuStackStorage(FpuStackStorage fpu)
@@ -95,9 +100,9 @@ namespace Reko.Scanning
         public Identifier VisitSequenceStorage(SequenceStorage seq)
         {
             var idSeq = id;
-            var newHead = (Identifier) VisitIdentifier(seq.Head);
-            var newTail = (Identifier) VisitIdentifier(seq.Tail);
-            return frame.EnsureSequence(newHead, newTail, idSeq.DataType);
+            var newHead = seq.Head.Accept(this);
+            var newTail = seq.Tail.Accept(this);
+            return frame.EnsureSequence(newHead.Storage, newTail.Storage, idSeq.DataType);
         }
 
         public Identifier VisitOutArgumentStorage(OutArgumentStorage ost)

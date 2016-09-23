@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -41,7 +41,35 @@ namespace Reko.Arch.X86
         {
             emitter.Assign(
                 orw.FlagGroup(FlagM.CF),
-                PseudoProc("__aaa", PrimitiveType.Bool,
+                host.PseudoProcedure("__aaa", PrimitiveType.Bool,
+                    orw.AluRegister(Registers.al),
+                    orw.AluRegister(Registers.ah),
+                            orw.AddrOf(orw.AluRegister(Registers.al)),
+                            orw.AddrOf(orw.AluRegister(Registers.ah))));
+        }
+
+        private void RewriteAad()
+        {
+            //$TODO: support for multiple register return values.
+            emitter.Assign(
+                orw.AluRegister(Registers.ax),
+                host.PseudoProcedure("__aad", PrimitiveType.Word16,
+                    orw.AluRegister(Registers.ax)));
+        }
+
+        private void RewriteAam()
+        {
+            emitter.Assign(
+                orw.AluRegister(Registers.ax),
+                host.PseudoProcedure("__aam", PrimitiveType.Word16,
+                    orw.AluRegister(Registers.al)));
+        }
+
+        private void RewriteAas()
+        {
+            emitter.Assign(
+                orw.FlagGroup(FlagM.CF),
+                host.PseudoProcedure("__aas", PrimitiveType.Bool,
                     orw.AluRegister(Registers.al),
                     orw.AluRegister(Registers.ah),
                             orw.AddrOf(orw.AluRegister(Registers.al)),
@@ -50,8 +78,7 @@ namespace Reko.Arch.X86
 
         private void RewriteCli()
         {
-            var ppp = host.EnsurePseudoProcedure("__cli", VoidType.Instance, 0);
-            emitter.SideEffect(PseudoProc(ppp, VoidType.Instance));
+            emitter.SideEffect(host.PseudoProcedure("__cli", VoidType.Instance));
         }
 
         private void RewriteHlt()
@@ -64,14 +91,6 @@ namespace Reko.Arch.X86
             emitter.SideEffect(PseudoProc(ppp, VoidType.Instance));
         }
 
-        private void RewriteAam()
-        {
-            emitter.Assign(
-                orw.AluRegister(Registers.ax),
-                PseudoProc("__aam", PrimitiveType.Word16,
-                    orw.AluRegister(Registers.al)));
-        }
-        
         /// <summary>
         /// Doesn't handle the x86 idiom add ... adc => long add (and 
         /// sub ..sbc => long sub)
@@ -94,7 +113,7 @@ namespace Reko.Arch.X86
         {
             // We do not take the trouble of widening the CF to the word size
             // to simplify code analysis in later stages. 
-            var c = orw.FlagGroup(FlagM.CF);       
+            var c = orw.FlagGroup(FlagM.CF);
             EmitCopy(
                 instrCur.op1, 
                 new BinaryExpression(
@@ -113,16 +132,24 @@ namespace Reko.Arch.X86
         {
             emitter.Assign(
                 orw.FlagGroup(FlagM.ZF),
-                PseudoProc("__arpl", PrimitiveType.Bool, 
+                host.PseudoProcedure("__arpl", PrimitiveType.Bool, 
                     SrcOp(instrCur.op1),
                     SrcOp(instrCur.op2),
                     orw.AddrOf(SrcOp(instrCur.op1))));
         }
 
+        private void RewriteBound()
+        {
+            emitter.SideEffect(
+                host.PseudoProcedure("__bound", VoidType.Instance,
+                    SrcOp(instrCur.op1),
+                    SrcOp(instrCur.op2)));
+        }
+
         private void RewriteCpuid()
         {
             emitter.SideEffect(
-                PseudoProc("__cpuid", VoidType.Instance,
+                host.PseudoProcedure("__cpuid", VoidType.Instance,
                     orw.AluRegister(Registers.eax),
                     orw.AluRegister(Registers.ecx),
                     orw.AddrOf(orw.AluRegister(Registers.eax)),
@@ -134,11 +161,11 @@ namespace Reko.Arch.X86
         private void RewriteXgetbv()
         {
             Identifier edx_eax = frame.EnsureSequence(
-                orw.AluRegister(Registers.edx),
-                orw.AluRegister(Registers.eax),
+                Registers.edx,
+                Registers.eax,
                 PrimitiveType.Word64);
             emitter.Assign(edx_eax,
-                PseudoProc("__xgetbv", 
+                host.PseudoProcedure("__xgetbv", 
                 edx_eax.DataType,
                 orw.AluRegister(Registers.ecx)));
         }
@@ -146,11 +173,11 @@ namespace Reko.Arch.X86
         private void RewriteRdtsc()
         {
             Identifier edx_eax = frame.EnsureSequence(
-                orw.AluRegister(Registers.edx),
-                orw.AluRegister(Registers.eax),
+                Registers.edx,
+                Registers.eax,
                 PrimitiveType.Word64);
             emitter.Assign(edx_eax,
-                PseudoProc("__rdtsc",
+                host.PseudoProcedure("__rdtsc",
                 edx_eax.DataType));
         }
 
@@ -163,21 +190,21 @@ namespace Reko.Arch.X86
         {
             Expression src = SrcOp(instrCur.op2);
             emitter.Assign(orw.FlagGroup(FlagM.ZF), emitter.Eq0(src));
-            emitter.Assign(SrcOp(instrCur.op1), PseudoProc("__bsr", instrCur.op1.Width, src));
+            emitter.Assign(SrcOp(instrCur.op1), host.PseudoProcedure("__bsr", instrCur.op1.Width, src));
         }
 
         private void RewriteBt()
         {
 		    emitter.Assign(
                 orw.FlagGroup(FlagM.CF),
-				PseudoProc("__bt", PrimitiveType.Bool, SrcOp(instrCur.op1), SrcOp(instrCur.op2)));
+                host.PseudoProcedure("__bt", PrimitiveType.Bool, SrcOp(instrCur.op1), SrcOp(instrCur.op2)));
         }
 
         private void RewriteBtr()
         {
             emitter.Assign(
                 orw.FlagGroup(FlagM.CF),                    // lhs
-                PseudoProc(
+                host.PseudoProcedure(
                         "__btr", PrimitiveType.Bool,      // rhs
                         SrcOp(instrCur.op1),
                         SrcOp(instrCur.op2),
@@ -188,7 +215,7 @@ namespace Reko.Arch.X86
         {
             emitter.Assign(
                 orw.FlagGroup(FlagM.CF),                    // lhs
-                PseudoProc(
+                host.PseudoProcedure(
                         "__bts", PrimitiveType.Bool,      // rhs
                         SrcOp(instrCur.op1),
                         SrcOp(instrCur.op2),
@@ -198,7 +225,7 @@ namespace Reko.Arch.X86
         public void RewriteBswap()
         {
             Identifier reg = (Identifier)orw.AluRegister(((RegisterOperand)instrCur.op1).Register);
-            emitter.Assign(reg, PseudoProc("__bswap", (PrimitiveType)reg.DataType, reg));
+            emitter.Assign(reg, host.PseudoProcedure("__bswap", (PrimitiveType)reg.DataType, reg));
         }
 
         public void RewriteCbw()
@@ -254,7 +281,7 @@ namespace Reko.Arch.X86
             Expression op1 = SrcOp(instrCur.op1);
             Expression op2 = SrcOp(instrCur.op2, instrCur.op1.Width);
             emitter.Assign(
-                orw.FlagGroup(IntelInstruction.DefCc(Opcode.cmp)),
+                orw.FlagGroup(X86Instruction.DefCc(Opcode.cmp)),
                 new ConditionOf(emitter.ISub(op1, op2)));
         }
 
@@ -266,7 +293,7 @@ namespace Reko.Arch.X86
             var Z = orw.FlagGroup(FlagM.ZF);
             emitter.Assign(
                 Z,
-                PseudoProc("__cmpxchg",
+                host.PseudoProcedure("__cmpxchg",
                     PrimitiveType.Bool,
                     op1, op2, acc, emitter.Out(instrCur.dataWidth, acc)));
         }
@@ -276,8 +303,8 @@ namespace Reko.Arch.X86
             if (instrCur.dataWidth == PrimitiveType.Word32)
             {
                 Identifier edx_eax = frame.EnsureSequence(
-                    orw.AluRegister(Registers.edx),
-                    orw.AluRegister(Registers.eax),
+                    Registers.edx,
+                    Registers.eax,
                     PrimitiveType.Int64);
                 emitter.Assign(
                     edx_eax, emitter.Cast(edx_eax.DataType, orw.AluRegister(Registers.eax)));
@@ -285,8 +312,8 @@ namespace Reko.Arch.X86
             else
             {
                 Identifier dx_ax = frame.EnsureSequence(
-                    orw.AluRegister(Registers.dx),
-                    orw.AluRegister(Registers.ax),
+                    Registers.dx,
+                    Registers.ax,
                     PrimitiveType.Int32);
                 emitter.Assign(
                     dx_ax, emitter.Cast(dx_ax.DataType, orw.AluRegister(Registers.ax)));
@@ -295,7 +322,7 @@ namespace Reko.Arch.X86
 
         private void EmitDaaDas(string fnName)
         {
-            emitter.Assign(orw.FlagGroup(FlagM.CF), PseudoProc(
+            emitter.Assign(orw.FlagGroup(FlagM.CF), host.PseudoProcedure(
                 fnName,
                 PrimitiveType.Bool,
                 orw.AluRegister(Registers.al),
@@ -320,35 +347,36 @@ namespace Reko.Arch.X86
             case 2:
                 regQuotient = orw.AluRegister(Registers.ax);
                 regRemainder = orw.AluRegister(Registers.dx);
-                regDividend = frame.EnsureSequence(regRemainder, regQuotient, PrimitiveType.Word32);
+                regDividend = frame.EnsureSequence(regRemainder.Storage, regQuotient.Storage, PrimitiveType.Word32);
                 break;
             case 4:
                 regQuotient = orw.AluRegister(Registers.eax);
                 regRemainder = orw.AluRegister(Registers.edx);
-                regDividend = frame.EnsureSequence(regRemainder, regQuotient, PrimitiveType.Word64);
+                regDividend = frame.EnsureSequence(regRemainder.Storage, regQuotient.Storage, PrimitiveType.Word64);
                 break;
             case 8:
                 regQuotient = orw.AluRegister(Registers.rax);
                 regRemainder = orw.AluRegister(Registers.rdx);
-                regDividend = frame.EnsureSequence(regRemainder, regQuotient, PrimitiveType.Word128);
+                regDividend = frame.EnsureSequence(regRemainder.Storage, regQuotient.Storage, PrimitiveType.Word128);
                 break;
             default:
                 throw new ArgumentOutOfRangeException(string.Format("{0}-byte divisions not supported.", instrCur.dataWidth.Size));
             };
             PrimitiveType p = ((PrimitiveType)regRemainder.DataType).MaskDomain(domain);
+            var tmp = frame.CreateTemporary(regDividend.DataType);
+            emitter.Assign(tmp, regDividend);
             emitter.Assign(
-                regRemainder, new BinaryExpression(Operator.IMod, p,
-                regDividend,
-                SrcOp(instrCur.op1)));
+                regRemainder, 
+                new BinaryExpression(Operator.IMod, p, tmp, SrcOp(instrCur.op1)));
             emitter.Assign(
-                regQuotient, new BinaryExpression(op, p, regDividend,
-                SrcOp(instrCur.op1)));
-            EmitCcInstr(regQuotient, IntelInstruction.DefCc(instrCur.code));
+                regQuotient, 
+                new BinaryExpression(op, p, tmp, SrcOp(instrCur.op1)));
+            EmitCcInstr(regQuotient, X86Instruction.DefCc(instrCur.code));
         }
 
         private void RewriteEnter()
         {
-            var bp = orw.AluRegister(Registers.ebp.GetPart(instrCur.dataWidth));
+            var bp = orw.AluRegister(arch.GetPart(Registers.ebp, instrCur.dataWidth));
             RewritePush(instrCur.dataWidth, bp);
             var sp = StackPointer();
             emitter.Assign(bp, sp);
@@ -389,7 +417,7 @@ namespace Reko.Arch.X86
         private void RewriteLock()
         {
             emitter.SideEffect(
-                PseudoProc("__lock", VoidType.Instance));
+                host.PseudoProcedure("__lock", VoidType.Instance));
         }
 
         private void RewriteLogical(BinaryOperator op)
@@ -400,7 +428,7 @@ namespace Reko.Arch.X86
                 if (r != null && r.Register == arch.StackRegister &&
                     instrCur.op2 is ImmediateOperand)
                 {
-                    emitter.SideEffect(PseudoProc("__align", VoidType.Instance, SrcOp(instrCur.op1)));
+                    emitter.SideEffect(host.PseudoProcedure("__align", VoidType.Instance, SrcOp(instrCur.op1)));
                     return;
                 }
             }
@@ -412,7 +440,7 @@ namespace Reko.Arch.X86
                 SrcOp(instrCur.op1),
                 SrcOp(instrCur.op2),
                 CopyFlags.ForceBreak);
-            EmitCcInstr(SrcOp(instrCur.op1), (IntelInstruction.DefCc(instrCur.code) & ~FlagM.CF));
+            EmitCcInstr(SrcOp(instrCur.op1), (X86Instruction.DefCc(instrCur.code) & ~FlagM.CF));
             emitter.Assign(orw.FlagGroup(FlagM.CF), Constant.False());
         }
 
@@ -433,17 +461,17 @@ namespace Reko.Arch.X86
                 case 2:
                     multiplicator = orw.AluRegister(Registers.ax);
                     product = frame.EnsureSequence(
-                        orw.AluRegister(Registers.dx), multiplicator, PrimitiveType.Word32);
+                        Registers.dx, multiplicator.Storage, PrimitiveType.Word32);
                     break;
                 case 4:
                     multiplicator = orw.AluRegister(Registers.eax);
                     product = frame.EnsureSequence(
-                        orw.AluRegister(Registers.edx), multiplicator, PrimitiveType.Word64);
+                        Registers.edx, multiplicator.Storage, PrimitiveType.Word64);
                     break;
                 case 8:
                     multiplicator = orw.AluRegister(Registers.rax);
                     product = frame.EnsureSequence(
-                        orw.AluRegister(Registers.rdx), multiplicator, PrimitiveType.Word64);
+                        Registers.rdx, multiplicator.Storage, PrimitiveType.Word64);
                     break;
                 default:
                     throw new ApplicationException(string.Format("Unexpected operand size: {0}", instrCur.op1.Width));
@@ -455,7 +483,7 @@ namespace Reko.Arch.X86
                         PrimitiveType.Create(resultDomain, product.DataType.Size),
                         SrcOp(instrCur.op1),
                         multiplicator));
-                EmitCcInstr(product, IntelInstruction.DefCc(instrCur.code));
+                EmitCcInstr(product, X86Instruction.DefCc(instrCur.code));
                 return;
             case 2:
                 EmitBinOp(op, instrCur.op1, instrCur.op1.Width.MaskDomain(resultDomain), SrcOp(instrCur.op1), SrcOp(instrCur.op2), 
@@ -475,7 +503,7 @@ namespace Reko.Arch.X86
             var ppName = "__in" + IntelSizeSuffix(instrCur.op1.Width.Size);
             emitter.Assign(
                 SrcOp(instrCur.op1),
-                PseudoProc(ppName, instrCur.op1.Width, SrcOp(instrCur.op2)));
+                host.PseudoProcedure(ppName, instrCur.op1.Width, SrcOp(instrCur.op2)));
         }
 
         private string IntelSizeSuffix(int size)
@@ -522,7 +550,7 @@ namespace Reko.Arch.X86
         private void RewriteLeave()
         {
             var sp = orw.AluRegister(arch.StackRegister);
-            var bp = orw.AluRegister(Registers.ebp.GetPart(arch.StackRegister.DataType));
+            var bp = orw.AluRegister(arch.GetPart(Registers.ebp, arch.StackRegister.DataType));
             emitter.Assign(sp, bp);
             emitter.Assign(bp, orw.StackAccess(sp, bp.DataType));
             emitter.Assign(sp, emitter.IAdd(sp, bp.DataType.Size));
@@ -538,7 +566,7 @@ namespace Reko.Arch.X86
             }
 
             var ass = emitter.Assign(
-                frame.EnsureSequence(orw.AluRegister(seg), orw.AluRegister(reg.Register),
+                frame.EnsureSequence(seg, reg.Register,
                 PrimitiveType.Pointer32),
                 SrcOp(mem, PrimitiveType.SegPtr32));
         }
@@ -575,6 +603,7 @@ namespace Reko.Arch.X86
                     dasm.MoveNext();
                     emitter.Assign(StackPointer(), emitter.ISub(StackPointer(), reg.Register.DataType.Size));
                     RewriteCall(dasm.Current.op1, dasm.Current.op1.Width);
+                    ric.Length = (byte) (ric.Length + dasm.Current.Length);
                     return;
                 }
 
@@ -595,7 +624,7 @@ namespace Reko.Arch.X86
             RewritePush(dasm.Current.dataWidth, SrcOp(dasm.Current.op1));
         }
 
-        private void RewritePush(IntelRegister reg)
+        private void RewritePush(RegisterStorage reg)
         {
             RewritePush(instrCur.dataWidth, orw.AluRegister(reg));
         }
@@ -604,22 +633,26 @@ namespace Reko.Arch.X86
         {
             if (instrCur.dataWidth == PrimitiveType.Word16)
             {
+                Identifier temp = frame.CreateTemporary(Registers.sp.DataType);
+                emitter.Assign(temp, orw.AluRegister(Registers.sp));
                 RewritePush(Registers.ax);
                 RewritePush(Registers.cx);
                 RewritePush(Registers.dx);
                 RewritePush(Registers.bx);
-                RewritePush(Registers.sp);
+                RewritePush(PrimitiveType.Word16, temp);
                 RewritePush(Registers.bp);
                 RewritePush(Registers.si);
                 RewritePush(Registers.di);
             }
             else
             {
+                Identifier temp = frame.CreateTemporary(Registers.esp.DataType);
+                emitter.Assign(temp, orw.AluRegister(Registers.esp));
                 RewritePush(Registers.eax);
                 RewritePush(Registers.ecx);
                 RewritePush(Registers.edx);
                 RewritePush(Registers.ebx);
-                RewritePush(Registers.esp);
+                RewritePush(PrimitiveType.Word32, temp);
                 RewritePush(Registers.ebp);
                 RewritePush(Registers.esi);
                 RewritePush(Registers.edi);
@@ -631,6 +664,7 @@ namespace Reko.Arch.X86
             RewritePush(
                 dasm.Current.dataWidth,
                 frame.EnsureFlagGroup(
+                    Registers.eflags,
                     (uint)(FlagM.SF | FlagM.CF | FlagM.ZF | FlagM.DF | FlagM.OF | FlagM.PF),
                     "SCZDOP", 
                     PrimitiveType.Byte));
@@ -672,7 +706,7 @@ namespace Reko.Arch.X86
             emitter.Assign(sp, emitter.IAdd(sp, width.Size));
         }
 
-        private void EmitPop(IntelRegister reg)
+        private void EmitPop(RegisterStorage reg)
         {
             RewritePop(orw.AluRegister(reg), instrCur.dataWidth);
         }
@@ -710,6 +744,7 @@ namespace Reko.Arch.X86
             var width = instrCur.dataWidth;
             var sp = StackPointer();
             emitter.Assign(frame.EnsureFlagGroup(
+                    Registers.eflags,
                     (uint)(FlagM.SF | FlagM.CF | FlagM.ZF | FlagM.DF | FlagM.OF | FlagM.PF),
                     "SCZDOP",
                     PrimitiveType.Byte),
@@ -725,11 +760,22 @@ namespace Reko.Arch.X86
                 expr = Constant.Create(dataWidth, c.ToInt64());
             }
 
-            // Allocate an local variable for the push.
-
+            // Allocate a local variable for the push.
             var sp = StackPointer();
+            Expression rhs;
+
+            // Check if the push requires preserving the original stack pointer
+            if (expr is Constant || (expr is Identifier && (expr as Identifier).Storage != arch.StackRegister))
+            {
+                rhs = expr;
+            }
+            else
+            {
+                rhs = frame.CreateTemporary(sp.DataType);
+                emitter.Assign(rhs, expr);
+            }
             emitter.Assign(sp, emitter.ISub(sp, dataWidth.Size));
-            emitter.Assign(orw.StackAccess(sp, dataWidth), expr);
+            emitter.Assign(orw.StackAccess(sp, dataWidth), rhs);
         }
 
         private void RewriteRotation(string operation, bool useCarry, bool left)
@@ -758,15 +804,14 @@ namespace Reko.Arch.X86
             Expression p;
             if (useCarry)
             {
-                p = PseudoProc(operation, instrCur.op1.Width, SrcOp(instrCur.op1), SrcOp(instrCur.op2), orw.FlagGroup(FlagM.CF));
+                p = host.PseudoProcedure(operation, instrCur.op1.Width, SrcOp(instrCur.op1), SrcOp(instrCur.op2), orw.FlagGroup(FlagM.CF));
             }
             else
             {
-                p = PseudoProc(operation, instrCur.op1.Width, SrcOp(instrCur.op1), SrcOp(instrCur.op2));
+                p = host.PseudoProcedure(operation, instrCur.op1.Width, SrcOp(instrCur.op1), SrcOp(instrCur.op2));
             }
             emitter.Assign(SrcOp(instrCur.op1), p);
-            if (t != null)
-                emitter.Assign(orw.FlagGroup(FlagM.CF), t);
+            emitter.Assign(orw.FlagGroup(FlagM.CF), t);
         }
 
         private void RewriteSet(ConditionCode cc)
@@ -839,7 +884,14 @@ namespace Reko.Arch.X86
 			get { return orw.AluRegister(Registers.rsi, instrCur.addrWidth); }
 		}
 	
-        private void RewriteStringInstruction()
+        /// <summary>
+        /// Rewrites the current instruction as a string instruction.
+        /// </summary>
+        /// <returns>False if the current instruction is not a string 
+        /// instruction. This can happen when disassembling data where
+        /// a "rep" prefix is followed by some other junk byte.
+        /// </returns>
+        private bool RewriteStringInstruction()
         {
             bool incSi = false;
             bool incDi = false;
@@ -850,11 +902,11 @@ namespace Reko.Arch.X86
             switch (instrCur.code)
             {
             default:
-                throw new NotSupportedException(string.Format("'{0}' is not an x86 string instruction.", instrCur.code));
+                return false;
             case Opcode.cmps:
             case Opcode.cmpsb:
                 emitter.Assign(
-                    orw.FlagGroup(IntelInstruction.DefCc(Opcode.cmp)),
+                    orw.FlagGroup(X86Instruction.DefCc(Opcode.cmp)),
                     new ConditionOf(
                     new BinaryExpression(Operator.ISub, instrCur.dataWidth, MemSi(), MemDi())));
                 incSi = true;
@@ -890,7 +942,7 @@ namespace Reko.Arch.X86
             case Opcode.scas:
             case Opcode.scasb:
                 emitter.Assign(
-                    orw.FlagGroup(IntelInstruction.DefCc(Opcode.cmp)),
+                    orw.FlagGroup(X86Instruction.DefCc(Opcode.cmp)),
                     new ConditionOf(
                     new BinaryExpression(Operator.ISub,
                     instrCur.dataWidth,
@@ -907,8 +959,7 @@ namespace Reko.Arch.X86
                 // "AMD recommends to avoid the penalty by adding rep prefix instead of nop
                 // because it saves decode bandwidth."
                 RewriteRet();
-                return;
-
+                return true;
             }
 
             if (incSi)
@@ -928,17 +979,22 @@ namespace Reko.Arch.X86
                     RegDi,
                     Constant.Create(instrCur.addrWidth, instrCur.dataWidth.Size)));
             }
+            return true;
         }
 
         private BinaryOperator GetIncrementOperator()
         {
             Constant direction = state.GetFlagGroup((uint)FlagM.DF);
-            Debug.Print("dir: " + direction);
             if (direction == null || !direction.IsValid)
                 return Operator.IAdd;        // Better safe than sorry.
             return direction.ToBoolean()
                 ? Operator.ISub
                 : Operator.IAdd;
+        }
+
+        private void RewriteSti()
+        {
+            emitter.SideEffect(host.PseudoProcedure("__sti", VoidType.Instance));
         }
 
         private void RewriteTest()
@@ -948,7 +1004,7 @@ namespace Reko.Arch.X86
                 SrcOp(instrCur.op1),
                                 SrcOp(instrCur.op2));
 
-            EmitCcInstr(src, (IntelInstruction.DefCc(instrCur.code) & ~FlagM.CF));
+            EmitCcInstr(src, (X86Instruction.DefCc(instrCur.code) & ~FlagM.CF));
             emitter.Assign(orw.FlagGroup(FlagM.CF), Constant.False());
         }
 
@@ -963,8 +1019,8 @@ namespace Reko.Arch.X86
             var src = SrcOp(instrCur.op2);
             emitter.Assign(
                 dst,
-                PseudoProc("__xadd", instrCur.op1.Width, dst, src));
-            EmitCcInstr(dst, IntelInstruction.DefCc(instrCur.code));
+                host.PseudoProcedure("__xadd", instrCur.op1.Width, dst, src));
+            EmitCcInstr(dst, X86Instruction.DefCc(instrCur.code));
         }
 
         private void RewriteXlat()

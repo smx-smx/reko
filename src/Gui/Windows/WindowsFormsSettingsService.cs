@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
-* Copyright (C) 1999-2015 John Källén.
+* Copyright (C) 1999-2016 John Källén.
 *
 * This program is free software; you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -44,7 +44,6 @@ namespace Reko.Gui.Windows
             return regSvc.CurrentUser.OpenSubKey(keyName, writeable);
         }
 
-
         public object Get(string settingName, object defaultValue)
         {
             string keyName; string valName;
@@ -71,6 +70,14 @@ namespace Reko.Gui.Windows
             SplitIntoKeyValueName(name, out keyName, out valName); 
             var key = GetRegistryKey(keyName, true);
             key.SetValue(valName, value);
+        }
+
+        public void Delete(string name)
+        {
+            string keyName; string valName;
+            SplitIntoKeyValueName(name, out keyName, out valName); 
+            var key = GetRegistryKey(keyName, true);
+            key.DeleteValue(valName);
         }
 
         private void SplitIntoKeyValueName(string name, out string keyName, out string valName)

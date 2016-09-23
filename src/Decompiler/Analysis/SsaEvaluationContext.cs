@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,10 +31,12 @@ namespace Reko.Analysis
 {
     public class SsaEvaluationContext : EvaluationContext
     {
+        private IProcessorArchitecture arch;
         private SsaIdentifierCollection ssaIds;
 
-        public SsaEvaluationContext(SsaIdentifierCollection ssaIds)
+        public SsaEvaluationContext(IProcessorArchitecture arch, SsaIdentifierCollection ssaIds)
         {
+            this.arch = arch;
             this.ssaIds = ssaIds;
         }
 
@@ -73,6 +75,11 @@ namespace Reko.Analysis
         public Expression GetDefiningExpression(Identifier id)
         {
             return ssaIds[id].DefExpression;
+        }
+
+        public Expression MakeSegmentedAddress(Constant seg, Constant off)
+        {
+            return arch.MakeSegmentedAddress(seg, off);
         }
 
         public void RemoveIdentifierUse(Identifier id)

@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@
 #endregion
 
 using Reko.Core.Code;
+using Reko.Core.Expressions;
 using System;
 using System.Collections.Generic;
 
@@ -58,9 +59,9 @@ namespace Reko.Core.Types
 			return new ArrayType(elType, length);
 		}
 
-		public FunctionType CreateFunctionType(string functionName, DataType returnType, DataType [] paramTypes, string [] paramNames)
+		public FunctionType CreateFunctionType(Identifier returnType, Identifier [] parameters)
 		{
-			return new FunctionType(functionName, returnType, paramTypes, paramNames);
+			return new FunctionType(returnType, parameters);
 		}
 
 		public PrimitiveType CreatePrimitiveType(Domain dom, int size)

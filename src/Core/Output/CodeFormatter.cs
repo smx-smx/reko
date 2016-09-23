@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,6 +28,8 @@ using System.IO;
 using System.Linq;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
+using System.Text;
 
 namespace Reko.Core.Output
 {
@@ -71,7 +73,8 @@ namespace Reko.Core.Output
             precedences = new Dictionary<Operator, int>();
 			precedences[Operator.Not] = 2;			//$REFACTOR: precedence is a property of the output language; these are the C/C++ precedences
 			precedences[Operator.Neg] = 2;			
-			precedences[Operator.Comp] = 2;
+			precedences[Operator.FNeg] = 2;
+            precedences[Operator.Comp] = 2;
 			precedences[Operator.AddrOf] = 2;
 			precedences[Operator.SMul] = 4;
 			precedences[Operator.UMul] = 4;
@@ -93,10 +96,10 @@ namespace Reko.Core.Output
 			precedences[Operator.Le] = 7;
 			precedences[Operator.Gt] = 7;
 			precedences[Operator.Ge] = 7;
-			precedences[Operator.Rlt] = 7;
-			precedences[Operator.Rle] = 7;
-			precedences[Operator.Rgt] = 7;
-			precedences[Operator.Rge] = 7;
+			precedences[Operator.Flt] = 7;
+			precedences[Operator.Fle] = 7;
+			precedences[Operator.Fgt] = 7;
+			precedences[Operator.Fge] = 7;
 			precedences[Operator.Ult] = 7;
 			precedences[Operator.Ule] = 7;
 			precedences[Operator.Ugt] = 7;
@@ -115,7 +118,6 @@ namespace Reko.Core.Output
                 Assoc.Right,    // Unary
                 Assoc.Left,     // member pointer deref
                 Assoc.Left,     // mul
-
             };
 		}
 
@@ -140,7 +142,6 @@ namespace Reko.Core.Output
 			precedenceCur = precedence;
 			return precedenceOld;
 		}
-
 
 		#region IExpressionVisitor members ///////////////////////
 
@@ -193,7 +194,7 @@ namespace Reko.Core.Output
 		{
 			int prec = SetPrecedence(PrecedenceCase);
 			writer.Write("(");
-            cast.DataType.Accept(new TypeFormatter(writer, true));
+            new TypeReferenceFormatter(writer).WriteTypeReference(cast.DataType);
 			writer.Write(") ");
 			cast.Expression.Accept(this);
 			ResetPresedence(prec);
@@ -206,6 +207,8 @@ namespace Reko.Core.Output
 			writer.Write(")");
 		}
 
+        private static readonly char[] nosuffixRequired = new[] { '.', 'E', 'e' };
+
         public virtual void VisitConstant(Constant c)
         {
             if (!c.IsValid)
@@ -213,17 +216,39 @@ namespace Reko.Core.Output
                 writer.Write("<invalid>");
                 return;
             }
-            PrimitiveType t = c.DataType as PrimitiveType;
-            if (t != null)
+            var pt = c.DataType as PrimitiveType;
+            if (pt != null)
             {
-                if (t.Domain == Domain.Boolean)
+                if (pt.Domain == Domain.Boolean)
                 {
                     writer.Write(Convert.ToBoolean(c.GetValue()) ? "true" : "false");
                 }
-                else
+                else if (pt.Domain == Domain.Real)
+                {
+                    string sr;
+
+                    if (pt.Size == 4)
+                    {
+                        sr = c.ToFloat().ToString("g", CultureInfo.InvariantCulture);
+                    }
+                    else
+                    {
+                        sr = c.ToReal64().ToString("g", CultureInfo.InvariantCulture);
+                    }
+                    if (sr.IndexOfAny(nosuffixRequired) < 0)
+                    {
+                        sr += ".0";
+                    }
+                    if (pt.Size == 4)
+                    {
+                        sr += "F";
+                    }
+                    writer.Write(sr);
+                }
+                else 
                 {
                     object v = c.GetValue();
-                    writer.Write(FormatString(t, v), v);
+                    writer.Write(FormatString(pt, v), v);
                 }
                 return;
             }
@@ -240,7 +265,7 @@ namespace Reko.Core.Output
 			WriteExpression(d.Source);
 			writer.Write(", ");
 			WriteExpression(d.InsertedBits);
-			writer.Write(", {0}, {1})", d.BitPosition, d.BitCount);
+			writer.Write(", {0})", d.BitPosition);
 		}
 
 		public void VisitMkSequence(MkSequence seq)
@@ -267,7 +292,7 @@ namespace Reko.Core.Output
             if (d != null)
             {
                 d.Expression.Accept(this);
-                writer.Write("->{0}", acc.FieldName);
+                writer.Write("->{0}", acc.Field.Name);
             }
             else
             {
@@ -275,12 +300,12 @@ namespace Reko.Core.Output
                 if (scope != null)
                 {
                     scope.Accept(this);
-                    writer.Write("::{0}", acc.FieldName);
+                    writer.Write("::{0}", acc.Field.Name);
                 }
                 else
                 {
                     acc.Structure.Accept(this);
-                    writer.Write(".{0}", acc.FieldName);
+                    writer.Write(".{0}", acc.Field.Name);
                 }
             }
 			ResetPresedence(prec);
@@ -344,7 +369,7 @@ namespace Reko.Core.Output
 
 		public void VisitPhiFunction(PhiFunction phi)
 		{
-			writer.Write("PHI");
+			writer.WriteKeyword("PHI");
 			WriteActuals(phi.Arguments);
 		}
 
@@ -450,9 +475,14 @@ namespace Reko.Core.Output
 			writer.Indent();
             Debug.Assert(decl.Identifier.DataType != null, "The DataType property can't ever be null");
 
+#if OLD
             TypeFormatter tf = new TypeFormatter(writer, true);
             tf.Write(decl.Identifier.DataType, decl.Identifier.Name);
-			if (decl.Expression != null)
+#else
+            TypeReferenceFormatter tf = new TypeReferenceFormatter(writer);
+            tf.WriteDeclaration(decl.Identifier.DataType, decl.Identifier.Name);
+#endif
+            if (decl.Expression != null)
 			{
 				writer.Write(" = ");
 				decl.Expression.Accept(this);
@@ -549,7 +579,7 @@ namespace Reko.Core.Output
 			}
 			writer.Terminate();
 		}
-		#endregion
+#endregion
 
 
 		#region IAbsynStatementVisitor //////////////////////
@@ -602,8 +632,8 @@ namespace Reko.Core.Output
 			writer.Indent();
 			if (decl.Identifier.DataType != null)
 			{
-                TypeFormatter tf = new TypeFormatter(writer, true);
-                tf.Write(decl.Identifier.DataType, decl.Identifier.Name);
+                TypeReferenceFormatter tf = new TypeReferenceFormatter(writer);
+                tf.WriteDeclaration(decl.Identifier.DataType, decl.Identifier.Name);
 			}
 			else
 			{
@@ -688,7 +718,6 @@ namespace Reko.Core.Output
             case 16: return "0x{0:X16}";
             default: throw new ArgumentOutOfRangeException("type", type.Size, string.Format("Integral types of size {0} bytes are not supported.", type.Size));
             }
-
         }
 
         private string FormatString(PrimitiveType type, object value)
@@ -711,13 +740,6 @@ namespace Reko.Core.Output
                 else if (ch == '\'' || ch == '\\')
                     return string.Format(format, string.Format("\\{0}", ch));
                 return format;
-            case Domain.Real:
-                switch (type.Size)
-                {
-                case 4: return "{0:g}F";
-                case 8: return "{0:g}";
-                default: throw new ArgumentOutOfRangeException("Only real types of size 4 and 8 are supported.");
-                }
             default:
                 return UnsignedFormatString(type, Convert.ToUInt64(value));
             }
@@ -784,11 +806,11 @@ namespace Reko.Core.Output
 			WriteIndentedStatements(loop.Body, false);
 		}
 
-		#endregion
+#endregion
 
 		public void Write(Procedure proc)
 		{
-			proc.Signature.Emit(proc.Name, ProcedureSignature.EmitFlags.None, writer, this, new TypeFormatter(writer, true));
+			proc.Signature.Emit(proc.QualifiedName(), FunctionType.EmitFlags.None, writer, this, new TypeFormatter(writer, true));
 			writer.WriteLine();
 			writer.Write("{");
             writer.WriteLine();
@@ -844,7 +866,14 @@ namespace Reko.Core.Output
             }
             else
             {
-                t.Write(arg.DataType, arg.Name);
+                if (arg.Storage is OutArgumentStorage)
+                {
+                    t.Write(new ReferenceTo(arg.DataType), arg.Name);
+                }
+                else
+                {
+                    t.Write(arg.DataType, arg.Name);
+                }
             }
         }
 

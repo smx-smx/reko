@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,9 +34,9 @@ namespace Reko.Gui.Windows.Forms
 {
     public interface InitialPageInteractor : IPhasePageInteractor
     {
-        bool OpenBinary(string file, DecompilerHost host);
-        bool OpenBinaryAs(string file, IProcessorArchitecture arch, Platform platform, Address addrBase, DecompilerHost host);
-        bool Assemble(string file, Assembler asm, DecompilerHost host);
+        bool OpenBinary(string file);
+        bool OpenBinaryAs(string file, string arch, string platform, Address addrBase, RawFileElement raw);
+        bool Assemble(string file, Assembler asm);
     }
 
     /// <summary>
@@ -48,9 +48,9 @@ namespace Reko.Gui.Windows.Forms
         {
         }
 
-        protected virtual IDecompiler CreateDecompiler(ILoader ldr, DecompilerHost host)
+        protected virtual IDecompiler CreateDecompiler(ILoader ldr)
         {
-            return new DecompilerDriver(ldr, host, Services);
+            return new DecompilerDriver(ldr, Services);
         }
 
         public override bool QueryStatus(CommandID cmdId, CommandStatus status, CommandText text)
@@ -62,10 +62,17 @@ namespace Reko.Gui.Windows.Forms
                 case CmdIds.ViewGoToAddress:
                 case CmdIds.ViewShowAllFragments:
                 case CmdIds.ViewShowUnscanned:
-                case CmdIds.ActionEditSignature:
                 case CmdIds.ActionMarkProcedure:
+                case CmdIds.ActionRestartDecompilation:
                     status.Status = 0;
                     return true;
+                case CmdIds.ActionNextPhase:
+                    status.Status = CanAdvance 
+                        ? MenuStatus.Visible | MenuStatus.Enabled
+                        : MenuStatus.Visible;
+                    text.Text = Resources.ScanBinaries;
+                    return true;
+
                 }
             }
             return base.QueryStatus(cmdId, status, text);
@@ -89,10 +96,10 @@ namespace Reko.Gui.Windows.Forms
             return (Decompiler != null);
         }
 
-        public bool OpenBinary(string file, DecompilerHost host)
+        public bool OpenBinary(string file)
         {
             var ldr = Services.RequireService<ILoader>();
-            this.Decompiler = CreateDecompiler(ldr, host);
+            this.Decompiler = CreateDecompiler(ldr);
             IWorkerDialogService svc = Services.RequireService<IWorkerDialogService>();
             bool isOldProject = false;
             svc.StartBackgroundWork("Loading program", delegate()
@@ -113,17 +120,28 @@ namespace Reko.Gui.Windows.Forms
 
         public bool OpenBinaryAs(
             string file, 
-            IProcessorArchitecture arch,
-            Platform platform, 
+            string arch,
+            string platform, 
             Address addrBase, 
-            DecompilerHost host)
+            RawFileElement raw)
         {
             var ldr = Services.RequireService<ILoader>();
-            this.Decompiler = CreateDecompiler(ldr, host);
+            this.Decompiler = CreateDecompiler(ldr);
             IWorkerDialogService svc = Services.RequireService<IWorkerDialogService>();
             svc.StartBackgroundWork("Loading program", delegate()
             {
-                Decompiler.LoadRawImage(file, arch, platform, addrBase);
+                Program program;
+                if (raw != null)
+                {
+                   program = Decompiler.LoadRawImage(file, raw);
+                }
+                else
+                {
+                   program= Decompiler.LoadRawImage(file, arch, platform, addrBase);
+                }
+                program.User.Processor = arch;
+                program.User.Environment = platform;
+                program.User.LoadAddress = program.ImageMap.BaseAddress; ;
                 svc.SetCaption("Scanning source program.");
                 Decompiler.ScanPrograms();
             });
@@ -137,10 +155,10 @@ namespace Reko.Gui.Windows.Forms
             return false;   // We never open projects this way.
         }
 
-        public bool Assemble(string file, Assembler asm, DecompilerHost host)
+        public bool Assemble(string file, Assembler asm)
         {
             var ldr = Services.RequireService<ILoader>();
-            this.Decompiler = CreateDecompiler(ldr, host);
+            this.Decompiler = CreateDecompiler(ldr);
             var svc = Services.RequireService<IWorkerDialogService>();
             svc.StartBackgroundWork("Loading program", delegate()
             {

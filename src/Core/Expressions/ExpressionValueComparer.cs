@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,7 +25,7 @@ using System.Text;
 namespace Reko.Core.Expressions
 {
     /// <summary>
-    /// Deep-compares expressions.
+    /// Deep-compares expressions; i.e. treats expressions as values.
     /// </summary>
     public class ExpressionValueComparer : IEqualityComparer<Expression>
     {
@@ -111,6 +111,12 @@ namespace Reko.Core.Expressions
             Add(typeof(Address64),
                 addrComp,
                 addrHash);
+            Add(typeof(ProtectedSegmentedAddress),
+                addrComp,
+                addrHash);
+            Add(typeof(RealSegmentedAddress),
+                addrComp,
+                addrHash);
 
             Add(typeof(Constant),
                 delegate(Expression ea, Expression eb)
@@ -127,13 +133,13 @@ namespace Reko.Core.Expressions
                 delegate(Expression ea, Expression eb)
                 {
                     DepositBits a = (DepositBits) ea, b = (DepositBits) eb;
-                    return a.BitCount == b.BitCount && a.BitPosition == b.BitPosition &&
+                    return a.BitPosition == b.BitPosition &&
                         EqualsImpl(a.Source, b.Source) && EqualsImpl(a.InsertedBits, b.InsertedBits);
                 },
                 delegate(Expression obj)
                 {
                     DepositBits dpb = (DepositBits) obj;
-                    return GetHashCodeImpl(dpb.Source) * 67 ^ GetHashCodeImpl(dpb.InsertedBits) * 43 ^ dpb.BitPosition * 7 ^ dpb.BitCount;
+                    return GetHashCodeImpl(dpb.Source) * 67 ^ GetHashCodeImpl(dpb.InsertedBits) * 43 ^ dpb.BitPosition;
                 });
 
             Add(typeof(Dereference),

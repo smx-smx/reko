@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -38,6 +38,7 @@ namespace Reko.UnitTests.Assemblers.Pdp11
         private Pdp11TextAssembler asm;
         private IEmitter emitter;
         private Program ldr;
+        private MemoryArea mem;
 
         [SetUp]
         public void Setup()
@@ -47,72 +48,7 @@ namespace Reko.UnitTests.Assemblers.Pdp11
             this.asm = new Pdp11TextAssembler(emitter);
         }
 
-        [Test]
-        public void Pdp11Tasm_Comment()
-        {
-            var ldr = asm.AssembleFragment(Address.Ptr16(0x0100), "; nothing");
-        }
-
-        [Test]
-        public void Pdp11Tasm_Equate()
-        {
-            var ldr = asm.AssembleFragment(Address.Ptr16(0x0100), " a = r");
-            Assert.AreEqual("r", asm.Assembler.Equates["a"]);
-        }
-
-        [Test]
-        public void Pdp11Tasm_Decimal()
-        {
-            var ldr = asm.AssembleFragment(Address.Ptr16(0x0100), " a = 42.");
-            Assert.AreEqual(42, asm.Assembler.Equates["a"]);
-        }
-
-        [Test]
-        public void Pdp11Tasm_Sum()
-        {
-            var ldr = asm.AssembleFragment(Address.Ptr16(0x0100), @"
-a = 42.; decimal
-b = 10 ; octal
-c = a + b");
-            Assert.AreEqual(50, asm.Assembler.Equates["c"]);
-        }
-
-        [Test]
-        public void Pdp11Tasm_PageDirective()
-        {
-            var ldr = asm.AssembleFragment(Address.Ptr16(0x0100), ".page");
-        }
-
-        [Test]
-        public void Pdp11Tasm_LabelledWord()
-        {
-            var ldr = asm.AssembleFragment(Address.Ptr16(0x0100), "label1: .word 14");
-            Assert.AreEqual(2, ldr.Image.Bytes.Length);
-            Assert.AreEqual(12, ldr.Image.ReadLeInt16(0));
-        }
-
-        [Test]
-        public void Pdp11Tasm_Dot()
-        {
-            var ldr = asm.AssembleFragment(Address.Ptr16(0x100), "label1: .word .");
-            Assert.AreEqual(0x100, ldr.Image.ReadLeUInt16(0));
-        }
-
-        [Test]
-        public void Pdp11Tasm_ReserveIdiom()
-        {
-            var ldr = asm.AssembleFragment(Address.Ptr16(0x100), ".=.+10");
-            Assert.AreEqual(8, ldr.Image.Bytes.Length);
-        }
-
-        [Test]
-        public void Pdp11Tasm_Reset()
-        {
-            var ldr = asm.AssembleFragment(Address.Ptr16(0x100), " rEsEt");
-            Assert.AreEqual(0x0005, ldr.Image.ReadLeUInt16(0));
-        }
-
-        private void AssertWords(byte [] actual, params ushort[] expected)
+        private void AssertWords(byte[] actual, params ushort[] expected)
         {
             var actualWords = actual.AsWords().ToArray();
             Assert.AreEqual(expected.Length, actualWords.Length);
@@ -123,12 +59,82 @@ c = a + b");
         }
 
         [Test]
+        public void Pdp11Tasm_Comment()
+        {
+            asm.AssembleFragment(Address.Ptr16(0x0100), "; nothing");
+        }
+
+        [Test]
+        public void Pdp11Tasm_Equate()
+        {
+            asm.AssembleFragment(Address.Ptr16(0x0100), " a = r");
+            Assert.AreEqual("r", asm.Assembler.Equates["a"]);
+        }
+
+        [Test]
+        public void Pdp11Tasm_Decimal()
+        {
+            asm.AssembleFragment(Address.Ptr16(0x0100), " a = 42.");
+            Assert.AreEqual(42, asm.Assembler.Equates["a"]);
+        }
+
+        [Test]
+        public void Pdp11Tasm_Sum()
+        {
+            asm.AssembleFragment(Address.Ptr16(0x0100), @"
+a = 42.; decimal
+b = 10 ; octal
+c = a + b");
+            Assert.AreEqual(50, asm.Assembler.Equates["c"]);
+        }
+
+        [Test]
+        public void Pdp11Tasm_PageDirective()
+        {
+            asm.AssembleFragment(Address.Ptr16(0x0100), ".page");
+        }
+
+        [Test]
+        public void Pdp11Tasm_LabelledWord()
+        {
+            var ldr = asm.AssembleFragment(Address.Ptr16(0x0100), "label1: .word 14");
+            var mem = ldr.SegmentMap.Segments.Values.First().MemoryArea;
+            Assert.AreEqual(2,  mem.Bytes.Length);
+            Assert.AreEqual(12, mem.ReadLeInt16(0));
+        }
+
+        [Test]
+        public void Pdp11Tasm_Dot()
+        {
+            var ldr = asm.AssembleFragment(Address.Ptr16(0x100), "label1: .word .");
+            var mem = ldr.SegmentMap.Segments.Values.First().MemoryArea;
+            Assert.AreEqual(0x100, mem.ReadLeUInt16(0));
+        }
+
+        [Test]
+        public void Pdp11Tasm_ReserveIdiom()
+        {
+            var ldr = asm.AssembleFragment(Address.Ptr16(0x100), ".=.+10");
+            var mem = ldr.SegmentMap.Segments.Values.First().MemoryArea;
+            Assert.AreEqual(8, mem.Bytes.Length);
+        }
+
+        [Test]
+        public void Pdp11Tasm_Reset()
+        {
+            var ldr = asm.AssembleFragment(Address.Ptr16(0x100), " rEsEt");
+            var mem = ldr.SegmentMap.Segments.Values.First().MemoryArea;
+            Assert.AreEqual(0x0005, mem.ReadLeUInt16(0));
+        }
+
+        [Test]
         public void Pdp11Tasm_MovSp()
         {
             var ldr = asm.AssembleFragment(Address.Ptr16(0x100), @"
 sav: .word
     mov sp,sav");
-            AssertWords(ldr.Image.Bytes, 0x0000, 0x119F, 0x0100);
+            var mem = ldr.SegmentMap.Segments.Values.First().MemoryArea;
+            AssertWords(mem.Bytes, 0x0000, 0x119F, 0x0100);
         }
 
         [Test]
@@ -139,12 +145,14 @@ sav: .word
 power:  .word 666
 sav:    .word 777";
             Assemble(assemblerFragment);
-            AssertWords(ldr.Image.Bytes, 0x15DF, 0x0106, 0x0108, 0x1B6, 0x1FF);
+            var mem = ldr.SegmentMap.Segments.Values.First().MemoryArea;
+            AssertWords(mem.Bytes, 0x15DF, 0x0106, 0x0108, 0x1B6, 0x1FF);
         }
 
         private void Assemble(string assemblerFragment)
         {
             ldr = asm.AssembleFragment(Address.Ptr16(0x100), assemblerFragment);
+            mem = ldr.SegmentMap.Segments.Values.First().MemoryArea;
         }
 
         [Test]
@@ -154,36 +162,35 @@ sav:    .word 777";
         jsr pc,delay
 delay:  .word
 ");
-            AssertWords(ldr.Image.Bytes, 0x09DF, 0x0104, 0x0000);
+            AssertWords(mem.Bytes, 0x09DF, 0x0104, 0x0000);
         }
 
         [Test]
         public void Pdp11Tasm_sub()
         {
             Assemble(@"sub r2,r3");
-            AssertWords(ldr.Image.Bytes, 0xE083);
+            AssertWords(mem.Bytes, 0xE083);
         }
-
 
         [Test]
         public void Pdp11Tasm_asr_w()
         {
             Assemble(@"asr @r2");
-            AssertWords(ldr.Image.Bytes, 0x0C8A);
+            AssertWords(mem.Bytes, 0x0C8A);
         }
 
         [Test]
         public void Pdp11Tasm_movb()
         {
             Assemble(@"movb @r2,-(r3)");
-            AssertWords(ldr.Image.Bytes, 0x92A3);
+            AssertWords(mem.Bytes, 0x92A3);
         }
 
         [Test]
         public void Pdp11Tasm_clr_post()
         {
             Assemble("clrb (r2)+");
-            AssertWords(ldr.Image.Bytes, 0x8A12);
+            AssertWords(mem.Bytes, 0x8A12);
         }
 
         [Test]
@@ -193,7 +200,7 @@ delay:  .word
 lupe: dec r0
      beq lupe
 ");
-            AssertWords(ldr.Image.Bytes, 0x0AC0, 0x03FE);
+            AssertWords(mem.Bytes, 0x0AC0, 0x03FE);
         }
 
         [Test]
@@ -209,7 +216,7 @@ lupe: dec r0
             Assemble(
                 "  .WORD SYMX\r\n" + 
                 "SYMX: clrb (r2)\r\n");
-            AssertWords(ldr.Image.Bytes, 0x0002, 0x8A0A);
+            AssertWords(mem.Bytes, 0x0002, 0x8A0A);
         }
     }
 

@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -48,12 +48,18 @@ namespace Reko.Evaluation
         private IdBinIdc_Rule idBinIdc;
         private SliceConstant_Rule sliceConst;
         private SliceMem_Rule sliceMem;
+        private SliceSegmentedPointer_Rule sliceSegPtr;
+        private SliceShift sliceShift;
+        private Shl_add_Rule shAdd;
         private Shl_mul_e_Rule shMul;
         private ShiftShift_c_c_Rule shiftShift;
-        private SliceShift sliceShift;
         private NegSub_Rule negSub;
         private Mps_Constant_Rule mpsRule;
         private BinOpWithSelf_Rule binopWithSelf;
+        private ConstDivisionImplementedByMultiplication constDiv;
+        private SelfDpbRule selfdpbRule;
+        private IdProcConstRule idProcConstRule;
+        private CastCastRule castCastRule;
 
         public ExpressionSimplifier(EvaluationContext ctx)
         {
@@ -69,13 +75,19 @@ namespace Reko.Evaluation
             this.idBinIdc = new IdBinIdc_Rule(ctx);
             this.sliceConst = new SliceConstant_Rule();
             this.sliceMem = new SliceMem_Rule();
+            this.sliceSegPtr = new SliceSegmentedPointer_Rule(ctx);
             this.negSub = new NegSub_Rule();
             this.constConstBin = new ConstConstBin_Rule();
+            this.shAdd = new Shl_add_Rule(ctx);
             this.shMul = new Shl_mul_e_Rule(ctx);
             this.shiftShift = new ShiftShift_c_c_Rule(ctx);
             this.mpsRule = new Mps_Constant_Rule(ctx);
             this.sliceShift = new SliceShift(ctx);
             this.binopWithSelf = new BinOpWithSelf_Rule();
+            this.constDiv = new ConstDivisionImplementedByMultiplication(ctx);
+            this.selfdpbRule = new SelfDpbRule(ctx);
+            this.idProcConstRule = new IdProcConstRule(ctx);
+            this.castCastRule = new CastCastRule(ctx);
         }
 
         public bool Changed { get { return changed; } set { changed = value; } }
@@ -86,7 +98,7 @@ namespace Reko.Evaluation
             return op == Operator.IAdd || op == Operator.ISub;
         }
 
-        private bool IsComparison(Operator op)
+        private bool IsIntComparison(Operator op)
         {
             return op == Operator.Eq || op == Operator.Ne ||
                    op == Operator.Ge || op == Operator.Gt ||
@@ -95,13 +107,19 @@ namespace Reko.Evaluation
                    op == Operator.Ule || op == Operator.Ult;
         }
 
+        private bool IsFloatComparison(Operator op)
+        {
+            return op == Operator.Feq || op == Operator.Fne ||
+                   op == Operator.Fge || op == Operator.Fgt ||
+                   op == Operator.Fle || op == Operator.Flt;
+        }
 
         public static Constant SimplifyTwoConstants(BinaryOperator op, Constant l, Constant r)
         {
             var lType = (PrimitiveType)l.DataType;
             var rType = (PrimitiveType)r.DataType;
-            if (lType.Domain != rType.Domain)
-                throw new ArgumentException(string.Format("Can't add types of different domains {0} and {1}", l.DataType, r.DataType));
+            if ((lType.Domain & rType.Domain) == 0)
+                throw new ArgumentException(string.Format("Can't add types of disjoint domains {0} and {1}", l.DataType, r.DataType));
             return op.ApplyConstants(l, r);
         }
 
@@ -169,6 +187,7 @@ namespace Reko.Evaluation
                 Changed = true;
                 return left;
             }
+            //$REVIEW: this is evaluation! Shouldn't the be done by the evaluator?
             if (left == Constant.Invalid || right == Constant.Invalid)
                 return Constant.Invalid;
 
@@ -184,8 +203,16 @@ namespace Reko.Evaluation
 
             // (rel? id1 c) should just pass.
 
-            if (IsComparison(binExp.Operator) && cRight != null && idLeft != null)
+            if (IsIntComparison(binExp.Operator) && cRight != null && idLeft != null)
                 return binExp;
+
+            // Floating point expressions with "integer" constants 
+            if (IsFloatComparison(binExp.Operator) && IsNonFloatConstant(cRight))
+            {
+                cRight = ReinterpretAsIeeeFloat(cRight);
+                right = cRight;
+                binExp.Right = cRight;
+            }
 
             var binLeft = left as BinaryExpression;
             var cLeftRight = (binLeft != null) ? binLeft.Right as Constant : null;
@@ -231,7 +258,7 @@ namespace Reko.Evaluation
             // (== (- e c1) c2) => (== e c1+c2)
 
             if (binLeft != null && cLeftRight != null && cRight != null &&
-                IsComparison(binExp.Operator) && IsAddOrSub(binLeft.Operator) &&
+                IsIntComparison(binExp.Operator) && IsAddOrSub(binLeft.Operator) &&
                 !cLeftRight.IsReal && !cRight.IsReal)
             {
                 Changed = true;
@@ -245,6 +272,12 @@ namespace Reko.Evaluation
             {
                 Changed = true;
                 return addMici.Transform();
+            }
+
+            if (shAdd.Match(binExp))
+            {
+                Changed = true;
+                return shAdd.Transform();
             }
 
             if (shMul.Match(binExp))
@@ -264,6 +297,29 @@ namespace Reko.Evaluation
             return binExp;
         }
 
+        private Constant ReinterpretAsIeeeFloat(Constant c)
+        {
+            if (c.DataType.Size == 4)
+            {
+                return Constant.FloatFromBitpattern(c.ToInt32());
+            }
+            else if (c.DataType.Size == 8)
+            {
+                return Constant.FloatFromBitpattern(c.ToInt64());
+            }
+            throw new NotImplementedException(string.Format(
+                "Unsupported IEEE floating point size {0}.",
+                c.DataType.Size));
+        }
+
+        private bool IsNonFloatConstant(Constant cRight)
+        {
+            if (cRight == null)
+                return false;
+            var pt = cRight.DataType as PrimitiveType;
+            return (pt.Domain != Domain.Real);
+        }
+
         public static Constant SimplifyTwoConstants(Operator op, Constant l, Constant r)
         {
             PrimitiveType lType = (PrimitiveType) l.DataType;
@@ -276,21 +332,59 @@ namespace Reko.Evaluation
         public virtual Expression VisitCast(Cast cast)
         {
             var exp = cast.Expression.Accept(this);
-            if (exp == Constant.Invalid)
-                return exp;
-
-            Constant c = exp as Constant;
-            if (c != null)
+            if (exp != Constant.Invalid)
             {
-                PrimitiveType p = c.DataType as PrimitiveType;
-                if (p != null && (p.Domain & Domain.Integer) != 0)
+                var ptCast = cast.DataType.ResolveAs<PrimitiveType>();
+                Constant c = exp as Constant;
+                if (c != null && ptCast != null)
                 {
-                    //$REVIEW: this is fixed to 32 bits; need a general solution to it.
-                    Changed = true;
-                    return Constant.Create(cast.DataType, c.ToUInt64());
+                    PrimitiveType ptSrc = c.DataType as PrimitiveType;
+                    if (ptSrc != null)
+                    {
+                        if ((ptSrc.Domain & Domain.Integer) != 0)
+                        {
+                            Changed = true;
+                            return Constant.Create(ptCast, c.ToUInt64());
+                        }
+                        if (ptSrc.Domain == Domain.Real &&
+                            ptCast.Domain == Domain.Real &&
+                            ptCast.Size < ptSrc.Size)
+                        {
+                            Changed = true;
+                            return ConstantReal.Create(ptCast, c.ToReal64());
+                        }
+                    }
                 }
+                Identifier id;
+                DepositBits dpb;
+                if (exp.As(out id) && ctx.GetDefiningExpression(id).As(out dpb) && dpb.BitPosition == 0)
+                {
+                    // If we are casting the result of a DPB, and the deposited part is >= 
+                    // the size of the cast, then use deposited part directly.
+                    int sizeDiff = dpb.InsertedBits.DataType.Size - cast.DataType.Size;
+                    if (sizeDiff >= 0)
+                    {
+                        ctx.RemoveIdentifierUse(id);
+                        ctx.UseExpression(dpb.InsertedBits);
+                        Changed = true;
+                        if (sizeDiff > 0)
+                        {
+                            return new Cast(cast.DataType, dpb.InsertedBits);
+                        }
+                        else
+                        {
+                            return dpb.InsertedBits;
+                        }
+                    }
+                }
+                cast = new Cast(cast.DataType, exp);
             }
-            return new Cast(cast.DataType, exp);
+            if (castCastRule.Match(cast))
+            {
+                Changed = true;
+                return castCastRule.Transform();
+            }
+            return cast;
         }
 
         public virtual Expression VisitConditionOf(ConditionOf c)
@@ -310,8 +404,9 @@ namespace Reko.Evaluation
 
         public virtual Expression VisitDepositBits(DepositBits d)
         {
-            d.Source = d.Source.Accept(this);
-            d.InsertedBits = d.InsertedBits.Accept(this);
+            var src = d.Source.Accept(this);
+            var bits = d.InsertedBits.Accept(this);
+            d = new DepositBits(src, bits, d.BitPosition);
             if (dpbConstantRule.Match(d))
             {
                 Changed = true;
@@ -321,6 +416,11 @@ namespace Reko.Evaluation
             {
                 Changed = true;
                 return dpbdpbRule.Transform();
+            }
+            if (selfdpbRule.Match(d))
+            {
+                Changed = true;
+                return selfdpbRule.Transform();
             }
             return d;
         }
@@ -341,6 +441,11 @@ namespace Reko.Evaluation
             {
                 Changed = true;
                 return idConst.Transform();
+            }
+            if (idProcConstRule.Match(id))
+            {
+                Changed = true;
+                return idProcConstRule.Transform();
             }
             // jkl: Copy propagation causes real problems when used during trashed register analysis.
             // If needed in other passes, it should be an option for expression e
@@ -391,7 +496,7 @@ namespace Reko.Evaluation
                 if (tHead.Domain == Domain.Selector)			//$REVIEW: seems to require Address, SegmentedAddress?
                 {
                     t = PrimitiveType.Create(Domain.Pointer, tHead.Size + tTail.Size);
-                    return Address.SegPtr(c1.ToUInt16(), c2.ToUInt16());
+                    return ctx.MakeSegmentedAddress(c1, c2);
                 }
                 else
                 {
@@ -403,6 +508,16 @@ namespace Reko.Evaluation
                 head = seq.Head;
             if (tail == Constant.Invalid)
                 tail = seq.Tail;
+            if (c1 != null && c1.IsZero)
+            {
+                // leading zeros imply a conversion to unsigned.
+                return new Cast(
+                    PrimitiveType.Create(Domain.UnsignedInt, seq.DataType.Size),
+                    new Cast(
+                        PrimitiveType.Create(Domain.UnsignedInt, tail.DataType.Size),
+                        tail));
+
+            }
             return new MkSequence(seq.DataType, head, tail);
         }
 
@@ -454,11 +569,18 @@ namespace Reko.Evaluation
 
         public virtual Expression VisitSegmentedAccess(SegmentedAccess segMem)
         {
-            return ctx.GetValue(new SegmentedAccess(
+            segMem =
+                new SegmentedAccess(
                 segMem.MemoryId,
                 segMem.BasePointer.Accept(this),
                 segMem.EffectiveAddress.Accept(this),
-                segMem.DataType));
+                segMem.DataType);
+            if (sliceSegPtr.Match(segMem))
+            {
+                Changed = true;
+                return sliceSegPtr.Transform();
+            }
+            return ctx.GetValue(segMem);
         }
 
         public virtual Expression VisitSlice(Slice slice)

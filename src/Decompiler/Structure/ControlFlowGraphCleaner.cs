@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -73,7 +73,6 @@ namespace Reko.Structure
 			dirty = true;
 		}
 
-
 		private void ReplaceJumpWithBranch(Block b1, Block b2)
 		{
 			Branch br = b2.Statements.Last.Instruction as Branch;
@@ -100,19 +99,35 @@ namespace Reko.Structure
                         {
                             ReplaceBranchWithJump(block);
                         }
+                        foreach (var s in block.Succ.ToList())
+                        {
+                            if (s.Statements.Count == 0 &&
+                                s.Pred.Count == 1 &&
+                                EndsInJump(s))
+                            {
+                                var sSucc = s.Succ[0];
+                                Block.ReplaceJumpsTo(s, sSucc);
+                                proc.ControlGraph.RemoveEdge(s, sSucc);
+                                proc.ControlGraph.Blocks.Remove(s);
+                                dirty = true;
+                            }
+                        }
                     }
 
                     if (EndsInJump(block))
                     {
                         Block next = block.Succ[0];
-                        if (block != proc.EntryBlock && block.Statements.Count == 0)
-                        {
-                            if (Block.ReplaceJumpsTo(block, next))
-                                dirty = true;
-                        }
                         if (next.Pred.Count == 1 && next != proc.ExitBlock)
                         {
                             Coalesce(block, next);
+                        }
+                        else if (block != proc.EntryBlock && 
+                            block.Statements.Count == 0 &&
+                            next.Pred.Count == 1)
+                        {
+                            Block.ReplaceJumpsTo(block, next);
+                            proc.ControlGraph.Blocks.Remove(block);
+                            dirty = true;
                         }
 #if IGNORE
 						// This bollixes up the graphs for ForkedLoop.asm, so we can't use it.		
@@ -125,7 +140,7 @@ namespace Reko.Structure
 #endif
                     }
                 }
-			} while (dirty);
+            } while (dirty);
 
 			proc.Dump(true);
 		}

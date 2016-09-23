@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -43,17 +43,16 @@ namespace Reko.Evaluation
         public bool Match(DepositBits dpb)
         {
             this.dpbUse = dpb;
-            if (!dpb.Source.As<Identifier>(out idDef))
+            if (!dpb.Source.As(out idDef))
                 return false;
             var expDef = ctx.GetDefiningExpression(idDef);
             if (expDef == null)
                 return false;
-            if (!expDef.As<DepositBits>(out dpbDef))
+            if (!expDef.As(out dpbDef))
                 return false;
-            if (    !dpbDef.Source.As<Identifier>(out idSrc))
+            if (!dpbDef.Source.As(out idSrc))
                 return false;
             return
-                dpbDef.BitCount == dpbUse.BitCount &&
                 dpbDef.BitPosition == dpbUse.BitPosition;
         }
 
@@ -61,7 +60,7 @@ namespace Reko.Evaluation
         {
             ctx.RemoveIdentifierUse(idDef);
             ctx.UseExpression(idSrc);
-            return new DepositBits(idSrc, dpbUse.InsertedBits, dpbUse.BitPosition, dpbUse.BitCount);
+            return new DepositBits(idSrc, dpbUse.InsertedBits, dpbUse.BitPosition);
         }
     }
 }

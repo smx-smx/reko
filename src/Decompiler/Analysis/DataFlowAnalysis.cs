@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,6 +23,7 @@ using Reko.Core.Code;
 using Reko.Core.Lib;
 using Reko.Core.Output;
 using Reko.Core.Services;
+using Reko.Core.Types;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -42,13 +43,15 @@ namespace Reko.Analysis
 	{
 		private Program program;
 		private DecompilerEventListener eventListener;
-		private ProgramDataFlow flow;
+        private IImportResolver importResolver;
+        private ProgramDataFlow flow;
 
-        public DataFlowAnalysis(Program prog, DecompilerEventListener eventListener)
+        public DataFlowAnalysis(Program program, IImportResolver importResolver, DecompilerEventListener eventListener)
 		{
-			this.program = prog;
+			this.program = program;
+            this.importResolver = importResolver;
             this.eventListener = eventListener;
-			this.flow = new ProgramDataFlow(prog);
+			this.flow = new ProgramDataFlow(program);
 		}
 
 		public void AnalyzeProgram()
@@ -67,6 +70,8 @@ namespace Reko.Analysis
             int i = 0;
 			foreach (Procedure proc in program.Procedures.Values)
 			{
+                if (eventListener.IsCanceled())
+                    break;
                 eventListener.ShowProgress("Building complex expressions.", i, program.Procedures.Values.Count);
                 ++i;
 
@@ -79,14 +84,20 @@ namespace Reko.Analysis
                     alias.Transform();
 
                     var doms = new DominatorGraph<Block>(proc.ControlGraph, proc.EntryBlock);
-                    var sst = new SsaTransform(flow, proc, doms);
+                    var sst = new SsaTransform(flow, proc, importResolver, doms, new HashSet<RegisterStorage>());
                     var ssa = sst.SsaState;
 
-                    var cce = new ConditionCodeEliminator(ssa.Identifiers, program.Platform);
+                    var icrw = new IndirectCallRewriter(program, ssa, eventListener);
+                    icrw.Rewrite();
+
+                    var cce = new ConditionCodeEliminator(ssa, program.Platform);
                     cce.Transform();
+                    //var cd = new ConstDivisionImplementedByMultiplication(ssa);
+                    //cd.Transform();
+
                     DeadCode.Eliminate(proc, ssa);
 
-                    var vp = new ValuePropagator(ssa.Identifiers, proc);
+                    var vp = new ValuePropagator(program.Architecture, ssa);
                     vp.Transform();
                     DeadCode.Eliminate(proc, ssa);
 
@@ -96,6 +107,8 @@ namespace Reko.Analysis
                     var coa = new Coalescer(proc, ssa);
                     coa.Transform();
                     DeadCode.Eliminate(proc, ssa);
+
+                    vp.Transform();
 
                     var liv = new LinearInductionVariableFinder(
                         proc,
@@ -118,11 +131,21 @@ namespace Reko.Analysis
                     web.Transform();
                     ssa.ConvertBack(false);
                 }
+                catch (StatementCorrelatedException stex)
+                {
+                    eventListener.Error(
+                        eventListener.CreateStatementNavigator(program, stex.Statement),
+                        stex, 
+                        "An error occurred during data flow analysis.");
+                }
                 catch (Exception ex)
                 {
-                    eventListener.Error(new NullCodeLocation(proc.Name), ex, "An error occurred during data flow analysis.");
+                    eventListener.Error(
+                        new NullCodeLocation(proc.Name),
+                        ex,
+                        "An error occurred during data flow analysis.");
                 }
-			} 
+			}
 		}
 
 		public void DumpProgram()
@@ -133,16 +156,16 @@ namespace Reko.Analysis
 				ProcedureFlow pf= this.flow[proc];
                 TextFormatter f = new TextFormatter(output);
 				if (pf.Signature != null)
-					pf.Signature.Emit(proc.Name, ProcedureSignature.EmitFlags.None, f);
+					pf.Signature.Emit(proc.Name, FunctionType.EmitFlags.None, f);
 				else if (proc.Signature != null)
-					proc.Signature.Emit(proc.Name, ProcedureSignature.EmitFlags.None, f);
+					proc.Signature.Emit(proc.Name, FunctionType.EmitFlags.None, f);
 				else
 					output.Write("Warning: no signature found for {0}", proc.Name);
 				output.WriteLine();
 				pf.Emit(program.Architecture, output);
 
 				output.WriteLine("// {0}", proc.Name);
-				proc.Signature.Emit(proc.Name, ProcedureSignature.EmitFlags.None, f);
+				proc.Signature.Emit(proc.Name, FunctionType.EmitFlags.None, f);
 				output.WriteLine();
 				foreach (Block block in proc.ControlGraph.Blocks)
 				{
@@ -173,9 +196,12 @@ namespace Reko.Analysis
 		public void UntangleProcedures()
 		{
             eventListener.ShowStatus("Eliminating intra-block dead registers.");
-            IntraBlockDeadRegisters.Apply(program);
+            var usb = new UserSignatureBuilder(program);
+            usb.BuildSignatures(eventListener);
+            CallRewriter.Rewrite(program, eventListener);
+            IntraBlockDeadRegisters.Apply(program, eventListener);
             eventListener.ShowStatus("Finding terminating procedures.");
-            var term = new TerminationAnalysis(flow);
+            var term = new TerminationAnalysis(flow, eventListener);
             term.Analyze(program);
 			eventListener.ShowStatus("Finding trashed registers.");
             var trf = new TrashedRegisterFinder(program, program.Procedures.Values, flow, eventListener);
@@ -183,15 +209,20 @@ namespace Reko.Analysis
             eventListener.ShowStatus("Rewriting affine expressions.");
             trf.RewriteBasicBlocks();
             eventListener.ShowStatus("Computing register liveness.");
-            var rl = RegisterLiveness.Compute(program, flow, eventListener);
+            RegisterLiveness.Compute(program, flow, eventListener);
             eventListener.ShowStatus("Rewriting calls.");
-			GlobalCallRewriter.Rewrite(program, flow);
+			GlobalCallRewriter.Rewrite(program, flow, eventListener);
 		}
 
-        public void UntangleProcedures2()
+        // EXPERIMENTAL - consult uxmal before using
+        /// <summary>
+        /// Analyizes the procedures of a program by finding all strongly 
+        /// connected components (SCCs) and processing the SCCs one by one.
+        /// </summary>
+        public void AnalyzeProgram2()
         {
-            eventListener.ShowStatus("Eliminating intra-block dead registers.");
-            IntraBlockDeadRegisters.Apply(program);
+            var usb = new UserSignatureBuilder(program);
+            usb.BuildSignatures(eventListener);
 
             var sscf = new SccFinder<Procedure>(new ProcedureGraph(program), UntangleProcedureScc);
             foreach (var procedure in program.Procedures.Values)
@@ -205,6 +236,7 @@ namespace Reko.Analysis
             if (procs.Count == 1)
             {
                 var proc = procs[0];
+
                 Aliases alias = new Aliases(proc, program.Architecture, flow);
                 alias.Transform();
                 
@@ -214,16 +246,21 @@ namespace Reko.Analysis
                 // (e.g. vtables) they will have no "ProcedureFlow" associated with them yet, in
                 // which case the the SSA treats the call as a "hell node".
                 var doms = proc.CreateBlockDominatorGraph();
-                var sst = new SsaTransform(flow, proc, doms);
+                var sst = new SsaTransform(
+                    flow,
+                    proc,
+                    importResolver,
+                    doms,
+                    program.Platform.CreateImplicitArgumentRegisters());
                 var ssa = sst.SsaState;
 
                 // Propagate condition codes and registers. At the end, the hope is that 
                 // all statements like (x86) mem[esp_42+4] will have been converted to
                 // mem[fp - 30]. We also hope that procedure constants kept in registers
                 // are propagated to the corresponding call sites.
-                var cce = new ConditionCodeEliminator(ssa.Identifiers, program.Platform);
+                var cce = new ConditionCodeEliminator(ssa, program.Platform);
                 cce.Transform();
-                var vp = new ValuePropagator(ssa.Identifiers, proc);
+                var vp = new ValuePropagator(program.Architecture, ssa);
                 vp.Transform();
 
                 // Now compute SSA for the stack-based variables as well. That is:
@@ -261,7 +298,7 @@ namespace Reko.Analysis
                     str.ClassifyUses();
                     str.ModifyUses();
                 }
-                proc.Dump(true);
+
                 //var opt = new OutParameterTransformer(proc, ssa.Identifiers);
                 //opt.Transform();
                 DeadCode.Eliminate(proc, ssa);
@@ -273,7 +310,7 @@ namespace Reko.Analysis
             }
             else
             {
-
+                throw new NotImplementedException();
             }
         }
 	}

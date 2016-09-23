@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -281,7 +281,6 @@ namespace Reko.Assemblers.Pdp11
         {
             this.Type = type;
             this.Linenumber = lineNumber;
-            Debug.Print("Token: {0}", this);
         }
 
         public Token(TokenType type, object value, int linenumber)
@@ -289,7 +288,6 @@ namespace Reko.Assemblers.Pdp11
             this.Type = type;
             this.Value = value;
             this.Linenumber = linenumber;
-            Debug.Print("Token: {0}", this);
         }
 
         public override string ToString()

@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,83 +20,77 @@
 
 using Reko.Core.Output;
 using Reko.Core.Serialization;
+using Reko.Core.Services;
 using Reko.Core.Types;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Xml;
 using System.Xml.Serialization;
 
 namespace Reko.Core
 {
+    /// <summary>
+    /// A type library contains metadata about DataTypes and functions.
+    /// </summary>
     public class TypeLibrary
 	{
 		public TypeLibrary() : this(
             new Dictionary<string, DataType>(),
-            new Dictionary<string, ProcedureSignature>())
+            new Dictionary<string, FunctionType>(),
+            new Dictionary<string, DataType>())
         {
         }
 
         public TypeLibrary(
             IDictionary<string,DataType> types,
-            IDictionary<string, ProcedureSignature> procedures)
+            IDictionary<string, FunctionType> procedures,
+            IDictionary<string, DataType> globals)
         {
             this.Types = types;
             this.Signatures = procedures;
-            this.ServicesByName = new Dictionary<string, SystemService>();
-            this.ServicesByVector = new Dictionary<int, SystemService>();
+            this.Globals = globals;
+            this.Modules = new Dictionary<string, ModuleDescriptor>();
         }
 
-        public string Filename { get; set; }
-        public string ModuleName { get; set; }
         public IDictionary<string, DataType> Types { get; private set; }
-        public IDictionary<string, ProcedureSignature> Signatures { get; private set; }
-        public IDictionary<string, SystemService> ServicesByName { get; private set; }
-        public IDictionary<int, SystemService> ServicesByVector { get; private set; }
+        public IDictionary<string, FunctionType> Signatures { get; private set; }
+        public IDictionary<string, DataType> Globals { get; private set; }
+        public IDictionary<string, ModuleDescriptor> Modules { get; private set; }
+
+        public TypeLibrary Clone()
+        {
+            var clone = new TypeLibrary();
+            clone.Types = new Dictionary<string, DataType>(this.Types);
+            clone.Signatures = new Dictionary<string, FunctionType>(this.Signatures);
+            clone.Globals = new Dictionary<string, DataType>(this.Globals);
+            clone.Modules = this.Modules.ToDictionary(k => k.Key, v => v.Value.Clone(), StringComparer.InvariantCultureIgnoreCase);
+            return clone;
+        }
 
 		public void Write(TextWriter writer)
 		{
-            var sl = new SortedList<string, ProcedureSignature>(
-                Signatures,
-                StringComparer.InvariantCulture);
             TextFormatter f = new TextFormatter(writer);
-			foreach (KeyValuePair<string,ProcedureSignature> de in sl)
+			foreach (var de in Signatures.OrderBy(d => d.Key, StringComparer.InvariantCulture))
 			{
-				string name = (string) de.Key;
-				de.Value.Emit(de.Key, ProcedureSignature.EmitFlags.ArgumentKind, f);
+				string name = de.Key;
+				de.Value.Emit(de.Key, FunctionType.EmitFlags.ArgumentKind, f);
 				writer.WriteLine();
 			}
-		}
 
-		public static TypeLibrary Load(Platform platform, string fileName)
-		{
-            var prefix = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-            var libPath = Path.Combine(prefix, fileName);
-            if (!File.Exists(libPath))
+            var tf = new TypeReferenceFormatter(f);
+            foreach (var de in Globals.OrderBy(d => d.Key, StringComparer.InvariantCulture))
             {
-                libPath = Path.Combine(Directory.GetCurrentDirectory(), fileName);
+                tf.WriteDeclaration(de.Value, de.Key);
             }
-			XmlSerializer ser = SerializedLibrary.CreateSerializer();
-			SerializedLibrary slib;
-			using (FileStream stm = new FileStream(libPath, FileMode.Open, FileAccess.Read, FileShare.Read))
-			{
-				slib = (SerializedLibrary) ser.Deserialize(stm);
-			}
-            return Load(platform, slib);
 		}
 
-        public static TypeLibrary Load(Platform platform, SerializedLibrary slib)
-        {
-            var tlldr = new TypeLibraryLoader(platform, true);
-            var tlib = tlldr.Load(slib);
-            return tlib;
-        }
-
-		public ProcedureSignature Lookup(string procedureName)
+		public FunctionType Lookup(string procedureName)
 		{
-			ProcedureSignature sig;
+			FunctionType sig;
             if (!Signatures.TryGetValue(procedureName, out sig))
                 return null;
 			return sig;

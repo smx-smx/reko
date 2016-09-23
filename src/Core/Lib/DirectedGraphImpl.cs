@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,7 +25,8 @@ namespace Reko.Core.Lib
 {
 	/// <summary>
 	/// A directed graph implementation.
-	/// $TODO: recover lost space from deleted nodes and edges if this proves necessary.
+	/// $TODO: recover lost space from deleted nodes and edges if this 
+    /// proves necessary.
 	/// </summary>
 	public class DirectedGraphImpl<T> : DirectedGraph<T>
         where T : class

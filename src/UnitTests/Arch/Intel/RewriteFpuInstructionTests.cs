@@ -1,14 +1,17 @@
-﻿using Reko.Assemblers.x86;
+﻿using NUnit.Framework;
 using Reko.Arch.X86;
+using Reko.Assemblers.x86;
 using Reko.Core;
 using Reko.Core.Code;
 using Reko.Core.Machine;
 using Reko.Core.Rtl;
+using Reko.Core.Services;
 using Reko.Core.Types;
-using NUnit.Framework;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.Design;
 using System.IO;
+using System.Linq;
 using System.Text;
 
 namespace Reko.UnitTests.Arch.Intel
@@ -25,7 +28,9 @@ namespace Reko.UnitTests.Arch.Intel
         public void Setup()
         {
             arch = new X86ArchitectureFlat32();
-            asm = new X86Assembler(arch, loadAddress, new List<EntryPoint>());
+            var services = new ServiceContainer();
+            services.AddService<IFileSystemService>(new FileSystemServiceImpl());
+            asm = new X86Assembler(services, new DefaultPlatform(services, arch), loadAddress, new List<ImageSymbol>());
         }
 
         public override IProcessorArchitecture Architecture
@@ -40,7 +45,11 @@ namespace Reko.UnitTests.Arch.Intel
 
         protected override IEnumerable<RtlInstructionCluster> GetInstructionStream(Frame frame, IRewriterHost host)
         {
-            return new X86Rewriter(arch, host, new X86State(arch), asmResult.Image.CreateLeReader(0), frame);
+            return new X86Rewriter(
+                arch,
+                host, 
+                new X86State(arch),
+                asmResult.SegmentMap.Segments.Values.First().MemoryArea.CreateLeReader(0), frame);
         }
 
         public override Address LoadAddress
@@ -65,9 +74,9 @@ namespace Reko.UnitTests.Arch.Intel
                 m.Jc("foo");
             });
             AssertCode(
-                "0|00010000(4): 1 instructions",
+                "0|L--|00010000(4): 1 instructions",
                 "1|L--|SCZO = FPUF",              //$TODO: P flag as well
-                "2|00010004(2): 1 instructions",
+                "2|T--|00010004(2): 1 instructions",
                 "3|T--|if (Test(ULT,C)) branch 00010000"
                 );
         }
@@ -83,7 +92,7 @@ namespace Reko.UnitTests.Arch.Intel
                 m.Jnz("foo");
             });
             AssertCode(
-                "0|00010000(8): 2 instructions",
+                "0|L--|00010000(8): 2 instructions",
                 "1|L--|SCZO = FPUF",
                 "2|T--|if (Test(EQ,FPUF)) branch 00010000"
                 );            

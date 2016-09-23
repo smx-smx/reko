@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,13 +26,16 @@ using System.Text;
 
 namespace Reko.Core
 {
+    /// <summary>
+    /// Base class for files that know how to load metadata from some file format.
+    /// </summary>
     public abstract class MetadataLoader
     {
         public MetadataLoader(IServiceProvider services, string filename, byte[] bytes)
         {
         }
 
-        public abstract TypeLibrary Load();
+        public abstract TypeLibrary Load(IPlatform platform, TypeLibrary dstLib);
     }
 
     public class NullMetadataLoader : MetadataLoader
@@ -42,9 +45,9 @@ namespace Reko.Core
         {
         }
 
-        public override TypeLibrary Load()
+        public override TypeLibrary Load(IPlatform platform, TypeLibrary dstLib)
         {
-            return new TypeLibrary();
+            return dstLib;
         }
     }
 }

@@ -37,6 +37,8 @@
     <BootstrapperEnabled>true</BootstrapperEnabled>
     <TargetFrameworkProfile />
     <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <ProductVersion>12.0.0</ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <OutputPath>bin\Debug\</OutputPath>
@@ -69,6 +71,17 @@
     <DebugType>none</DebugType>
     <ErrorReport>prompt</ErrorReport>
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'TravisRelease|AnyCPU'">
+    <OutputPath>bin\TravisRelease\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <BaseAddress>285212672</BaseAddress>
+    <Optimize>true</Optimize>
+    <FileAlignment>4096</FileAlignment>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+    <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System">
@@ -150,33 +163,39 @@
     <Compile Include="Assemblers\Emitter.cs" />
     <Compile Include="Assemblers\Symbol.cs" />
     <Compile Include="CharacteristicsLibrary.cs" />
+    <Compile Include="CLanguage\CBasicType.cs" />
+    <Compile Include="CLanguage\CConstantEvaluator.cs" />
+    <Compile Include="CLanguage\CDirectiveLexer.cs" />
+    <Compile Include="CLanguage\CExpressionVisitor.cs" />
+    <Compile Include="CLanguage\CGrammar.cs" />
+    <Compile Include="CLanguage\CLexer.cs" />
+    <Compile Include="CLanguage\CParser.cs" />
+    <Compile Include="CLanguage\CParserException.cs" />
+    <Compile Include="CLanguage\CSyntax.cs" />
+    <Compile Include="CLanguage\CSyntaxVisitor.cs" />
+    <Compile Include="CLanguage\EnumEvaluator.cs" />
+    <Compile Include="CLanguage\LookaheadLexer.cs" />
+    <Compile Include="CLanguage\NamedDataType.cs" />
+    <Compile Include="CLanguage\NamedDataTypeExtractor.cs" />
+    <Compile Include="CLanguage\NameExtractor.cs" />
+    <Compile Include="CLanguage\ParseResult.cs" />
+    <Compile Include="CLanguage\ParserState.cs" />
+    <Compile Include="CLanguage\SerializedTypeComparer.cs" />
+    <Compile Include="CLanguage\SymbolTable.cs" />
+    <Compile Include="CLanguage\TypeSizer.cs" />
     <Compile Include="Code\GotoInstruction.cs" />
     <Compile Include="Code\SwitchInstruction.cs" />
     <Compile Include="Configuration\ArchitectureElement.cs" />
-    <Compile Include="Configuration\ArchitectureElementCollection.cs" />
-    <Compile Include="Configuration\ArchitectureReferenceElement.cs" />
-    <Compile Include="Configuration\ArchitectureReferenceElementCollection.cs" />
-    <Compile Include="Configuration\ArchitectureSectionHandler.cs" />
     <Compile Include="Configuration\AssemblerElement.cs" />
-    <Compile Include="Configuration\AssemblerElementCollection.cs" />
-    <Compile Include="Configuration\AssemblerSectionHandler.cs" />
-    <Compile Include="Configuration\DecompilerConfiguration.cs" />
+    <Compile Include="Configuration\RekoConfigurationService.cs" />
     <Compile Include="Configuration\LoaderElement.cs" />
-    <Compile Include="Configuration\LoaderElementCollection.cs" />
-    <Compile Include="Configuration\LoaderSectionHandler.cs" />
     <Compile Include="Configuration\OperatingEnvironmentElement.cs" />
-    <Compile Include="Configuration\OperatingEnvironmentElementCollection.cs" />
-    <Compile Include="Configuration\OperatingEnvironmentSectionHandler.cs" />
     <Compile Include="Configuration\RawFileElement.cs" />
-    <Compile Include="Configuration\RawFileElementCollection.cs" />
-    <Compile Include="Configuration\RawFileSectionHandler.cs" />
+    <Compile Include="Configuration\RekoConfiguration_v1.cs" />
     <Compile Include="Configuration\SignatureFileElement.cs" />
-    <Compile Include="Configuration\SignatureFileSectionHandler.cs" />
     <Compile Include="Configuration\TypeLibraryElement.cs" />
-    <Compile Include="Configuration\TypeLibraryElementCollection.cs" />
-    <Compile Include="Configuration\UiPreferencesSectionHandler.cs" />
+    <Compile Include="Configuration\UiPreferencesConfiguration.cs" />
     <Compile Include="Configuration\UiStyleElement.cs" />
-    <Compile Include="Configuration\UiStyleCollection.cs" />
     <Compile Include="EnumerableEx.cs" />
     <Compile Include="EvaluationContext.cs" />
     <Compile Include="EventEx.cs" />
@@ -207,11 +226,26 @@
     <Compile Include="Expressions\TestCondition.cs" />
     <Compile Include="Expressions\UnaryExpression.cs" />
     <Compile Include="FieldAttribute.cs" />
-    <Compile Include="GlobalDataItem_v2.cs" />
+    <Compile Include="ImageSymbol.cs" />
+    <Compile Include="Analysis\IVarargsFormatParser.cs" />
+    <Compile Include="Lib\PatternCollector.cs" />
+    <Compile Include="Lib\PerfectHash.cs" />
+    <Compile Include="Lib\SuffixArray.cs" />
+    <Compile Include="Lib\UbjsonReader.cs" />
+    <Compile Include="Lib\UbjsonMarker.cs" />
+    <Compile Include="Lib\UbjsonWriter.cs" />
+    <Compile Include="Lib\WildPatternMatcher.cs" />
+    <Compile Include="Operators\FNegOperator.cs" />
+    <Compile Include="Output\CTypeReferenceFormatter.cs" />
+    <Compile Include="Rational.cs" />
+    <Compile Include="SegmentMap.cs" />
+    <Compile Include="Serialization\ArgumentDeserializer.cs" />
+    <Compile Include="Serialization\GlobalDataItem_v2.cs" />
+    <Compile Include="IByteSource.cs" />
     <Compile Include="ICodeLocation.cs" />
     <Compile Include="ILoader.cs" />
     <Compile Include="ImageHeader.cs" />
-    <Compile Include="ImageMapSegmentRenderer.cs" />
+    <Compile Include="ImageSegmentRenderer.cs" />
     <Compile Include="ImportReference.cs" />
     <Compile Include="ImportResolver.cs" />
     <Compile Include="AddressContext.cs" />
@@ -222,9 +256,13 @@
     <Compile Include="Lib\DiGraph.cs" />
     <Compile Include="Lib\ObservableRangeCollection.cs" />
     <Compile Include="Lib\Trie.cs" />
+    <Compile Include="Lib\UndirectedGraph.cs" />
+    <Compile Include="Lib\UndirectedGraphImpl.cs" />
+    <Compile Include="Machine\InstructionClass.cs" />
     <Compile Include="Machine\MachineInstructionWriter.cs" />
     <Compile Include="Machine\InstructionComparer.cs" />
     <Compile Include="MetadataLoader.cs" />
+    <Compile Include="ModuleDescriptor.cs" />
     <Compile Include="Operators\CommaOperator.cs" />
     <Compile Include="Output\BlockDecorator.cs" />
     <Compile Include="Output\GlobalDataWriter.cs" />
@@ -244,7 +282,8 @@
     <Compile Include="Operators\FSubOperator.cs" />
     <Compile Include="Output\ProcedureFormatter.cs" />
     <Compile Include="PrintfApplicationBuilder.cs" />
-    <Compile Include="ProgramOptions.cs" />
+    <Compile Include="ProgramAddress.cs" />
+    <Compile Include="ProgramResource.cs" />
     <Compile Include="ProjectFile.cs" />
     <Compile Include="MetadataFile.cs" />
     <Compile Include="Provenance.cs" />
@@ -258,23 +297,31 @@
     <Compile Include="Rtl\RtlInstruction.cs" />
     <Compile Include="Rtl\RtlInstructionMatcher.cs" />
     <Compile Include="Rtl\RtlInstructionVisitor.cs" />
+    <Compile Include="Rtl\RtlInvalid.cs" />
+    <Compile Include="Rtl\RtlNop.cs" />
     <Compile Include="Rtl\RtlReturn.cs" />
     <Compile Include="Rtl\RtlSideEffect.cs" />
     <Compile Include="Rtl\RtlTransfer.cs" />
     <Compile Include="Serialization\CharacteristicsLibrary_v1.cs" />
     <Compile Include="Serialization\Code_v1.cs" />
-    <Compile Include="Serialization\DataTypeNameSerializer.cs" />
+    <Compile Include="Serialization\DataTypeSerializer.cs" />
     <Compile Include="Serialization\ISerializedTypeVisitor.cs" />
     <Compile Include="Serialization\MemberPointer_v1.cs" />
+    <Compile Include="Serialization\MemoryMap_v1.cs" />
     <Compile Include="Serialization\ProgramOptions_v2.cs" />
     <Compile Include="Serialization\ProjectLoader.cs" />
+    <Compile Include="Serialization\ProjectPersister.cs" />
     <Compile Include="Serialization\ProjectSaver.cs" />
+    <Compile Include="Serialization\Procedure_v1.cs" />
+    <Compile Include="Serialization\Project_v3.cs" />
     <Compile Include="Serialization\Project_v2.cs" />
     <Compile Include="Serialization\ArrayType_v1.cs" />
+    <Compile Include="Serialization\Project_v4.cs" />
     <Compile Include="Serialization\SerializedEnumType.cs" />
+    <Compile Include="Serialization\SerializedProject.cs" />
     <Compile Include="Serialization\SerializedTemplate.cs" />
     <Compile Include="Serialization\SerializedTypedef.cs" />
-    <Compile Include="Serialization\SerializedTypeReference.cs" />
+    <Compile Include="Serialization\TypeReference_v1.cs" />
     <Compile Include="Serialization\StringType_v2.cs" />
     <Compile Include="Serialization\UnionType_v1.cs" />
     <Compile Include="Serialization\UnpackerSignatureFile_v1.cs" />
@@ -343,9 +390,6 @@
     <Compile Include="Dumper.cs">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="EntryPoint.cs">
-      <SubType>Code</SubType>
-    </Compile>
     <Compile Include="ExternalProcedure.cs">
       <SubType>Code</SubType>
     </Compile>
@@ -362,7 +406,7 @@
     <Compile Include="ImageMapBlock.cs">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="ImageMapSegment.cs">
+    <Compile Include="ImageSegment.cs">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="ImageMapVectorTable.cs">
@@ -378,9 +422,6 @@
     <Compile Include="IRewriterHost.cs">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Lib\BitSet.cs">
-      <SubType>Code</SubType>
-    </Compile>
     <Compile Include="Lib\DfsIterator.cs">
       <SubType>Code</SubType>
     </Compile>
@@ -390,10 +431,7 @@
     </Compile>
     <Compile Include="Lib\DisjointPartition.cs" />
     <Compile Include="Lib\DominatorGraph.cs" />
-    <Compile Include="Lib\IntSet.cs">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="Lib\Map.cs">
+    <Compile Include="Lib\SortedListEx.cs">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="Lib\SccFinder.cs">
@@ -479,9 +517,6 @@
     <Compile Include="ProcedureBase.cs">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="ProcedureSignature.cs">
-      <SubType>Code</SubType>
-    </Compile>
     <Compile Include="ProcessorInfo.cs">
       <SubType>Code</SubType>
     </Compile>
@@ -491,7 +526,7 @@
     <Compile Include="Program.cs">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="LoadedImage.cs">
+    <Compile Include="MemoryArea.cs">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="PseudoProcedure.cs">
@@ -500,9 +535,6 @@
     <Compile Include="RelocationDictionary.cs" />
     <Compile Include="Serialization\ArgumentSerializer.cs" />
     <Compile Include="Serialization\ArraySizeCharacteristic.cs" />
-    <Compile Include="Serialization\Project_v1.cs">
-      <SubType>Code</SubType>
-    </Compile>
     <Compile Include="Serialization\ProcedureCharacteristics.cs">
       <SubType>Code</SubType>
     </Compile>
@@ -548,7 +580,7 @@
     <Compile Include="Serialization\StackVariable_v1.cs">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Serialization\SerializedStructType.cs">
+    <Compile Include="Serialization\StructType_v1.cs">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="Serialization\SerializedType.cs">
@@ -559,10 +591,13 @@
     <Compile Include="Services\IDecompilerUiService.cs" />
     <Compile Include="Services\IDiagnosticsService.cs" />
     <Compile Include="Services\IFileSystemService.cs" />
+    <Compile Include="Services\IOracleService.cs" />
     <Compile Include="Services\ITypeLibraryLoaderService.cs" />
     <Compile Include="Services\IUnpackerService.cs" />
     <Compile Include="SignatureBuilder.cs" />
+    <Compile Include="StatementCorrelatedException.cs" />
     <Compile Include="StructureReader.cs" />
+    <Compile Include="TypedDataDumper.cs" />
     <Compile Include="TypeLibrary.cs">
       <SubType>Code</SubType>
     </Compile>
@@ -579,11 +614,14 @@
     </Compile>
     <Compile Include="TreeMatching\TreeMatcher.cs" />
     <Compile Include="TypedServiceProvider.cs" />
+    <Compile Include="TypeLibraryDeserializer.cs" />
     <Compile Include="TypeLibraryLoader.cs" />
     <Compile Include="Types\ArrayType.cs">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Types\ClassType.cs" />
     <Compile Include="Types\CodeType.cs" />
+    <Compile Include="Types\CompositeType.cs" />
     <Compile Include="Types\DataType.cs">
       <SubType>Code</SubType>
     </Compile>
@@ -601,6 +639,7 @@
     <Compile Include="Types\EquivalenceClass.cs">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Types\Field.cs" />
     <Compile Include="Types\FunctionType.cs">
       <SubType>Code</SubType>
     </Compile>
@@ -613,6 +652,7 @@
     <Compile Include="Types\PrimitiveType.cs">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Types\ReferenceTo.cs" />
     <Compile Include="Types\StringType.cs" />
     <Compile Include="Types\StructureField.cs">
       <SubType>Code</SubType>
@@ -620,6 +660,7 @@
     <Compile Include="Types\StructureType.cs">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Expressions\ExpressionTypeAscenderBase.cs" />
     <Compile Include="Types\TypeFactory.cs">
       <SubType>Code</SubType>
     </Compile>
@@ -641,9 +682,12 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="Types\VoidType.cs" />
+    <Compile Include="UserData.cs" />
+    <Compile Include="UserRegisterValue.cs" />
     <Compile Include="WorkList.cs">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="XmlOptions.cs" />
     <Content Include="Serialization\test.xml" />
   </ItemGroup>
   <ItemGroup>

@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,7 +18,9 @@
  */
 #endregion
 
-using System;
+using Reko.Core;
+using Reko.Gui.Controls;
+using Reko.Gui.Windows;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
@@ -32,6 +34,7 @@ namespace Reko.Gui
     /// </summary>
     public interface ISearchResultService 
     {
+        void ShowAddressSearchResults(IEnumerable<ProgramAddress> hits, AddressSearchDetails code);
         void ShowSearchResults(ISearchResult result);
     }
 }

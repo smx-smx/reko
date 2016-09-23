@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,9 +19,12 @@
 #endregion
 
 using Reko.Core;
+using Reko.Core.Machine;
 using Reko.Core.Rtl;
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 
@@ -55,22 +58,18 @@ namespace Reko.Scanning
         public HeuristicBlock Disassemble(Address addr)
         {
             var current = new HeuristicBlock(addr, string.Format("l{0:X}", addr));
-            var rAddr = program.Architecture.CreateRewriter(
-                     program.CreateImageReader(addr),
-                     program.Architecture.CreateProcessorState(),
-                     proc.Frame,
-                     host);
-            foreach (var rtl in rAddr.TakeWhile(r => r.Address < proc.EndAddress))
+            var dasm = program.CreateDisassembler(addr);
+            foreach (var instr in dasm.TakeWhile(r => r.Address < proc.EndAddress))
             {
                 HeuristicBlock block;
-                if (blockMap.TryGetValue(rtl.Address, out block))
+                if (blockMap.TryGetValue(instr.Address, out block))
                 {
                     // This instruction was already disassembled before.
-                    if (rtl.Address.ToLinear() != block.Address.ToLinear())
+                    if (instr.Address.ToLinear() != block.Address.ToLinear())
                     {
-                        block = SplitBlock(block, rtl.Address);
+                        block = SplitBlock(block, instr.Address);
                     }
-                    if (current.Statements.Count == 0)
+                    if (current.Instructions.Count == 0)
                     {
                         // Coincides exactly, return the old block.
                         return block;
@@ -81,55 +80,50 @@ namespace Reko.Scanning
                         // 'current'. Create a fall-though edge
                         if (!proc.Cfg.Nodes.Contains(current))
                         {
-                            proc.Cfg.Nodes.Add(current);
+                            AddNode(current);
                         }
-                        proc.Cfg.AddEdge(current, block);
+                        AddEdge(current, block);
                         return current;
                     }
                 }
                 else
                 {
                     // Fresh instruction
-                    if (!proc.Cfg.Nodes.Contains(current))
+                    AddNode(current);
+                    current.Instructions.Add(instr);
+                    blockMap.Add(instr.Address, current);
+                    var op0 = instr.GetOperand(0);
+                    var addrOp= op0 as AddressOperand;
+                    switch (instr.InstructionClass)
                     {
-                        proc.Cfg.Nodes.Add(current);
-                    }
-                    current.Statements.Add(rtl);
-                    blockMap.Add(rtl.Address, current);
-                    var rtlLast = rtl.Instructions.Last();
-                    if (rtlLast is RtlCall || rtlLast is RtlReturn)
-                    {
-                        // Since calls cannot be depended on to return, 
-                        // we stop disassembling.
+                    case InstructionClass.Invalid:
+                        current.IsValid = false;
                         return current;
-                    }
-                    var rtlJump = rtlLast as RtlGoto;
-                    if (rtlJump != null)
-                    {
-                        // Stop disassembling if you get outside
-                        // the procedure or a computed goto.
-                        var target = rtlJump.Target as Address;
-                        if (target == null ||
-                            target < proc.BeginAddress ||
-                            target >= proc.EndAddress)
+                    case InstructionClass.Transfer | InstructionClass.Call:
+                        return current;
+                    case InstructionClass.Transfer:
+                        if (addrOp != null &&
+                            proc.BeginAddress <= addrOp.Address && addrOp.Address < proc.EndAddress)
                         {
+                            block = Disassemble(addrOp.Address);
+                            AddEdge(current, block);
                             return current;
                         }
-                        block = Disassemble(target);
-                        proc.Cfg.AddEdge(current, block);
                         return current;
-                    }
-                    var rtlBranch = rtlLast as RtlBranch;
-                    if (rtlBranch != null)
-                    {
-                        block = Disassemble(rtlBranch.Target);
-                        proc.Cfg.AddEdge(current, block);
-                        block = Disassemble(rtl.Address + rtl.Length);
-                        proc.Cfg.AddEdge(current, block);
+                    case InstructionClass.Transfer | InstructionClass.Conditional:
+                        if (addrOp != null && program.SegmentMap.IsValidAddress(addrOp.Address))
+                        {
+                            block = Disassemble(addrOp.Address);
+                            Debug.Assert(proc.Cfg.Nodes.Contains(block));
+                            AddEdge(current, block);
+                        }
+                        block = Disassemble(instr.Address + instr.Length);
+                        AddEdge(current, block);
                         return current;
                     }
                 }
             }
+            AddNode(current);
             return current;
         }
 
@@ -137,21 +131,37 @@ namespace Reko.Scanning
         {
             var newBlock = new HeuristicBlock(addr, string.Format("l{0:X}", addr));
             proc.Cfg.Nodes.Add(newBlock);
-            newBlock.Statements.AddRange(
-                block.Statements.Where(r => r.Address >= addr).OrderBy(r => r.Address));
+            newBlock.Instructions.AddRange(
+                block.Instructions.Where(r => r.Address >= addr).OrderBy(r => r.Address));
             foreach (var de in blockMap.Where(d => d.Key >= addr && d.Value == block).ToList())
             {
                 blockMap[de.Key] = newBlock;
             }
-            block.Statements.RemoveAll(r => r.Address >= addr);
+            block.Instructions.RemoveAll(r => r.Address >= addr);
             var succs = proc.Cfg.Successors(block).ToArray();
             foreach (var s in succs)
             {
-                proc.Cfg.AddEdge(newBlock, s);
-                proc.Cfg.RemoveEdge(block, s);
+                AddEdge(newBlock, s);
+                RemoveEdge(block, s);
             }
-            proc.Cfg.AddEdge(block, newBlock);
+            AddEdge(block, newBlock);
             return newBlock;
+        }
+
+        private void AddEdge(HeuristicBlock from, HeuristicBlock to)
+        {
+            proc.Cfg.AddEdge(from, to);
+        }
+
+        private void AddNode(HeuristicBlock block)
+        {
+            if (!proc.Cfg.Nodes.Contains(block))
+                proc.Cfg.Nodes.Add(block);
+        }
+
+        private void RemoveEdge(HeuristicBlock from, HeuristicBlock to)
+        {
+            proc.Cfg.RemoveEdge(from, to);
         }
     }
 }

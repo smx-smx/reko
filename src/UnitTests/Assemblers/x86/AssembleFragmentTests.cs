@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,15 +18,19 @@
  */
 #endregion
 
+using NUnit.Framework;
 using Reko.Arch.X86;
 using Reko.Assemblers.x86;
 using Reko.Core;
+using Reko.Core.Services;
 using Reko.Core.Types;
+using Reko.Environments.Msdos;
 using Reko.UnitTests.Arch.Intel;
 using Reko.UnitTests.Arch.Intel.Fragments;
-using NUnit.Framework;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.Design;
+using System.Linq;
 using System.Text;
 
 namespace Reko.UnitTests.Assemblers.x86
@@ -35,6 +39,14 @@ namespace Reko.UnitTests.Assemblers.x86
     public class AssembleFragmentTests
     {
         private string nl = Environment.NewLine;
+        private ServiceContainer sc;
+
+        [SetUp]
+        public void Setup()
+        {
+            this.sc = new ServiceContainer();
+            sc.AddService<IFileSystemService>(new FileSystemServiceImpl());
+        }
 
         [Test]
         public void Factorial()
@@ -67,12 +79,13 @@ namespace Reko.UnitTests.Assemblers.x86
         private void RunTest(AssemblerFragment fragment, string sExp)
         {
             Address addrBase=  Address.SegPtr(0xC00, 0);
-            X86Assembler asm = new X86Assembler(new IntelArchitecture(ProcessorMode.Real), addrBase, new List<EntryPoint>());
+            X86Assembler asm = new X86Assembler(sc, new MsdosPlatform(sc, new X86ArchitectureReal()), addrBase, new List<ImageSymbol>());
             fragment.Build(asm);
             Program lr = asm.GetImage();
-
+            var mem = lr.SegmentMap.Segments.Values.First().MemoryArea;
             X86Disassembler dasm = new X86Disassembler(
-                lr.Image.CreateLeReader(lr.Image.BaseAddress),
+                ProcessorMode.Real,
+                mem.CreateLeReader(mem.BaseAddress),
                 PrimitiveType.Word16,
                 PrimitiveType.Word16,
                 false);

@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,17 +22,18 @@ using Reko.Core.Types;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 namespace Reko.Core.Output
 {
 	/// <summary>
-	/// Formats type declarations using indentation settings specified by caller.
+	/// Formats type declarations using indentation settings specified by
+    /// caller.
 	/// </summary>
 	public class TypeFormatter : IDataTypeVisitor<Formatter>
 	{
         private Formatter writer;
 		private string name;
-		public int indentLevel;
 		private Dictionary<DataType,object> visited;
 		private Mode mode;
         private bool typeReference;
@@ -57,28 +58,24 @@ namespace Reko.Core.Output
 
 		public void BeginLine(string s)
 		{
-			for (int i = 0; i < indentLevel; ++i)
-			{
-				writer.Write("\t");
-			}
-			writer.Write(s);
+			writer.Indent();
 		}
 
 		public void EndLine()
 		{
-			EndLine("", null);
+            writer.Terminate();
 		}
 
 		public void EndLine(string terminator)
 		{
-			EndLine(terminator, null);
+			writer.Terminate(terminator);
 		}
 
 		public void EndLine(string terminator, string comment)
 		{
 			writer.Write(terminator);
 			LineEndComment(comment);
-			writer.WriteLine();
+			writer.Terminate();
 		}
 
 		public void LineEndComment(string comment)
@@ -98,12 +95,12 @@ namespace Reko.Core.Output
 		public void OpenBrace(string trailingComment)
 		{
 			EndLine(" {", trailingComment);
-			++indentLevel;
+            writer.Indentation += writer.TabSize;
 		}
 
 		public void CloseBrace()
 		{
-			--indentLevel;
+            writer.Indentation -= writer.TabSize;
 			BeginLine();
 			writer.Write("}");
 		}
@@ -115,22 +112,112 @@ namespace Reko.Core.Output
 			string oldName = name;
 			name = null;
 			at.ElementType.Accept(this);
-			name = oldName;
-			WriteName(true);
-			name = null;
-			writer.Write("[");
-			if (at.Length != 0)
-			{
-				writer.Write(at.Length.ToString());
-			}
-			writer.Write("]");
+            if (mode == Mode.Writing)
+            {
+                name = oldName;
+                WriteName(true);
+                name = null;
+                writer.Write("[");
+                if (at.Length != 0)
+                {
+                    writer.Write(at.Length.ToString());
+                }
+                writer.Write("]");
+            }
             return writer;
 		}
 
+        public Formatter VisitClass(ClassType ct)
+        {
+            var n = this.name;
+            if (mode == Mode.Writing)
+            {
+                object v;
+                if (visited.TryGetValue(ct, out v) && (v == Defined || v == Declared))
+                {
+                    writer.WriteHyperlink(ct.Name, ct);
+                }
+                else if (v != Declared)
+                {
+                    visited[ct] = Declared;
+                    ScanFields(ct);
+                    ScanMethods(ct);
+                    writer.WriteKeyword("class");
+                    writer.Write(" ");
+                    writer.WriteHyperlink(ct.Name, ct);
+                    OpenBrace(ct.Size > 0 ? string.Format("size: {0} {0:X}", ct.Size) : null);
+
+                    WriteClassMembers(ct, ClassProtection.Public, "public");
+                    WriteClassMembers(ct, ClassProtection.Protected, "protected");
+                    WriteClassMembers(ct, ClassProtection.Private, "private");
+                    
+                    CloseBrace();
+                    visited[ct] = Defined;
+                }
+
+                name = n;
+                WriteName(true);
+            }
+            else
+            {
+                if (!visited.ContainsKey(ct))
+                {
+                    visited[ct] = Declared;
+                    writer.WriteKeyword("class");
+                    writer.Write(" ");
+                    writer.WriteHyperlink(ct.Name, ct);
+                    writer.Write(";");
+                    writer.WriteLine();
+                }
+            }
+            return writer;
+        }
+
+        private void WriteClassMembers(ClassType ct, ClassProtection protection, string sectionName)
+        { 
+            var methods = ct.Methods.Where(m => m.Protection == protection)
+                .OrderBy(m => m.Offset).ThenBy(m => m.Name)
+                .ToList();
+            var fields = ct.Fields.Where(f => f.Protection == protection)
+                .OrderBy(m => m.Offset)
+                .ToList();
+            if (methods.Count == 0 && fields.Count == 0)
+                return;
+            writer.Indentation -= writer.TabSize;
+            BeginLine();
+            writer.WriteKeyword(sectionName);
+            writer.WriteLine(":");
+            writer.Indentation += writer.TabSize;
+
+            foreach (var m in methods)
+            {
+                //$TODO: finish this.
+                BeginLine();
+                writer.Write(m.Name);
+                writer.Write("()");
+                EndLine(";");
+            }
+            if (methods.Count > 0 && fields.Count > 0)
+            {
+                // separate methods from fields.
+                writer.WriteLine();
+            }
+            foreach (var f in fields)
+            {
+                BeginLine();
+                var trf = new TypeReferenceFormatter(writer);
+                trf.WriteDeclaration(f.DataType, f.Name);
+                EndLine(";", string.Format("{0:X}", f.Offset));
+            }
+        }
+
         public Formatter VisitCode(CodeType c)
         {
-            writer.Write("code", c.Size);
-            WriteName(true);
+            if (mode == Mode.Writing)
+            {
+                writer.Write("code");
+                WriteName(true);
+            }
             return writer;
         }
 
@@ -141,15 +228,19 @@ namespace Reko.Core.Output
 
 		public Formatter VisitEquivalenceClass(EquivalenceClass eq)
 		{
-            if (eq.DataType == null)
+            if (mode == Mode.Writing)
             {
-                writer.Write("ERROR: EQ_{0}.DataType is Null", eq.Number);      //$DEBUG
+                if (eq.DataType == null)
+                {
+                    //$BUG: we should never have Eq.classes with null DataType properties.
+                    writer.Write("ERROR: EQ_{0}.DataType is Null", eq.Number);
+                }
+                else
+                {
+                    writer.WriteType(eq.DataType.Name, eq.DataType);
+                }
+                WriteName(true);
             }
-            else
-            {
-                writer.WriteType(eq.DataType.Name, eq.DataType);
-            }
-            WriteName(true);
             return writer;
 		}
 
@@ -157,26 +248,38 @@ namespace Reko.Core.Output
 		{
 			string oldName = name;
 			name = null;
-			ft.ReturnType.Accept(this);
-			writer.Write(" (");
+			ft.ReturnValue.DataType.Accept(this);
+            if (mode == Mode.Writing)
+            {
+                writer.Write(" (");
+            }
 			name = oldName;
 			WriteName(false);
-			writer.Write(")(");
-			if (ft.ArgumentTypes.Length > 0)
+            if (mode == Mode.Writing)
+            {
+                writer.Write(")(");
+            }
+			if (ft.Parameters != null && ft.Parameters.Length > 0)
 			{
-				name = ft.ArgumentNames != null ? ft.ArgumentNames[0] : null;
-				ft.ArgumentTypes[0].Accept(this);
+                name = ft.Parameters[0].Name;
+				ft.Parameters[0].DataType.Accept(this);
 				
-				for (int i = 1; i < ft.ArgumentTypes.Length; ++i)
+				for (int i = 1; i < ft.Parameters.Length; ++i)
 				{
-					writer.Write(", ");
-					name = ft.ArgumentNames != null ? ft.ArgumentNames[i] : null;
-					ft.ArgumentTypes[i].Accept(this);
+                    if (mode == Mode.Writing)
+                    {
+                        writer.Write(", ");
+                    }
+                    name = ft.Parameters[i].Name;
+					ft.Parameters[i].DataType.Accept(this);
 				}
 				name = oldName;
 			}
 
-			writer.Write(")");
+            if (mode == Mode.Writing)
+            {
+                writer.Write(")");
+            }
             return writer;
 		}
 
@@ -191,25 +294,27 @@ namespace Reko.Core.Output
 			if (mode == Mode.Writing)
 			{
                 object v;
-                if (visited.TryGetValue(str, out v) && (v == Defined || v == Declared))
+                if (visited.TryGetValue(str, out v) && (v == Defined))
 				{
                     writer.WriteKeyword("struct");
                     writer.Write(" ");
                     writer.Write(str.Name);
 				}
-				else if (v != Declared)
+				else
 				{
 					visited[str] = Declared;
 					ScanFields(str);
-					writer.Write("struct {0}", str.Name);
+                    writer.WriteKeyword("struct");
+                    writer.Write(" ");
+                    writer.WriteHyperlink(str.Name, str);
 					OpenBrace(str.Size > 0 ? string.Format("size: {0} {0:X}", str.Size) : null);
 					if (str.Fields != null)
 					{
 						foreach (StructureField f in str.Fields)
 						{
 							BeginLine();
-							name = f.Name;
-							f.DataType.Accept(this);
+                            var trf = new TypeReferenceFormatter(writer);
+                            trf.WriteDeclaration(f.DataType, f.Name);
 							EndLine(";", string.Format("{0:X}", f.Offset));
 						}
 					}
@@ -226,7 +331,7 @@ namespace Reko.Core.Output
 				{
 					visited[str] = Declared;
 					writer.Write("struct ");
-                    writer.Write(str.Name);
+                    writer.WriteHyperlink(str.Name, str);
                     writer.Write(";");
 					writer.WriteLine();
 				}
@@ -245,6 +350,29 @@ namespace Reko.Core.Output
 			}
 			mode = m;
 		}
+
+        public void ScanFields(ClassType ct)
+        {
+            Mode m = mode;
+            mode = Mode.Scanning;
+            foreach (var f in ct.Fields)
+            {
+                f.DataType.Accept(this);
+            }
+            mode = m;
+        }
+
+        public void ScanMethods(ClassType ct)
+        {
+            Mode m = mode;
+            mode = Mode.Scanning;
+            foreach (var method in ct.Methods)
+            {
+                //$TODO: it would be greate if FunctionType were a parent
+                // of ProcedureSignature.
+            }
+            mode = m;
+        }
 
 		public Formatter VisitMemberPointer(MemberPointer memptr)
 		{
@@ -280,7 +408,7 @@ namespace Reko.Core.Output
 		{
 			if (mode == Mode.Writing)
 			{
-				if (name == null)
+				if (string.IsNullOrEmpty(name))
 					name = "*";
 				else 
 					name = "* " + name;
@@ -289,7 +417,20 @@ namespace Reko.Core.Output
             return writer;
 		}
 
-		public Formatter VisitPrimitive(PrimitiveType pt)
+        public Formatter VisitReference(ReferenceTo refTo)
+        {
+            if (mode == Mode.Writing)
+            {
+                if (string.IsNullOrEmpty(name))
+                    name = "&";
+                else
+                    name = "& " + name;
+            }
+            refTo.Referent.Accept(this);
+            return writer;
+        }
+
+        public Formatter VisitPrimitive(PrimitiveType pt)
 		{
 			if (mode == Mode.Writing)
 			{
@@ -301,13 +442,18 @@ namespace Reko.Core.Output
 
         public Formatter VisitTypeReference(TypeReference typeref)
         {
-            writer.Write(typeref.Name);
+            if (mode == Mode.Writing)
+            {
+                writer.Write(typeref.Name);
+                WriteName(true);
+            }
             return writer;
         }
 
-		public Formatter VisitTypeVariable(TypeVariable t)
+        public Formatter VisitTypeVariable(TypeVariable t)
 		{
-			throw new NotImplementedException("TypeFormatter.TypeVariable");
+            this.writer.WriteType(t.Name, t);
+            return writer;
 		}
 
         public Formatter VisitUnion(UnionType ut)
@@ -322,9 +468,8 @@ namespace Reko.Core.Output
 			foreach (UnionAlternative alt in ut.Alternatives.Values)
 			{
 				BeginLine();
-				name = alt.MakeName(i);
-                var trf = new TypeReferenceFormatter(writer, true);
-                trf.WriteDeclaration(alt.DataType, name);
+                var trf = new TypeReferenceFormatter(writer);
+                trf.WriteDeclaration(alt.DataType, alt.Name);
 				EndLine(";");
 				++i;
 			}
@@ -365,15 +510,14 @@ namespace Reko.Core.Output
 			foreach (DataType dt in datatypes)
 			{
 				Write(dt, null);
-				writer.Write(";");
-                writer.WriteLine();
+				EndLine(";");
 				writer.WriteLine();
 			}
 		}
 
 		private void WriteName(bool spacePrefix)
 		{
-			if (name != null)
+			if (!string.IsNullOrEmpty(name))
 			{
 				if (spacePrefix)
 					writer.Write(" ");

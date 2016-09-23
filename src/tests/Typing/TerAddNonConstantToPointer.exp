@@ -17,13 +17,13 @@ void proc1()
 proc1_entry:
 	// succ:  l1
 l1:
-	p->w0000 = 0x0004;
-	p->w0004 = 0x0004;
-	p = p + i;
+	p->w0000 = 0x0004
+	p->w0004 = 0x0004
+	p = p + i / 6
 proc1_exit:
 
 // Equivalence classes ////////////
-Eq_1: (struct "Eq_1")
+Eq_1: (struct "Globals")
 	globals_t (in globals : (ptr (struct "Globals")))
 Eq_3: (struct "Eq_3" (0 word16 w0000) (4 word16 w0004))
 	T_3 (in p : word16)
@@ -32,7 +32,7 @@ Eq_3: (struct "Eq_3" (0 word16 w0000) (4 word16 w0004))
 globals_t: (in globals : (ptr (struct "Globals")))
   Class: Eq_1
   DataType: (ptr Eq_1)
-  OrigDataType: (ptr (struct))
+  OrigDataType: (ptr (struct "Globals"))
 T_2: (in 0x0004 : word16)
   Class: Eq_2
   DataType: word16
@@ -63,17 +63,17 @@ T_8: (in 0x0004 : word16)
   OrigDataType: word16
 T_9: (in p + 0x0004 : word16)
   Class: Eq_9
-  DataType: word16
-  OrigDataType: word16
+  DataType: ptr16
+  OrigDataType: ptr16
 T_10: (in Mem0[p + 0x0004:word16] : word16)
   Class: Eq_7
   DataType: word16
   OrigDataType: word16
 T_11: (in i : word16)
   Class: Eq_11
-  DataType: word16
-  OrigDataType: word16
+  DataType: int16
+  OrigDataType: int16
 T_12: (in p + i : word16)
   Class: Eq_3
   DataType: (ptr Eq_3)
-  OrigDataType: word16
+  OrigDataType: ptr16

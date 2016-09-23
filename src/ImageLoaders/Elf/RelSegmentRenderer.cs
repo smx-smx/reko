@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,23 +28,23 @@ using System.Text;
 
 namespace Reko.ImageLoaders.Elf
 {
-    public class RelSegmentRenderer : ImageMapSegmentRenderer
+    public class RelSegmentRenderer : ImageSegmentRenderer
     {
-        private ElfImageLoader loader;
-        private Elf32_SHdr shdr;
+        private ElfLoader32 loader;
+        private ElfSection shdr;
 
-        public RelSegmentRenderer(ElfImageLoader loader, Elf32_SHdr shdr)
+        public RelSegmentRenderer(ElfLoader32 loader, ElfSection shdr)
         {
             this.loader = loader;
             this.shdr = shdr;
         }
 
-        public override void Render(ImageMapSegment segment, Program program, Formatter formatter)
+        public override void Render(ImageSegment segment, Program program, Formatter formatter)
         {
-            var entries = shdr.sh_size / shdr.sh_entsize;
-            var symtab = (int)shdr.sh_link;
-            var rdr = loader.CreateReader(shdr.sh_offset);
-            for (int i = 0; i < entries; ++i)
+            var entries = shdr.Size / shdr.EntrySize;
+            var symtab = shdr.LinkedSection;
+            var rdr = loader.CreateReader(shdr.FileOffset);
+            for (ulong i = 0; i < entries; ++i)
             {
                 uint offset;
                 if (!rdr.TryReadUInt32(out offset))
@@ -54,7 +54,7 @@ namespace Reko.ImageLoaders.Elf
                     return;
 
                 uint sym = info >> 8;
-                string symStr = loader.GetSymbol(symtab, (int)sym);
+                string symStr = loader.GetSymbolName(symtab, sym);
                 formatter.Write("{0:X8} {1,3} {2:X8} {3}", offset, info & 0xFF, sym, symStr);
                 formatter.WriteLine();
             }

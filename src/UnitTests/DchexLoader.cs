@@ -45,13 +45,13 @@ namespace Reko.UnitTests
                     break;
                 ProcessLine(line);
             }
-            var img = new LoadedImage(addrStart, memStm.ToArray());
+            var mem = new MemoryArea(addrStart, memStm.ToArray());
             results = new Program(
-                img,
-                img.CreateImageMap(),
+                new SegmentMap(
+                    mem.BaseAddress,
+                    new ImageSegment("code", mem, AccessMode.ReadWriteExecute)),
                 arch,
                 new DefaultPlatform(Services, arch));
-
         }
 
         private IProcessorArchitecture GetArchitecture(string archName)
@@ -125,7 +125,7 @@ namespace Reko.UnitTests
 
         public override RelocationResults Relocate(Program program, Address addrLoad)
         {
-            return new RelocationResults(new List<EntryPoint>(), new RelocationDictionary());
+            return new RelocationResults(new List<ImageSymbol>(), new SortedList<Address, ImageSymbol>());
         }
     }
 }

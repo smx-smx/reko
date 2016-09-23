@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,13 +28,18 @@ namespace Reko.Core.Services
     public interface IDiagnosticsService
     {
         void Error(string message);
+        void Error(string message, params object[] args);
         void Error(Exception ex, string message);
         void Error(ICodeLocation location, string message);
+        void Error(ICodeLocation location, string message, params object[] args);
         void Error(ICodeLocation location, Exception ex, string message);
         void Error(ICodeLocation location, Exception ex, string message, params object [] args);
         void Warn(string message);
+        void Warn(string message, params object[] args);
         void Warn(ICodeLocation location, string message);
         void Warn(ICodeLocation location, string message, params object[] args);
+        void Inform(string message);
+        void Inform(string message, params object[] args);
         void ClearDiagnostics();
     }
 }

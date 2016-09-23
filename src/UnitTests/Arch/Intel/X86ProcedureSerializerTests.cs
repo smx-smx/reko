@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,38 +24,58 @@ using Reko.Core.Expressions;
 using Reko.Core.Serialization;
 using Reko.Core.Types;
 using Reko.UnitTests.Core.Serialization;
+using Reko.UnitTests.Mocks;
 using NUnit.Framework;
 using System;
 using System.Xml;
 using System.Xml.Serialization;
-using Reko.Environments.Win32;
+using Reko.Environments.Windows;
+using Rhino.Mocks;
 
 namespace Reko.UnitTests.Arch.Intel
 {
     [TestFixture]
+    [Category(Categories.UnitTests)]
     public class X86ProcedureSerializerTests
     {
+        private MockRepository mr;
+        private MockFactory mockFactory;
         private IntelArchitecture arch;
         private X86ProcedureSerializer ser;
         private Win32Platform platform;
+        private ISerializedTypeVisitor<DataType> deserializer;
 
         [SetUp]
         public void Setup()
         {
-            arch = new IntelArchitecture(ProcessorMode.Protected32);
+            mr = new MockRepository();
+            mockFactory = new MockFactory(mr);
+            arch = new X86ArchitectureFlat32();
             platform = new Win32Platform(null, arch);
         }
 
+        private void Verify(SerializedSignature ssig, string outputFilename)
+        {
+            using (FileUnitTester fut = new FileUnitTester(outputFilename))
+            {
+                XmlTextWriter x = new FilteringXmlWriter(fut.TextWriter);
+                x.Formatting = Formatting.Indented;
+                XmlSerializer ser = SerializedLibrary.CreateSerializer_v1(ssig.GetType());
+                ser.Serialize(x, ssig);
+                fut.AssertFilesEqual();
+            }
+        }
         private void Given_ProcedureSerializer(string cConvention)
         {
-            this.ser = new X86ProcedureSerializer(arch, new TypeLibraryLoader(platform, true), cConvention);
+            this.deserializer = new FakeTypeDeserializer(4);
+            this.ser = new X86ProcedureSerializer(arch, deserializer, cConvention);
         }
 
         [Test]
         public void Test()
         {
             Given_ProcedureSerializer("stdapi");
-            ProcedureSignature sig = new ProcedureSignature(
+            FunctionType sig = new FunctionType(
                 new Identifier("qax", PrimitiveType.Word32, Registers.eax),
                 new Identifier[] {
                     new Identifier("qbx", PrimitiveType.Word32, Registers.ebx)
@@ -79,13 +99,13 @@ namespace Reko.UnitTests.Arch.Intel
         [Test]
         public void SsigSerializeSequence()
         {
-            Identifier seq = new Identifier("es_bx", PrimitiveType.Word32, new SequenceStorage(
-                new Identifier(Registers.es.Name, Registers.es.DataType, Registers.es),
-                new Identifier(Registers.bx.Name, Registers.bx.DataType, Registers.bx)));
+            Identifier seq = new Identifier("es_bx", PrimitiveType.Word32, 
+                new SequenceStorage(Registers.es, Registers.bx));
             Given_ProcedureSerializer("stdapi");
-            SerializedSignature ssig = ser.Serialize(new ProcedureSignature(seq, new Identifier[0]));
-            Verify(ssig, "Core/SsigSerializeSequence.txt");
+            mr.ReplayAll();
 
+            SerializedSignature ssig = ser.Serialize(new FunctionType(seq, new Identifier[0]));
+            Verify(ssig, "Core/SsigSerializeSequence.txt");
         }
 
         [Test]
@@ -94,6 +114,8 @@ namespace Reko.UnitTests.Arch.Intel
             Procedure proc = new Procedure("foo", arch.CreateFrame());
             Address addr = Address.Ptr32(0x12345);
             Given_ProcedureSerializer("stdapi");
+            mr.ReplayAll();
+
             Procedure_v1 sproc =  ser.Serialize(proc, addr);
             Assert.AreEqual("foo", sproc.Name);
             Assert.AreEqual("00012345", sproc.Address);
@@ -104,7 +126,7 @@ namespace Reko.UnitTests.Arch.Intel
         {
             Procedure proc = new Procedure("foo", arch.CreateFrame())
             {
-                Signature = new ProcedureSignature(
+                Signature = new FunctionType(
                     new Identifier("eax", PrimitiveType.Word32, Registers.eax),
                     new Identifier[] {
                         new Identifier("arg00", PrimitiveType.Word32, new StackArgumentStorage(0, PrimitiveType.Word32))
@@ -113,12 +135,14 @@ namespace Reko.UnitTests.Arch.Intel
             
             Address addr = Address.Ptr32(0x567A0C);
             Given_ProcedureSerializer("stdapi");
+            mr.ReplayAll();
+
             Procedure_v1 sproc = ser.Serialize(proc, addr);
             Assert.AreEqual("eax", sproc.Signature.ReturnValue.Name);
         }
 
         [Test]
-        public void DeserializeFpuStackargument()
+        public void X86ps_DeserializeFpuStackargument()
         {
             var ssig = new SerializedSignature
             {
@@ -129,15 +153,17 @@ namespace Reko.UnitTests.Arch.Intel
                 }
             };
             Given_ProcedureSerializer("stdapi");
+            mr.ReplayAll();
+
             var sig = ser.Deserialize(ssig, arch.CreateFrame());
             Assert.AreEqual(-1, sig.FpuStackDelta);
-            Assert.AreEqual(0, sig.StackDelta);
+            Assert.AreEqual(4, sig.StackDelta);
             Assert.AreEqual("Register int test(FpuStack real64 fpArg0)", sig.ToString("test"));
         }
 
         private SerializedType Type(string typeName)
         {
-            return new SerializedTypeReference(typeName);
+            return new TypeReference_v1(typeName);
         }
 
         private Argument_v1 RegArg(SerializedType type, string regName)
@@ -167,33 +193,40 @@ namespace Reko.UnitTests.Arch.Intel
                 Convention = "stdapi",
                 ReturnValue = new Argument_v1
                 {
-                    Type = new SerializedTypeReference("double"),
+                    Type = new TypeReference_v1("double"),
                     Kind = new FpuStackVariable_v1 { ByteSize = 8 },
                 }
             };
             Given_ProcedureSerializer("stdapi");
+            mr.ReplayAll();
+
             var sig = ser.Deserialize(ssig, arch.CreateFrame());
             Assert.AreEqual(1, sig.FpuStackDelta);
         }
 
         [Test]
-        public void ProcSer_Deserialize_thiscall()
+        public void X86ProcSer_Deserialize_thiscall()
         {
             var ssig = new SerializedSignature
             {
+                EnclosingType = new StructType_v1 { Name = "CHandle" },
                 Convention = "__thiscall",
                 Arguments = new Argument_v1[] {
                     new Argument_v1 
                     {
-                        Type = new SerializedTypeReference("int"),
-                        Name = "this"
+                        Type = new PrimitiveType_v1 { Domain = Domain.SignedInt, ByteSize = 4 },
+                        Name = "foo"
                     }
                 }
             };
 
             Given_ProcedureSerializer("stdcall");
+            mr.ReplayAll();
+
             var sig = ser.Deserialize(ssig, arch.CreateFrame());
-            Assert.AreEqual("ecx", sig.Parameters[0].ToString());
+            Assert.AreEqual(2, sig.Parameters.Length);
+            Assert.AreEqual("this", sig.Parameters[0].ToString());
+            Assert.AreEqual("ecx", sig.Parameters[0].Storage.ToString());
         }
 
         [Test]
@@ -211,8 +244,11 @@ namespace Reko.UnitTests.Arch.Intel
                 }
             };
             Given_ProcedureSerializer(ssig.Convention);
+            mr.ReplayAll();
+
             var sig = ser.Deserialize(ssig, arch.CreateFrame());
-            Assert.AreEqual(0, sig.StackDelta);
+            Assert.AreEqual(4, sig.StackDelta);
+            Assert.AreEqual(4, ((StackArgumentStorage)sig.Parameters[0].Storage).StackOffset);
         }
 
         [Test]
@@ -230,20 +266,73 @@ namespace Reko.UnitTests.Arch.Intel
                 }
             };
             Given_ProcedureSerializer(ssig.Convention);
+            mr.ReplayAll();
+
             var sig = ser.Deserialize(ssig, arch.CreateFrame());
-            Assert.AreEqual(4, sig.StackDelta);
+            Assert.AreEqual(8, sig.StackDelta);
+            Assert.AreEqual(4, ((StackArgumentStorage)sig.Parameters[0].Storage).StackOffset);
         }
 
-        private void Verify(SerializedSignature ssig, string outputFilename)
+        [Test]
+        public void ProcSer_Load_pascal()
         {
-            using (FileUnitTester fut = new FileUnitTester(outputFilename))
+            var ssig = new SerializedSignature
             {
-                XmlTextWriter x = new FilteringXmlWriter(fut.TextWriter);
-                x.Formatting = Formatting.Indented;
-                XmlSerializer ser = SerializedLibrary.CreateSerializer_v1(ssig.GetType());
-                ser.Serialize(x, ssig);
-                fut.AssertFilesEqual();
-            }
+                Convention = "pascal",
+                Arguments = new Argument_v1[]
+                {
+                    new Argument_v1
+                    {
+                        Name = "arg1",
+                        Type = new PrimitiveType_v1 { Domain = Domain.SignedInt, ByteSize= 2 },
+                    },
+                    new Argument_v1
+                    {
+                        Name = "arg2",
+                        Type = new PrimitiveType_v1 { Domain = Domain.Pointer, ByteSize=4  }
+                    }
+                }
+            };
+            Given_ProcedureSerializer(ssig.Convention);
+            mr.ReplayAll();
+
+            var sig = ser.Deserialize(ssig, arch.CreateFrame());
+            Assert.AreEqual(8, ((StackArgumentStorage)sig.Parameters[0].Storage).StackOffset);
+            Assert.AreEqual(4, ((StackArgumentStorage)sig.Parameters[1].Storage).StackOffset);
+        }
+
+        [Test]
+        public void X86ProcSer_Load_thiscall()
+        {
+            var ssig = new SerializedSignature
+            {
+                EnclosingType = new StructType_v1 { Name="CWindow" },
+                Convention = "__thiscall",
+                Arguments = new Argument_v1[]
+                {
+                    new Argument_v1
+                    {
+                        Name = "XX",
+                        Type = new PrimitiveType_v1 { Domain = Domain.SignedInt, ByteSize= 4 },
+                    },
+                    new Argument_v1
+                    {
+                        Name = "arg1",
+                        Type = new PrimitiveType_v1 { Domain = Domain.SignedInt, ByteSize= 2 },
+                    },
+                }
+            };
+            Given_ProcedureSerializer(ssig.Convention);
+            mr.ReplayAll();
+
+            var sig = ser.Deserialize(ssig, arch.CreateFrame());
+            var sExp =
+@"void memfn(Register (ptr (struct ""CWindow"")) this, Stack int32 XX, Stack int16 arg1)
+// stackDelta: 4; fpuStackDelta: 0; fpuMaxParam: -1
+";
+            Assert.AreEqual(sExp, sig.ToString("memfn", FunctionType.EmitFlags.AllDetails));
+            Assert.AreEqual(4, ((StackArgumentStorage)sig.Parameters[1].Storage).StackOffset);
+            Assert.AreEqual(8, ((StackArgumentStorage)sig.Parameters[2].Storage).StackOffset);
         }
     }
 }

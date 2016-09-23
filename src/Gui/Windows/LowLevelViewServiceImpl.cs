@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,6 +21,7 @@
 using Reko.Core;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 
 namespace Reko.Gui.Windows
@@ -45,17 +46,26 @@ namespace Reko.Gui.Windows
 
         public void ViewImage(Program program)
         {
-            ShowWindow();
+            ShowWindow(program);
             mvi.Program = program;
             if (program != null)
             {
-                mvi.SelectedAddress = program.Image.BaseAddress;
+                mvi.SelectedAddress = program.SegmentMap.Segments.Values
+                    .Where(s => s.MemoryArea != null)
+                    .Select(s => Address.Max(s.Address, s.MemoryArea.BaseAddress))
+                    .First();
             }
         }
 
         public void ShowMemoryAtAddress(Program program, Address addr)
         {
-            ViewImage(program);
+            if (mvi == null || mvi.Program != program)
+            {
+                ViewImage(program);
+            } else
+            {
+                ShowWindow(program);
+            }
             mvi.SelectedAddress = addr;
         }
 
@@ -64,14 +74,14 @@ namespace Reko.Gui.Windows
             return mvi.GetSelectedAddressRange();
         }
 
-        public void ShowWindow()
+        public void ShowWindow(Program program)
         {
             if (mvi == null)
             {
                 mvi = CreateMemoryViewInteractor();
                 mvi.SelectionChanged += new EventHandler<SelectionChangedEventArgs>(mvi_SelectionChanged);
             }
-            ShowWindow(ViewWindowType, "Memory View", mvi);
+            ShowWindow(ViewWindowType, "Memory View", program, mvi);
         }
 
         #endregion

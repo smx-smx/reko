@@ -1,5 +1,5 @@
 #region License
-/* Copyright (C) 1999-2015 John Källén.
+/* Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,6 +34,9 @@ using System.IO;
 using System.Linq;
 using System.Xml;
 using Reko.Core.Assemblers;
+using System.Threading;
+using Reko.Core.Configuration;
+using System.Diagnostics;
 
 namespace Reko
 {
@@ -42,10 +45,10 @@ namespace Reko
         Project Project { get; }
 
         bool Load(string fileName);
-        TypeLibrary LoadMetadata(string fileName);
-        void LoadRawImage(string fileName, IProcessorArchitecture arch, Platform platform, Address addrBase);
+        Program LoadRawImage(string file, RawFileElement raw);
+        Program LoadRawImage(string fileName, string arch, string platform, Address addrBase);
         void ScanPrograms();
-        ProcedureBase ScanProcedure(Program program, Address procAddress);
+        ProcedureBase ScanProcedure(ProgramAddress paddr);
         void AnalyzeDataFlow();
         void ReconstructTypes();
         void StructureProgram();
@@ -68,16 +71,14 @@ namespace Reko
         private DecompilerEventListener eventListener;
         private IServiceProvider services;
 
-        public DecompilerDriver(ILoader ldr, DecompilerHost host, IServiceProvider services)
+        public DecompilerDriver(ILoader ldr, IServiceProvider services)
         {
             if (ldr == null)
                 throw new ArgumentNullException("ldr");
-            if (host == null)
-                throw new ArgumentNullException("host");
             if (services == null)
                 throw new ArgumentNullException("services");
             this.loader = ldr;
-            this.host = host;
+            this.host = services.RequireService<DecompilerHost>();
             this.services = services;
             this.eventListener = services.GetService<DecompilerEventListener>();
         }
@@ -119,10 +120,12 @@ namespace Reko
 		///</summary>
         public virtual void AnalyzeDataFlow()
         {
+            var eventListener = services.RequireService<DecompilerEventListener>();
             foreach (var program in project.Programs)
             {
                 eventListener.ShowStatus("Performing interprocedural analysis.");
-                DataFlowAnalysis dfa = new DataFlowAnalysis(program, eventListener);
+                var ir = new ImportResolver(project, program, eventListener);
+                var dfa = new DataFlowAnalysis(program, ir, eventListener);
                 dfa.UntangleProcedures();
 
                 dfa.BuildExpressionTrees();
@@ -131,12 +134,12 @@ namespace Reko
             eventListener.ShowStatus("Interprocedural analysis complete.");
         }
 
-        public void DumpAssembler(Program program, TextWriter wr)
+        public void DumpAssembler(Program program, Formatter wr)
         {
             if (wr == null || program.Architecture == null)
                 return;
             Dumper dump = new Dumper(program.Architecture);
-            dump.Dump(program, program.ImageMap, wr);
+            dump.Dump(program, wr);
         }
 
         private void EmitProgram(Program program, DataFlowAnalysis dfa, TextWriter output)
@@ -150,9 +153,9 @@ namespace Reko
                     ProcedureFlow flow = dfa.ProgramDataFlow[proc];
                     TextFormatter f = new TextFormatter(output);
                     if (flow.Signature != null)
-                        flow.Signature.Emit(proc.Name, ProcedureSignature.EmitFlags.LowLevelInfo, f);
+                        flow.Signature.Emit(proc.Name, FunctionType.EmitFlags.LowLevelInfo, f);
                     else if (proc.Signature != null)
-                        proc.Signature.Emit(proc.Name, ProcedureSignature.EmitFlags.LowLevelInfo, f);
+                        proc.Signature.Emit(proc.Name, FunctionType.EmitFlags.LowLevelInfo, f);
                     else
                         output.Write("Warning: no signature found for {0}", proc.Name);
                     output.WriteLine();
@@ -191,8 +194,8 @@ namespace Reko
         {
             eventListener.ShowStatus("Loading source program.");
             byte[] image = loader.LoadImageBytes(fileName, 0);
-            var projectLoader = new ProjectLoader(loader);
-            projectLoader.ProgramLoaded += (s, e) => { RunScriptOnProgramImage(e.Program, e.Program.OnLoadedScript); };
+            var projectLoader = new ProjectLoader(this.services, loader);
+            projectLoader.ProgramLoaded += (s, e) => { RunScriptOnProgramImage(e.Program, e.Program.User.OnLoadedScript); };
             Project = projectLoader.LoadProject(fileName, image);
             bool isProject;
             if (Project != null)
@@ -203,10 +206,25 @@ namespace Reko
             {
                 var program = loader.LoadExecutable(fileName, image, null);
                 Project = CreateDefaultProject(fileName, program);
+                Project.LoadedMetadata = program.Platform.CreateMetadata();
+                program.EnvironmentMetadata = Project.LoadedMetadata;
                 isProject = false;
             }
+            BuildImageMaps();
             eventListener.ShowStatus("Source program loaded.");
             return isProject;
+        }
+
+        /// <summary>
+        /// Build image maps for each program in preparation of the scanning
+        /// phase.
+        /// </summary>
+        private void BuildImageMaps()
+        {
+            foreach (var program in this.Project.Programs)
+            {
+                program.BuildImageMap();
+            }
         }
 
         public void RunScriptOnProgramImage(Program program, Script_v2 script)
@@ -222,7 +240,7 @@ namespace Reko
             }
             catch (Exception ex)
             {
-                eventListener.Error(new NullCodeLocation(""), ex, string.Format("Unable to load script interpreter {0}."));
+                eventListener.Error(new NullCodeLocation(""), ex, "Unable to load script interpreter {0}.");
                 return;
             }
 
@@ -230,22 +248,16 @@ namespace Reko
             {
                 interpreter.LoadFromString(script.Script, null);
                 interpreter.Run();
-            } catch (Exception ex)
-            {
-                eventListener.Error(new NullCodeLocation(""), ex, string.Format("An error occurred while running the script."));
             }
-        }
-
-        public TypeLibrary LoadMetadata(string fileName)
-        {
-            eventListener.ShowStatus("Loading metadata");
-            return loader.LoadMetadata(fileName);
+            catch (Exception ex)
+            {
+                eventListener.Error(new NullCodeLocation(""), ex, "An error occurred while running the script.");
+            }
         }
 
         public void Assemble(string fileName, Assembler asm)
         {
             eventListener.ShowStatus("Assembling program.");
-            byte[] image = loader.LoadImageBytes(fileName, 0);
             var program = loader.AssembleExecutable(fileName, asm, null);
             Project = CreateDefaultProject(fileName, program);
             eventListener.ShowStatus("Assembled program.");
@@ -257,19 +269,24 @@ namespace Reko
         /// <param name="fileName"></param>
         /// <param name="arch"></param>
         /// <param name="platform"></param>
-        public void LoadRawImage(string fileName, IProcessorArchitecture arch, Platform platform, Address addrBase)
+        public Program LoadRawImage(string fileName, string arch, string platform, Address addrBase)
         {
             eventListener.ShowStatus("Loading raw bytes.");
             byte[] image = loader.LoadImageBytes(fileName, 0);
-            var loadedImage = new LoadedImage(addrBase, image);
-            var program = new Program(
-                loadedImage,
-                loadedImage.CreateImageMap(),
-                arch,
-                platform);
-            program.Name = Path.GetFileName(fileName);
+            var program = loader.LoadRawImage(fileName, image, arch, platform, addrBase);
             Project = CreateDefaultProject(fileName, program);
             eventListener.ShowStatus("Raw bytes loaded.");
+            return program;
+        }
+
+        public Program LoadRawImage(string fileName, RawFileElement raw)
+        {
+            eventListener.ShowStatus("Loading raw bytes.");
+            byte[] image = loader.LoadImageBytes(fileName, 0);
+            var program = loader.LoadRawImage(fileName, image, raw);
+            Project = CreateDefaultProject(fileName, program);
+            eventListener.ShowStatus("Raw bytes loaded.");
+            return program;
         }
 
         protected Project CreateDefaultProject(string fileName, Program program)
@@ -347,12 +364,17 @@ namespace Reko
         {
             WriteHeaderComment(Path.GetFileName(program.TypesFilename), program, w);
             w.WriteLine("/*"); program.TypeStore.Write(w); w.WriteLine("*/");
-            TypeFormatter fmt = new TypeFormatter(new TextFormatter(w), false);
+            var tf = new TextFormatter(w)
+            {
+                Indentation = 0,
+            };
+            TypeFormatter fmt = new TypeFormatter(tf, false);
             foreach (EquivalenceClass eq in program.TypeStore.UsedEquivalenceClasses)
             {
                 if (eq.DataType != null)
                 {
-                    w.Write("typedef ");
+                    tf.WriteKeyword("typedef");     //$REVIEW: C/C++-specific
+                    tf.Write(" ");
                     fmt.Write(eq.DataType, eq.Name);
                     w.WriteLine(";");
                     w.WriteLine();
@@ -366,17 +388,20 @@ namespace Reko
         /// <param name="addr"></param>
         /// <returns>a ProcedureBase, because the target procedure may have been a thunk or 
         /// an linked procedure the user has decreed not decompileable.</returns>
-		public ProcedureBase ScanProcedure(Program program, Address addr)
-		{
-			if (scanner == null)        //$TODO: it's unfortunate that we depend on the scanner of the Decompiler class.
-				scanner = CreateScanner(program, eventListener);
-			return scanner.ScanProcedure(addr, null, program.Architecture.CreateProcessorState());
-		}
+        public ProcedureBase ScanProcedure(ProgramAddress paddr)
+        {
+            if (scanner == null)        //$TODO: it's unfortunate that we depend on the scanner of the Decompiler class.
+                scanner = CreateScanner(paddr.Program);
+            Procedure_v1 sProc;
+            var procName = paddr.Program.User.Procedures.TryGetValue(
+                paddr.Address, out sProc) ? sProc.Name : null;
+            return scanner.ScanProcedure(paddr.Address, procName, paddr.Program.Architecture.CreateProcessorState());
+        }
 
 		/// <summary>
 		/// Generates the control flow graph and finds executable code in each program.
 		/// </summary>
-		/// <param name="prog">the program whose flow graph we seek</param>
+		/// <param name="program">the program whose flow graph we seek</param>
 		/// <param name="cfg">configuration information</param>
 		public void ScanPrograms()
 		{
@@ -394,61 +419,95 @@ namespace Reko
             try
             {
                 eventListener.ShowStatus("Rewriting reachable machine code.");
-                scanner = CreateScanner(program, eventListener);
-                foreach (EntryPoint ep in program.EntryPoints)
+                scanner = CreateScanner(program);
+                var tlDeser = program.CreateTypeLibraryDeserializer();
+                foreach (var global in program.User.Globals)
                 {
-                    scanner.EnqueueEntryPoint(ep);
+                    var addr = global.Key;
+                    var dt = global.Value.DataType.Accept(tlDeser);
+                    scanner.EnqueueUserGlobalData(addr, dt);
                 }
-                foreach (Procedure_v1 up in program.UserProcedures.Values)
+                foreach (ImageSymbol ep in program.EntryPoints.Values)
+                {
+                    scanner.EnqueueImageSymbol(ep, true);
+                }
+                foreach (Procedure_v1 up in program.User.Procedures.Values)
                 {
                     scanner.EnqueueUserProcedure(up);
                 }
-                scanner.ScanImage();
-                if (program.Options.HeuristicScanning)
+                foreach (ImageSymbol sym in program.ImageSymbols.Values.Where(s => s.Type == SymbolType.Procedure))
                 {
-                    eventListener.ShowStatus("Finding machine code using heuristics.");
-                    scanner.ScanImageHeuristically();
+                    if (sym.NoDecompile)
+                        program.EnsureUserProcedure(sym.Address, sym.Name, false);
+                    else
+                        scanner.EnqueueImageSymbol(sym, false);
+                }
+                scanner.ScanImage();
+
+                if (program.User.Heuristics.Contains("HeuristicScanning"))
+                {
+                    //eventListener.ShowStatus("Finding machine code using heuristics.");
+                    //scanner.ScanImageHeuristically();
+                }
+                if (program.User.Heuristics.Contains("Shingle heuristic"))
+                {
+                    eventListener.ShowStatus("Shingle scanning");
+                    var sh = new ShingledScanner(program, (IRewriterHost)scanner, eventListener);
+                    var watch = new Stopwatch();
+                    watch.Start();
+                    var procs = sh.Scan();
+                    var pprocs = procs.ToList();
+                    watch.Stop();
+                    Debug.Print(
+                        "Elapsed time: {0} msec for {1} procs",
+                        watch.ElapsedMilliseconds,
+                        pprocs.Count);
+
+                    foreach (var addr in procs)
+                    {
+                        scanner.ScanProcedure(addr.Key, null, program.Architecture.CreateProcessorState());
+                    }
                 }
                 eventListener.ShowStatus("Finished rewriting reachable machine code.");
             }
             finally
             {
+                eventListener.ShowStatus("Writing .asm and .dis files.");
                 host.WriteDisassembly(program, w => DumpAssembler(program, w));
                 host.WriteIntermediateCode(program, w => EmitProgram(program, null, w));
             }
         }
 
-        public IDictionary<Address, ProcedureSignature> LoadCallSignatures(
+        public IDictionary<Address, FunctionType> LoadCallSignatures(
             Program program, 
-            ICollection<SerializedCall_v1> serializedCalls)
+            ICollection<SerializedCall_v1> userCalls)
         {
             return
-                serializedCalls
+                userCalls
                 .Where(sc => sc != null && sc.Signature != null)
                 .Select(sc =>
                 {
-                    var sser = program.Platform.CreateProcedureSerializer(
-                        new TypeLibraryLoader(program.Platform, true), null);
+                //$BUG: need access to platform.Metadata.
+                    var sser = program.CreateProcedureSerializer();
                     Address addr;
                     if (program.Architecture.TryParseAddress(sc.InstructionAddress, out addr))
                     {
-                        return new KeyValuePair<Address, ProcedureSignature>(
+                        return new KeyValuePair<Address, FunctionType>(
                             addr,
                             sser.Deserialize(sc.Signature, program.Architecture.CreateFrame()));
                     }
                     else
-                        return new KeyValuePair<Address, ProcedureSignature>(null, null);
+                        return new KeyValuePair<Address, FunctionType>(null, null);
                 })
                 .ToDictionary(item => item.Key, item => item.Value);
         }
 
-        private IScanner CreateScanner(Program program, DecompilerEventListener eventListener)
+        private IScanner CreateScanner(Program program)
         {
             return new Scanner(
                 program, 
-                LoadCallSignatures(program, program.UserCalls.Values),
-                new ImportResolver(project),
-                eventListener);
+                new ImportResolver(project, program, eventListener),
+                services);
         }
 
         /// <summary>
@@ -461,21 +520,21 @@ namespace Reko
             foreach (var program in project.Programs)
             {
                 int i = 0;
-
                 foreach (Procedure proc in program.Procedures.Values)
                 {
+                    if (eventListener.IsCanceled())
+                        return;
                     try
                     {
                         eventListener.ShowProgress("Rewriting procedures to high-level language.", i, program.Procedures.Values.Count);
                         ++i;
-                        Console.WriteLine("rewriting: {0}", proc);
-                        IStructureAnalysis sa = new StructureAnalysis(proc);
+                        IStructureAnalysis sa = new StructureAnalysis(eventListener, program, proc);
                         sa.Structure();
                     }
                     catch (Exception e)
                     {
                         eventListener.Error(
-                            eventListener.CreateProcedureNavigator(proc),
+                            eventListener.CreateProcedureNavigator(program, proc),
                             e,
                             "An error occurred while rewriting procedure to high-level language.");
                     }
@@ -498,8 +557,8 @@ namespace Reko
 		public void WriteHeaderComment(string filename, Program program, TextWriter w)
 		{
 			w.WriteLine("// {0}", filename);
-			w.WriteLine("// Generated on {0} by decompiling {1}", DateTime.Now, program.Filename);
-			w.WriteLine("// using Decompiler version {0}.", AssemblyMetadata.AssemblyFileVersion);
+			w.WriteLine("// Generated by decompiling {0}", Path.GetFileName(program.Filename));
+			w.WriteLine("// using Reko decompiler version {0}.", AssemblyMetadata.AssemblyFileVersion);
 			w.WriteLine();
 		}
 	}

@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
-* Copyright (C) 1999-2015 John Källén.
+* Copyright (C) 1999-2016 John Källén.
 *
 * This program is free software; you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -36,9 +36,10 @@ namespace Reko.Gui
     /// </summary>
     public interface IServiceFactory
     {
+        DecompilerEventListener CreateDecompilerEventListener();
         IArchiveBrowserService CreateArchiveBrowserService();
         IConfigurationService CreateDecompilerConfiguration();
-        DecompilerEventListener CreateDecompilerEventListener();
+        IDecompilerShellUiService CreateShellUiService(IMainForm form, DecompilerMenus dm);
         IDecompilerService CreateDecompilerService();
         IDiagnosticsService CreateDiagnosticsService(ListView list);
         IDisassemblyViewService CreateDisassemblyViewService();
@@ -48,11 +49,12 @@ namespace Reko.Gui
         ILowLevelViewService CreateMemoryViewService();
         IProjectBrowserService CreateProjectBrowserService(ITreeView treeView);
         ISearchResultService CreateSearchResultService(ListView listView);
-        IDecompilerShellUiService CreateShellUiService(IMainForm form, DecompilerMenus dm);
+        IResourceEditorService CreateResourceEditorService();
         ITabControlHostService CreateTabControlHost(TabControl tabControl);
         ITypeLibraryLoaderService CreateTypeLibraryLoaderService();
         IUiPreferencesService CreateUiPreferencesService();
         ILoader CreateLoader();
+        ICallGraphViewService CreateCallGraphViewService();
     }
 
     public class ServiceFactory : IServiceFactory
@@ -71,7 +73,7 @@ namespace Reko.Gui
 
         public IConfigurationService CreateDecompilerConfiguration()
         {
-            return new DecompilerConfiguration();
+            return RekoConfigurationService.Load();
         }
 
         public IDiagnosticsService CreateDiagnosticsService(ListView list)
@@ -123,7 +125,7 @@ namespace Reko.Gui
 
         public ITypeLibraryLoaderService CreateTypeLibraryLoaderService()
         {
-            return new TypeLibraryLoaderServiceImpl();
+            return new TypeLibraryLoaderServiceImpl(services);
         }
 
         public IProjectBrowserService CreateProjectBrowserService(ITreeView treeView)
@@ -134,6 +136,11 @@ namespace Reko.Gui
         public ISearchResultService CreateSearchResultService(ListView listView)
         {
             return new SearchResultServiceImpl(services, listView);
+        }
+
+        public IResourceEditorService CreateResourceEditorService()
+        {
+            return new ResourceEditorService(services);
         }
 
         public ITabControlHostService CreateTabControlHost(TabControl tabControl)
@@ -151,6 +158,11 @@ namespace Reko.Gui
         public IFileSystemService CreateFileSystemService()
         {
             return new FileSystemServiceImpl();
+        }
+
+        public ICallGraphViewService CreateCallGraphViewService()
+        {
+            return new CallGraphViewService(services);
         }
     }
 }

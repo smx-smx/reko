@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -41,19 +41,21 @@ namespace Reko.Core.Serialization
 			DataType = pointee;
 		}
 
+        public static SerializedType Create(SerializedType dt, int n)
+        {
+            return new PointerType_v1 { DataType = dt, PointerSize = n };
+        }
+
         public override T Accept<T>(ISerializedTypeVisitor<T> visitor)
         {
             return visitor.VisitPointer(this);
         }
 
-		public override DataType BuildDataType(TypeFactory factory)
-		{
-			return factory.CreatePointer(DataType.BuildDataType(factory), PointerSize);
-		}
-
 		public override string ToString()
 		{
 			return string.Format("ptr({0})", DataType);
 		}
-	}
+
+      
+    }
 }

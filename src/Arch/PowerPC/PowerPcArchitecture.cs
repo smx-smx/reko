@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -41,10 +41,11 @@ namespace Reko.Arch.PowerPC
         private ReadOnlyCollection<RegisterStorage> cregs;
 
         public RegisterStorage lr { get; private set; }
-        public RegisterStorage cr { get; private set; }
         public RegisterStorage ctr { get; private set; }
         public RegisterStorage xer { get; private set; }
         public RegisterStorage fpscr { get; private set; }
+
+        public FlagRegister cr { get; private set; }
 
         /// <summary>
         /// Creates an instance of PowerPcArchitecture.
@@ -57,22 +58,23 @@ namespace Reko.Arch.PowerPC
             FramePointerType = PointerType;
             InstructionBitSize = 32;
 
-            this.lr = new RegisterStorage("lr", 0x68,   wordWidth);
-            this.cr = new RegisterStorage("cr", 0x69,   wordWidth);
-            this.ctr = new RegisterStorage("ctr", 0x6A, wordWidth);
-            this.xer = new RegisterStorage("xer", 0x6B, wordWidth);
-            this.fpscr = new RegisterStorage("fpscr", 0x6C, wordWidth);
+            this.lr = new RegisterStorage("lr", 0x68, 0, wordWidth);
+            this.ctr = new RegisterStorage("ctr", 0x6A, 0, wordWidth);
+            this.xer = new RegisterStorage("xer", 0x6B, 0, wordWidth);
+            this.fpscr = new RegisterStorage("fpscr", 0x6C, 0, wordWidth);
+
+            this.cr = new FlagRegister("cr", wordWidth);
 
             regs = new ReadOnlyCollection<RegisterStorage>(
                 Enumerable.Range(0, 0x20)
-                    .Select(n => new RegisterStorage("r" + n, n, wordWidth))
+                    .Select(n => new RegisterStorage("r" + n, n, 0, wordWidth))
                 .Concat(Enumerable.Range(0, 0x20)
-                    .Select(n => new RegisterStorage("f" + n, n + 0x20, PrimitiveType.Word64)))
+                    .Select(n => new RegisterStorage("f" + n, n + 0x20, 0, PrimitiveType.Word64)))
                 .Concat(Enumerable.Range(0, 0x20)
-                    .Select(n => new RegisterStorage("v" + n, n + 0x40, PrimitiveType.Word128)))
+                    .Select(n => new RegisterStorage("v" + n, n + 0x40, 0, PrimitiveType.Word128)))
                 .Concat(Enumerable.Range(0, 8)
-                    .Select(n => new RegisterStorage("cr" + n, n + 0x60, PrimitiveType.Byte)))
-                .Concat(new[] { lr, cr, ctr, xer })
+                    .Select(n => new RegisterStorage("cr" + n, n + 0x60, 0, PrimitiveType.Byte)))
+                .Concat(new[] { lr, ctr, xer })
                 .ToList());
 
             fpregs = new ReadOnlyCollection<RegisterStorage>(
@@ -84,13 +86,10 @@ namespace Reko.Arch.PowerPC
             cregs = new ReadOnlyCollection<RegisterStorage>(
                 regs.Skip(0x60).Take(0x8).ToList());
 
+            //$REVIEW: using R1 as the stack register is a _convention_. It 
+            // should be platform-specific at the very least.
+            StackRegister = regs[1];
         }
-
-        public uint CarryFlagMask { get { throw new NotImplementedException(); } }
-
-        //$REVIEW: using R1 as the stack register is a _convention_. It 
-        // should be platform-specific at the very least.
-        public RegisterStorage StackRegister { get { return regs[1]; } }
 
         public ReadOnlyCollection<RegisterStorage> Registers
         {
@@ -123,16 +122,34 @@ namespace Reko.Arch.PowerPC
             return new PowerPcDisassembler(this, rdr, WordWidth);
         }
 
-        public override ImageReader CreateImageReader(LoadedImage image, Address addr)
+        public override ImageReader CreateImageReader(MemoryArea image, Address addr)
         {
             //$TODO: PowerPC is bi-endian.
             return new BeImageReader(image, addr);
         }
 
-        public override ImageReader CreateImageReader(LoadedImage image, ulong offset)
+        public override ImageReader CreateImageReader(MemoryArea image, Address addrBegin, Address addrEnd)
+        {
+            //$TODO: PowerPC is bi-endian.
+            return new BeImageReader(image, addrBegin, addrEnd);
+        }
+
+        public override ImageReader CreateImageReader(MemoryArea image, ulong offset)
         {
             //$TODO: PowerPC is bi-endian.
             return new BeImageReader(image, offset);
+        }
+
+        public override ImageWriter CreateImageWriter()
+        {
+            //$TODO: PowerPC is bi-endian.
+            return new BeImageWriter();
+        }
+
+        public override ImageWriter CreateImageWriter(MemoryArea mem, Address addr)
+        {
+            //$TODO: PowerPC is bi-endian.
+            return new BeImageWriter(mem, addr);
         }
 
         public override IEqualityComparer<MachineInstruction> CreateInstructionComparer(Normalize norm)
@@ -141,7 +158,7 @@ namespace Reko.Arch.PowerPC
         }
 
         public override abstract IEnumerable<Address> CreatePointerScanner(
-            ImageMap map, 
+            SegmentMap map, 
             ImageReader rdr,
             IEnumerable<Address> addrs, 
             PointerScannerFlags flags);
@@ -212,11 +229,6 @@ namespace Reko.Arch.PowerPC
             return new PowerPcState(this);
         }
 
-        public override BitSet CreateRegisterBitset()
-        {
-            return new BitSet(0x80);
-        }
-
         public override RegisterStorage GetRegister(int i)
         {
             if (0 <= i && i < regs.Count)
@@ -248,6 +260,14 @@ namespace Reko.Arch.PowerPC
         public override FlagGroupStorage GetFlagGroup(string name)
         {
             throw new NotImplementedException();
+        }
+
+        public override RegisterStorage GetSubregister(RegisterStorage reg, int offset, int width)
+        {
+            if (offset == 0)
+                return reg;
+            else
+                return null;
         }
 
         public override string GrfToString(uint grf)
@@ -289,7 +309,7 @@ namespace Reko.Arch.PowerPC
         { }
 
         public override IEnumerable<Address> CreatePointerScanner(
-            ImageMap map, 
+            SegmentMap map, 
             ImageReader rdr, 
             IEnumerable<Address> knownAddresses,
             PointerScannerFlags flags)
@@ -314,7 +334,7 @@ namespace Reko.Arch.PowerPC
         { }
 
         public override IEnumerable<Address> CreatePointerScanner(
-            ImageMap map,
+            SegmentMap map,
             ImageReader rdr,
             IEnumerable<Address> knownAddresses,
             PointerScannerFlags flags)

@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -40,7 +40,7 @@ namespace Reko.UnitTests.Analysis
     public class TrashedRegisterFinderTests : AnalysisTestBase
     {
         private ProcedureBuilder m;
-        private Program prog;
+        private Program program;
         private TrashedRegisterFinder trf;
         private Procedure exit;
         private ProgramDataFlow flow;
@@ -53,10 +53,10 @@ namespace Reko.UnitTests.Analysis
         [SetUp]
         public void Setup()
         {
-            arch = new IntelArchitecture(ProcessorMode.Protected32);
+            arch = new X86ArchitectureFlat32();
             m = new ProcedureBuilder(arch);
-            prog = new Program();
-            prog.Architecture = arch;
+            program = new Program();
+            program.Architecture = arch;
             exit = new Procedure("exit", new Frame(PrimitiveType.Word32));
             flow = new ProgramDataFlow();
             p = new ProgramBuilder();
@@ -66,9 +66,9 @@ namespace Reko.UnitTests.Analysis
         {
             var bflow = new BlockFlow(
                 block,
-                prog.Architecture.CreateRegisterBitset(),
+                new HashSet<RegisterStorage>(),
                 new SymbolicEvaluationContext(
-                    prog.Architecture,
+                    program.Architecture,
                     frame));
             flow[block] = bflow;
             return bflow;
@@ -76,7 +76,7 @@ namespace Reko.UnitTests.Analysis
 
         private TrashedRegisterFinder CreateTrashedRegisterFinder()
         {
-            return new TrashedRegisterFinder(prog, prog.Procedures.Values, this.flow, new FakeDecompilerEventListener());
+            return new TrashedRegisterFinder(program, program.Procedures.Values, this.flow, new FakeDecompilerEventListener());
         }
 
         private TrashedRegisterFinder CreateTrashedRegisterFinder(Program prog)
@@ -92,9 +92,9 @@ namespace Reko.UnitTests.Analysis
 
         private TextWriter DumpProcedureSummaries(TextWriter writer)
         {
-            foreach (Procedure proc in prog.Procedures.Values)
+            foreach (Procedure proc in program.Procedures.Values)
             {
-                DataFlow.EmitRegisters(prog.Architecture, proc.Name, flow[proc].grfTrashed, flow[proc].TrashedRegisters, writer);
+                DataFlow.EmitRegisters(program.Architecture, proc.Name, flow[proc].grfTrashed, flow[proc].TrashedRegisters, writer);
                 writer.WriteLine();
                 if (flow[proc].ConstantRegisters.Count > 0)
                 {
@@ -113,22 +113,29 @@ namespace Reko.UnitTests.Analysis
 
         private void RunTest(ProgramBuilder p, string sExp)
         {
-            prog = p.BuildProgram(arch);
+            program = p.BuildProgram(arch);
 
-            flow = new ProgramDataFlow(prog);
+            flow = new ProgramDataFlow(program);
             trf = CreateTrashedRegisterFinder();
             trf.Compute();
 
             var summary = DumpProcedureSummaries().Trim();
             if (sExp == summary)
                 return;
-            Console.WriteLine(summary);
-            Assert.AreEqual(sExp, summary);
+            try
+            {
+                Assert.AreEqual(sExp, summary);
+            }
+            catch
+            {
+                Console.WriteLine(summary);
+                throw;
+            }
         }
 
         protected override void RunTest(Program prog, TextWriter writer)
         {
-            this.prog = prog;
+            this.program = prog;
             flow = new ProgramDataFlow(prog);
             trf = CreateTrashedRegisterFinder();
             trf.Compute();
@@ -185,7 +192,8 @@ namespace Reko.UnitTests.Analysis
         [Test]
         public void TrashFlag()
         {
-            var scz = m.Frame.EnsureFlagGroup(0x7, arch.GrfToString(0x7), PrimitiveType.Byte);
+            var flags = arch.GetFlagGroup(0x7).FlagRegister;
+            var scz = m.Frame.EnsureFlagGroup(flags, 0x7, arch.GrfToString(0x7), PrimitiveType.Byte);
             var stm = m.Assign(scz, m.Int32(3));
 
             trf = CreateTrashedRegisterFinder();
@@ -227,7 +235,6 @@ namespace Reko.UnitTests.Analysis
         [Test]
         public void TrfCopyBack()
         {
-            var tmp = m.Local32("tmp");
             var esp = m.Frame.EnsureRegister(Registers.esp);
             var r2 = m.Register(2);
             var stm1 = m.Store(m.ISub(esp, 0x10), r2);
@@ -262,10 +269,10 @@ namespace Reko.UnitTests.Analysis
         [Test]
         public void TrfCallInstruction()
         {
-            var callee = new Procedure("Callee", prog.Architecture.CreateFrame());
+            var callee = new Procedure("Callee", program.Architecture.CreateFrame());
             var stm = m.Call(callee, 4);
-            var pf = new ProcedureFlow(callee, prog.Architecture);
-            pf.TrashedRegisters[Registers.ebx.Number] = true;
+            var pf = new ProcedureFlow(callee, program.Architecture);
+            pf.TrashedRegisters.Add(Registers.ebx);
             flow[callee] = pf;
 
             trf = CreateTrashedRegisterFinder();
@@ -279,7 +286,7 @@ namespace Reko.UnitTests.Analysis
         [Test]
         public void TrfPropagateToSuccessorBlocks()
         {
-            Procedure proc = new Procedure("test", prog.Architecture.CreateFrame());
+            Procedure proc = new Procedure("test", program.Architecture.CreateFrame());
             var frame = proc.Frame;
             Identifier ecx = m.Register(1);
             Identifier edx = m.Register(2);
@@ -289,10 +296,10 @@ namespace Reko.UnitTests.Analysis
             Block e = proc.AddBlock("e");
             proc.ControlGraph.AddEdge(b, e);
             proc.ControlGraph.AddEdge(b, t);
-            flow[t] = new BlockFlow(t, null, new SymbolicEvaluationContext(prog.Architecture, frame));
-            flow[e] = new BlockFlow(e, null, new SymbolicEvaluationContext(prog.Architecture, frame));
+            flow[t] = new BlockFlow(t, null, new SymbolicEvaluationContext(program.Architecture, frame));
+            flow[e] = new BlockFlow(e, null, new SymbolicEvaluationContext(program.Architecture, frame));
 
-            trf = CreateTrashedRegisterFinder(prog);
+            trf = CreateTrashedRegisterFinder(program);
             CreateBlockFlow(b, frame);
             trf.StartProcessingBlock(b);
             trf.RegisterSymbolicValues[(RegisterStorage) ecx.Storage] = Constant.Invalid;
@@ -321,7 +328,7 @@ namespace Reko.UnitTests.Analysis
         {
             m.Label("Start");
             Identifier ecx = m.Register(1);
-            trf = CreateTrashedRegisterFinder(prog);
+            trf = CreateTrashedRegisterFinder(program);
             CreateBlockFlow(m.Block, m.Frame);
             trf.StartProcessingBlock(m.Block);
 
@@ -353,13 +360,13 @@ namespace Reko.UnitTests.Analysis
         [Test]
         public void TrfPropagateToProcedureSummary()
         {
-            Procedure proc = new Procedure("proc", prog.Architecture.CreateFrame());
-            prog.CallGraph.AddProcedure(proc);
+            Procedure proc = new Procedure("proc", program.Architecture.CreateFrame());
+            program.CallGraph.AddProcedure(proc);
             Identifier eax = proc.Frame.EnsureRegister(Registers.eax);
             Identifier ebx = proc.Frame.EnsureRegister(Registers.ebx);
             Identifier ecx = proc.Frame.EnsureRegister(Registers.ecx);
             Identifier esi = proc.Frame.EnsureRegister(Registers.esi);
-            flow[proc] = new ProcedureFlow(proc, prog.Architecture);
+            flow[proc] = new ProcedureFlow(proc, program.Architecture);
 
             trf = CreateTrashedRegisterFinder();
             CreateBlockFlow(proc.ExitBlock, proc.Frame);
@@ -370,25 +377,25 @@ namespace Reko.UnitTests.Analysis
             trf.RegisterSymbolicValues[(RegisterStorage) esi.Storage] = Constant.Invalid;				// trashed
             trf.PropagateToProcedureSummary(proc);
             ProcedureFlow pf = flow[proc];
-            Assert.AreEqual(" ebx esi", pf.EmitRegisters(prog.Architecture, "", pf.TrashedRegisters));
-            Assert.AreEqual(" eax", pf.EmitRegisters(prog.Architecture, "", pf.PreservedRegisters));
+            Assert.AreEqual(" ebx esi", pf.EmitRegisters(program.Architecture, "", pf.TrashedRegisters));
+            Assert.AreEqual(" eax", pf.EmitRegisters(program.Architecture, "", pf.PreservedRegisters));
         }
 
         [Test]
         public void TrfPropagateFlagsToProcedureSummary()
         {
-            var proc = new Procedure("proc", prog.Architecture.CreateFrame());
-            prog.CallGraph.AddProcedure(proc);
-            var flags = prog.Architecture.GetFlagGroup("SZ");
-            var sz = m.Frame.EnsureFlagGroup(flags.FlagGroupBits, flags.Name, flags.DataType);
+            var proc = new Procedure("proc", program.Architecture.CreateFrame());
+            program.CallGraph.AddProcedure(proc);
+            var flags = program.Architecture.GetFlagGroup("SZ");
+            var sz = m.Frame.EnsureFlagGroup(flags.FlagRegister, flags.FlagGroupBits, flags.Name, flags.DataType);
             var stm = m.Assign(sz, m.Int32(3));
-            flow[proc] = new ProcedureFlow(proc, prog.Architecture);
-            trf = CreateTrashedRegisterFinder(prog);
+            flow[proc] = new ProcedureFlow(proc, program.Architecture);
+            trf = CreateTrashedRegisterFinder(program);
             CreateBlockFlow(m.Block, m.Frame);
             trf.StartProcessingBlock(m.Block);
             stm.Accept(trf);
             trf.PropagateToProcedureSummary(proc);
-            Assert.AreEqual(" SZ", flow[proc].EmitFlagGroup(prog.Architecture, "", flow[proc].grfTrashed));
+            Assert.AreEqual(" SZ", flow[proc].EmitFlagGroup(program.Architecture, "", flow[proc].grfTrashed));
         }
 
         [Test]
@@ -402,14 +409,14 @@ namespace Reko.UnitTests.Analysis
             m.Return();
 
             Procedure proc = m.Procedure;
-            prog.Procedures.Add(Address.Ptr32(0x10000), proc);
-            prog.CallGraph.AddProcedure(proc);
-            flow = new ProgramDataFlow(prog);
+            program.Procedures.Add(Address.Ptr32(0x10000), proc);
+            program.CallGraph.AddProcedure(proc);
+            flow = new ProgramDataFlow(program);
 
-            trf = CreateTrashedRegisterFinder(prog);
+            trf = CreateTrashedRegisterFinder(program);
             trf.Compute();
             ProcedureFlow pf = flow[proc];
-            Assert.AreEqual(" esp ebp", pf.EmitRegisters(prog.Architecture, "", pf.PreservedRegisters), "ebp should have been preserved");
+            Assert.AreEqual(" ebp esp", pf.EmitRegisters(program.Architecture, "", pf.PreservedRegisters), "ebp should have been preserved");
         }
 
         [Test]
@@ -423,7 +430,7 @@ namespace Reko.UnitTests.Analysis
 
             flow[m.Block] = CreateBlockFlow(m.Block, m.Frame);
             flow[m.Block].SymbolicIn.SetValue(esp, m.Frame.FramePointer);
-            trf = CreateTrashedRegisterFinder(prog);
+            trf = CreateTrashedRegisterFinder(program);
             trf.ProcessBlock(m.Block);
             Assert.AreEqual("(eax:eax), (esp:fp), (Stack -4:eax)", DumpValues());
         }
@@ -436,9 +443,9 @@ namespace Reko.UnitTests.Analysis
             m.Call(exit, 4);
 
             flow[m.Block] = CreateBlockFlow(m.Block, m.Frame);
-            flow[exit] = new ProcedureFlow(exit, prog.Architecture);
+            flow[exit] = new ProcedureFlow(exit, program.Architecture);
             flow[exit].TerminatesProcess = true;
-            trf = CreateTrashedRegisterFinder(prog);
+            trf = CreateTrashedRegisterFinder(program);
             trf.ProcessBlock(m.Block);
             Assert.AreEqual("", DumpValues());
         }
@@ -466,13 +473,13 @@ namespace Reko.UnitTests.Analysis
             });
 
             RunTest(p,
-@"main ebx bx bl bh
+@"main bh bl bx ebx rbx
 const ebx:0x01231313
     main_entry esp:fp
     l1 esp:fp
     main_exit eax:eax ebx:0x01231313 esp:fp
 
-TrashEaxEbx eax ebx ax bx al bl ah bh
+TrashEaxEbx ah al ax bh bl bx eax ebx rax rbx
 const eax:<invalid> ebx:0x01231313
     TrashEaxEbx_entry esp:fp
     l1 esp:fp
@@ -483,7 +490,7 @@ const eax:<invalid> ebx:0x01231313
         [Test]
         public void PreservedValues()
         {
-            arch = new IntelArchitecture(ProcessorMode.Real);
+            arch = new X86ArchitectureReal();
             p.Add("main", m =>
             {
                 var sp = m.Frame.EnsureRegister(Registers.sp);
@@ -516,7 +523,7 @@ const eax:<invalid> ebx:0x01231313
             });
 
             var sExp =
-@"main SCZO eax ax al ah
+@"main SCZO ah al ax eax rax
 const eax:<invalid>
     main_entry esp:fp
     l1 esp:fp
@@ -565,7 +572,7 @@ const eax:<invalid>
             });
 
             var sExp =
-@"main eax ax al ah
+@"main ah al ax eax rax
 const eax:<invalid>
     main_entry esp:fp
     l1 esp:fp
@@ -601,6 +608,7 @@ const ax:0x0000 cx:<invalid>
 ";
             RunTest(p, sExp);
         }
+
         [Test]
         public void TrfFactorial()
         {
@@ -608,7 +616,6 @@ const ax:0x0000 cx:<invalid>
         }
 
         [Test]
-        [Ignore("scanning-development")]
         public void TrfReg00005()
         {
             RunFileTest("Fragments/regressions/r00005.asm", "Analysis/TrfReg00005.txt");
@@ -646,8 +653,39 @@ const ax:0x0000 cx:<invalid>
         {
             frame = new Frame(PrimitiveType.Pointer32);
             ctx = new SymbolicEvaluationContext(arch, frame);
-            blockflow = new BlockFlow(null, arch.CreateRegisterBitset(), ctx);
+            blockflow = new BlockFlow(null, new HashSet<RegisterStorage>(), ctx);
             trf.EnsureEvaluationContext(blockflow);
+        }
+
+        /// <summary>
+        /// This crazy code is generated when Reko starts disassembling large 
+        /// areas of data as M68k code. At least we won't run out of memory
+        /// trying to evaluate the data.
+        /// </summary>
+        [Test]
+        public void TrashRepeatedDpbs()
+        {
+            p.Add("main", m =>
+            {
+                var eax = m.Frame.EnsureRegister(Registers.eax);
+                var v1 = m.Frame.CreateTemporary("v1", PrimitiveType.Byte);
+                var v2 = m.Frame.CreateTemporary("v2", PrimitiveType.Byte);
+                var v3 = m.Frame.CreateTemporary("v3", PrimitiveType.Byte);
+                m.Assign(v1, m.Or(m.Cast(v1.DataType, eax), 0));
+                m.Assign(eax, m.Dpb(eax, v1, 0));
+                m.Assign(v2, m.Or(m.Cast(v1.DataType, eax), 0));
+                m.Assign(eax, m.Dpb(eax, v2, 0));
+                m.Assign(v3, m.Or(m.Cast(v1.DataType, eax), 0));
+                m.Assign(eax, m.Dpb(eax, v3, 0));
+                m.Return();
+            });
+
+            var sExp =
+@"main
+    main_entry esp:fp
+    l1 esp:fp
+    main_exit eax:eax esp:fp";
+            RunTest(p, sExp);
         }
     }
 }

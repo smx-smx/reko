@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,6 +21,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.Design;
+using System.Drawing;
 using System.Text;
 using System.Windows.Forms;
 
@@ -62,5 +63,7 @@ namespace Reko.Gui
         IEnumerable<int> SelectedIndices { get; }
 
         void AddColumn(string columnTitle, int width);
+        void Invalidate();
+        void ShowTypeMarker(Action<string> action);
     }
 }

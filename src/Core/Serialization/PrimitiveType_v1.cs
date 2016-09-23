@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -40,7 +40,72 @@ namespace Reko.Core.Serialization
 		{
 		}
 
-		public PrimitiveType_v1(Domain domain, int byteSize)
+        public static SerializedType Bool()
+        {
+            return new PrimitiveType_v1 { Domain = Domain.Boolean, ByteSize = 1 };
+        }
+
+        public static SerializedType Char8()
+        {
+            return new PrimitiveType_v1 { Domain = Domain.Character, ByteSize = 1 };
+        }
+
+        public static SerializedType WChar16()
+        {
+            return new PrimitiveType_v1 { Domain = Domain.Character, ByteSize = 2 };
+        }
+
+        public static SerializedType SChar8()
+        {
+            return new PrimitiveType_v1 { Domain = Domain.Character | Domain.SignedInt, ByteSize = 1 };
+        }
+
+        public static SerializedType UChar8()
+        {
+            return new PrimitiveType_v1 { Domain = Domain.Character|Domain.UnsignedInt, ByteSize = 1 };
+        }
+
+        public static SerializedType Int16()
+        {
+            return new PrimitiveType_v1 { Domain = Domain.SignedInt, ByteSize = 2 };
+        }
+
+        public static SerializedType UInt16()
+        {
+            return new PrimitiveType_v1 { Domain = Domain.UnsignedInt, ByteSize = 2 };
+        }
+
+        public static SerializedType Int32()
+        {
+            return new PrimitiveType_v1 { Domain = Domain.SignedInt, ByteSize = 4 };
+        }
+
+        public static SerializedType UInt32()
+        {
+            return new PrimitiveType_v1 { Domain = Domain.UnsignedInt, ByteSize = 4 };
+        }
+
+        public static SerializedType Int64()
+        {
+            return new PrimitiveType_v1 { Domain = Domain.SignedInt, ByteSize = 8 };
+        }
+
+        public static SerializedType UInt64()
+        {
+            return new PrimitiveType_v1 { Domain = Domain.UnsignedInt, ByteSize = 8 };
+        }
+
+        public static SerializedType Real32()
+        {
+            return new PrimitiveType_v1 { Domain = Domain.Real, ByteSize = 4 };
+        }
+
+        public static SerializedType Real64()
+        {
+            return new PrimitiveType_v1 { Domain = Domain.Real, ByteSize = 8 };
+        }
+
+        public PrimitiveType_v1(Domain domain, int byteSize)
 		{
 			this.Domain = domain;	
 			this.ByteSize = byteSize;
@@ -51,14 +116,11 @@ namespace Reko.Core.Serialization
             return visitor.VisitPrimitive(this);
         }
 
-		public override DataType BuildDataType(TypeFactory factory)
-		{
-			return factory.CreatePrimitiveType(Domain, ByteSize);
-		}
-
 		public override string ToString()
 		{
 			return string.Format("prim({0},{1})", Domain, ByteSize);
 		}
-	}
+
+       
+    }
 }

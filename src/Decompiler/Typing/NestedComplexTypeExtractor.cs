@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -90,6 +90,9 @@ namespace Reko.Typing
 
 		public override DataType VisitStructure(StructureType str)
 		{
+            // Do not transform user-defined types
+            if (str.UserDefined)
+                return str;
             if (visitedTypes.Contains(str))
                 return str;
             visitedTypes.Add(str);
@@ -109,7 +112,10 @@ namespace Reko.Typing
 
 		public override DataType VisitUnion(UnionType ut)
 		{
-			if (insideComplexType)
+            // Do not transform user-defined types
+            if (ut.UserDefined)
+                return ut;
+            if (insideComplexType)
 			{
 				changed = true;
 				NestedComplexTypeExtractor nctr = new NestedComplexTypeExtractor(factory, store);

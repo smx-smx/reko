@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,36 +29,40 @@ namespace Reko.Core.Types
     /// A Domain specifies the possible interpretation of a chunk of bytes.
     /// </summary>
     /// <remarks>
-    /// A 32-bit load from memory could mean that the variable could be treated as an signed int, unsigned int,
-    /// floating point number, a pointer to something. As the decompiler records how the value is used,
-    /// some of these alternatives will be discarded. For instance, if the 32-bit word is used in a memory access,
-    /// it is certain that it is a pointer to (something), and it can't be a float.
+    /// A 32-bit load from memory could mean that the variable could be 
+    /// treated as an signed int, unsigned int, floating point number, a 
+    /// pointer to something. As the decompiler records how the value is used,
+    /// some of these alternatives will be discarded. For instance, if the
+    /// 32-bit word is used in a memory access, it is certain that it is a
+    /// pointer to (something), and it can't be a float.
     /// </remarks>
 	[Flags]
 	public enum Domain
 	{
 		None = 0,
-		Boolean = 2,                // f
-		Character = 4,              // c
-		SignedInt = 8,              // i 
-		UnsignedInt = 16,           // u
+		Boolean = 1,                // f
+		Character = 2,              // c
+		SignedInt = 4,              // i 
+		UnsignedInt = 8,            // u
         Integer = SignedInt|UnsignedInt,
-        Bcd = 32,                   // b - Binary coded decimal; a decimal digit stored in each nybble of a byte.
-        Real = 64,                  // r
-		Pointer = 128,              // p
+        Bcd = 16,                   // b - Binary coded decimal; a decimal digit stored in each nybble of a byte.
+        Real = 32,                  // r
+		Pointer = 64,               // p
+        Offset = 128,               // n - "near pointer" (x86)
 		Selector = 256,             // S
         SegPointer = 512,           // P - Segmented pointer (x86-style)
 
-        Any = Boolean|Character|SignedInt|UnsignedInt|Bcd|Real|Pointer|Selector|SegPointer
+        Any = Boolean|Character|SignedInt|UnsignedInt|Bcd|Real|Pointer|Offset|Selector|SegPointer
 	}
 
 	/// <summary>
 	/// Represents a primitive machine data type, with no internal structure.
 	/// </summary>
 	/// <remarks>
-	/// Examples of primitives are integers of different signedness and sizes, as well as real types and booleans.
-	/// Pointers to types are not considered primitives, as they are type constructors. Primitives are implemented
-	/// as immutable flyweights since there are so many of them.
+	/// Examples of primitives are integers of different signedness and sizes,
+    /// as well as real types and booleans. Pointers to types are not 
+    /// considered primitives, as they are type constructors. Primitives are
+    /// implemented as immutable flyweights since there are so many of them.
 	/// </remarks>
 	public class PrimitiveType : DataType
 	{
@@ -70,6 +74,11 @@ namespace Reko.Core.Types
 			this.byteSize = byteSize;
 			this.Name = name;
 		}
+
+        public override void Accept(IDataTypeVisitor v)
+        {
+            v.VisitPrimitive(this);
+        }
 
         public override T Accept<T>(IDataTypeVisitor<T> v)
         {
@@ -120,7 +129,7 @@ namespace Reko.Core.Types
 				name = "byte";
 				break;
 			case 2:
-				w = Domain.Character|Domain.Integer|Domain.Pointer|Domain.Selector;
+				w = Domain.Character|Domain.Integer| Domain.Pointer|Domain.Offset|Domain.Selector;
 				name = "word16";
 				break;
 			case 4:
@@ -131,6 +140,10 @@ namespace Reko.Core.Types
                 w = Domain.Integer|Domain.Pointer|Domain.Real;
 				name = "word64";
 				break;
+            case 10:
+                w = Domain.Integer|Domain.Real|Domain.Bcd;
+                name = "word80";
+                break;
             case 16:
                 w = Domain.Integer|Domain.Real;
                 name = "word128";
@@ -140,7 +153,7 @@ namespace Reko.Core.Types
                 name = "word256";
                 break;
             default:
-				throw new ArgumentException("Only word sizes 1, 2, 4, 8, and 16 bytes are supported.");
+				throw new ArgumentException("Only word sizes 1, 2, 4, 8, 10, 16, and 32 bytes are supported.");
 			}
 			return Create(w, (short) byteSize, name);
 		}
@@ -155,6 +168,17 @@ namespace Reko.Core.Types
 			return p.Domain == Domain && p.byteSize == byteSize;
 		}
 	
+        /// <summary>
+        /// Generates a string based on domain and bitsize
+        /// </summary>
+        /// <remarks>
+        /// Note that these are not C data types, but Reko internal types.
+        /// The Reko output formatters are responsible for translation to
+        /// C (or whatever output language has been chosen by the user).
+        /// </remarks>
+        /// <param name="dom"></param>
+        /// <param name="bitSize"></param>
+        /// <returns></returns>
 		public static string GenerateName(Domain dom, int bitSize)
 		{
 			StringBuilder sb;
@@ -174,6 +198,8 @@ namespace Reko.Core.Types
 				return "uint" + bitSize;
 			case Domain.Pointer:
 				return "ptr" + bitSize;
+            case Domain.Offset:
+                return "mp" + bitSize;
             case Domain.SegPointer:
                 return "segptr" + bitSize;
 			case Domain.Real:
@@ -191,8 +217,10 @@ namespace Reko.Core.Types
                 if ((dom & Domain.SignedInt) != 0)
                     sb.Append('i');
                 if ((dom & Domain.Pointer) != 0)
-					sb.Append('p');
-				if ((dom & Domain.Selector) != 0)
+                    sb.Append('p');
+                if ((dom & Domain.Offset) != 0)
+                    sb.Append('o');
+                if ((dom & Domain.Selector) != 0)
 					sb.Append('s');
 				if ((dom & Domain.Real) != 0)
 					sb.Append('r');
@@ -212,7 +240,7 @@ namespace Reko.Core.Types
 		}
 
         /// <summary>
-        /// True if the type can only be some kind of numeric type
+        /// True if the type can only be some kind of integral numeric type
         /// </summary>
 		public bool IsIntegral
 		{
@@ -221,13 +249,17 @@ namespace Reko.Core.Types
 
         /// <summary>
         /// Creates a new primitive type, whose domain is the original domain ANDed 
-        /// with the supplied domain mask.
+        /// with the supplied domain mask. If the resulting domain is empty, use the 
+        /// supplied domain.
         /// </summary>
         /// <param name="dom"></param>
         /// <returns></returns>
 		public PrimitiveType MaskDomain(Domain domainMask)
 		{
-			return Create(this.Domain & domainMask, Size);
+            var dom = this.Domain & domainMask;
+            if (dom == 0)
+                dom = domainMask;
+            return Create(dom, Size);
 		}
 
 		public override string Prefix
@@ -291,6 +323,7 @@ namespace Reko.Core.Types
 			Ptr16 = Create(Domain.Pointer, 2);
 			SegmentSelector = Create(Domain.Selector, 2);
             WChar = Create(Domain.Character, 2);
+            Offset16 = Create(Domain.Offset, 2);
 
 			Word32 = CreateWord(4);
 			Int32 = Create(Domain.SignedInt, 4);
@@ -305,6 +338,7 @@ namespace Reko.Core.Types
 			Pointer64 = Create(Domain.Pointer, 8);
 			Real64 = Create(Domain.Real, 8);
 
+            Word80 = CreateWord(10);
 			Real80 = Create(Domain.Real, 10);
             Bcd80 = Create(Domain.Bcd, 10);
 
@@ -314,35 +348,38 @@ namespace Reko.Core.Types
             Word256 = CreateWord(32);
         }
 
-		public static PrimitiveType Bool {get; private set; }
+		public static PrimitiveType Bool { get; private set; }
 
-		public static PrimitiveType Byte {get; private set; }
+		public static PrimitiveType Byte { get; private set; }
         // 8-bit character
         public static PrimitiveType Char { get; private set; }
-		public static PrimitiveType SByte {get; private set; }
-		public static PrimitiveType UInt8 {get; private set; }
+		public static PrimitiveType SByte { get; private set; }
+		public static PrimitiveType UInt8 { get; private set; }
 
-		public static PrimitiveType Word16 {get; private set; }
-		public static PrimitiveType Int16 {get; private set; }
-		public static PrimitiveType UInt16 {get; private set; }
+		public static PrimitiveType Word16 { get; private set; }
+		public static PrimitiveType Int16 { get; private set; }
+		public static PrimitiveType UInt16 { get; private set; }
         public static PrimitiveType Ptr16 { get; private set; }
+        public static PrimitiveType Offset16 { get; private set; }
 
-		public static PrimitiveType SegmentSelector {get; private set; }
+		public static PrimitiveType SegmentSelector  {get; private set; }
 
-		public static PrimitiveType Word32 {get; private set; }
-		public static PrimitiveType Int32 {get; private set; }
-		public static PrimitiveType UInt32 {get; private set; }
-		public static PrimitiveType Pointer32 {get; private set; }
-		public static PrimitiveType Real32 {get; private set; }
+		public static PrimitiveType Word32 { get; private set; }
+		public static PrimitiveType Int32 { get; private set; }
+		public static PrimitiveType UInt32 { get; private set; }
+		public static PrimitiveType Pointer32 { get; private set; }
+		public static PrimitiveType Real32 { get; private set; }
         public static PrimitiveType SegPtr32 { get; private set; }
 
-		public static PrimitiveType Word64 {get; private set; }
-		public static PrimitiveType Int64 {get; private set; }
-		public static PrimitiveType UInt64 {get; private set; }
-		public static PrimitiveType Pointer64 {get; private set; }
+		public static PrimitiveType Word64 { get; private set; }
+		public static PrimitiveType Int64 { get; private set; }
+		public static PrimitiveType UInt64 { get; private set; }
+		public static PrimitiveType Pointer64 { get; private set; }
         public static PrimitiveType Real64 { get; private set; }
 
-		public static PrimitiveType Real80 {get; private set; }
+        public static PrimitiveType Word80 { get; private set; }
+		public static PrimitiveType Real80 { get; private set; }
+        public static PrimitiveType Bcd80 { get; private set; }
 
         public static PrimitiveType Word128 { get; private set; }
         public static PrimitiveType Real128 { get; private set; }
@@ -350,7 +387,5 @@ namespace Reko.Core.Types
         public static PrimitiveType Word256 { get; private set; }
 
         public static PrimitiveType WChar { get; private set; }
-
-        public static PrimitiveType Bcd80 { get;private set; }
     }
 }

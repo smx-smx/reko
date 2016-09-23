@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,23 +22,20 @@ using Reko.Core;
 using Reko.Core.Services;
 using Reko.Gui;
 using Reko.Gui.Forms;
-using Reko.Loading;
 using Reko.UnitTests.Mocks;
-using Reko.Gui.Controls;
-using Reko.Gui.Windows;
 using Reko.Gui.Windows.Forms;
 using NUnit.Framework;
 using Rhino.Mocks;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.Design;
-using Reko.Core.Lib;
 
 namespace Reko.UnitTests.Gui.Windows.Forms
 {
 	[TestFixture]
+    [Category(Categories.UserInterface)]
 	public class InitialPageInteractorTests
-	{
+    {
         private MockRepository mr;
         private IMainForm form;
 		private TestInitialPageInteractor i;
@@ -64,14 +61,13 @@ namespace Reko.UnitTests.Gui.Windows.Forms
             uiSvc = new FakeShellUiService();
             host = mr.StrictMock<DecompilerHost>();
             memSvc = mr.StrictMock<ILowLevelViewService>();
-            var image = new LoadedImage(Address.Ptr32(0x10000), new byte[1000]);
-            var imageMap = image.CreateImageMap();
+            var mem = new MemoryArea(Address.Ptr32(0x10000), new byte[1000]);
+            var imageMap = new SegmentMap(
+                mem.BaseAddress,
+                new ImageSegment("code", mem, AccessMode.ReadWriteExecute));
             var arch = mr.StrictMock<IProcessorArchitecture>();
-            arch.Stub(a => a.CreateRegisterBitset()).Return(new BitSet(32));
-            arch.Replay();
-            var platform = mr.StrictMock<Platform>(null, arch);
-            arch.BackToRecord();
-            program = new Program(image, imageMap, arch, platform);
+            var platform = mr.StrictMock<IPlatform>();
+            program = new Program(imageMap, arch, platform);
             project = new Project { Programs = { program } };
 
             browserSvc = mr.StrictMock<IProjectBrowserService>();
@@ -84,6 +80,7 @@ namespace Reko.UnitTests.Gui.Windows.Forms
             sc.AddService(typeof(IProjectBrowserService), browserSvc);
             sc.AddService(typeof(ILowLevelViewService), memSvc);
             sc.AddService<ILoader>(loader);
+            sc.AddService<DecompilerHost>(host);
 
             i = new TestInitialPageInteractor(sc, dec);
 
@@ -110,7 +107,7 @@ namespace Reko.UnitTests.Gui.Windows.Forms
             memSvc.Stub(m => m.ViewImage(program));
             mr.ReplayAll();
 
-            i.OpenBinary("floxe.exe", host);
+            i.OpenBinary("floxe.exe");
             Assert.IsTrue(i.CanAdvance, "Page should be ready to advance");
             mr.VerifyAll();
         }
@@ -129,7 +126,7 @@ namespace Reko.UnitTests.Gui.Windows.Forms
             memSvc.Stub(m => m.ViewImage(program));
             mr.ReplayAll();
 
-            i.OpenBinary("floxe.exe", host);
+            i.OpenBinary("floxe.exe");
 
             Assert.IsTrue(i.CanAdvance, "Page should be ready to advance");
             mr.VerifyAll();
@@ -144,7 +141,7 @@ namespace Reko.UnitTests.Gui.Windows.Forms
             memSvc.Expect(s => s.ViewImage(program));
             mr.ReplayAll();
 
-            i.OpenBinary("floxe.exe", host);
+            i.OpenBinary("floxe.exe");
 
             mr.VerifyAll();
         }
@@ -158,7 +155,7 @@ namespace Reko.UnitTests.Gui.Windows.Forms
             memSvc.Stub(m => m.ViewImage(program));
             mr.ReplayAll();
 
-            i.OpenBinary("foo.exe", new FakeDecompilerHost());
+            i.OpenBinary("foo.exe");
 
             mr.VerifyAll();
         }
@@ -172,7 +169,7 @@ namespace Reko.UnitTests.Gui.Windows.Forms
             memSvc.Stub(m => m.ViewImage(program));
             mr.ReplayAll();
 
-            i.OpenBinary("foo.exe", host);
+            i.OpenBinary("foo.exe");
             Assert.IsTrue(i.LeavePage());
 
             mr.VerifyAll();
@@ -201,7 +198,7 @@ namespace Reko.UnitTests.Gui.Windows.Forms
                 this.decompiler = decompiler;
             }
 
-            protected override IDecompiler CreateDecompiler(ILoader ldr, DecompilerHost host)
+            protected override IDecompiler CreateDecompiler(ILoader ldr)
             {
                 return decompiler;
             }

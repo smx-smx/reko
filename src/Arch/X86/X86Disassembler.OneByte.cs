@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -331,10 +331,10 @@ namespace Reko.Arch.X86
 				new SingleByteOpRec(Opcode.ret),
 				new Alternative64OpRec(
                     new SingleByteOpRec(Opcode.les,	"Gv,Mp"),
-                    null),      //$TODO: VEX + 2 byte
+                    new SingleByteOpRec(Opcode.illegal)),      //$TODO: VEX + 2 byte
 				new Alternative64OpRec(
                     new SingleByteOpRec(Opcode.lds,	"Gv,Mp"),
-                    null),      //$TODO: VEX + 1 byte
+                    new SingleByteOpRec(Opcode.illegal)),      //$TODO: VEX + 1 byte
 				new SingleByteOpRec(Opcode.mov,	"Eb,Ib"),
 				new SingleByteOpRec(Opcode.mov,	"Ev,Iz"),
 
@@ -343,7 +343,7 @@ namespace Reko.Arch.X86
 				new SingleByteOpRec(Opcode.retf,	"Iw"),
 				new SingleByteOpRec(Opcode.retf,	""),
 				new SingleByteOpRec(Opcode.@int,	"3"),
-				new SingleByteOpRec(Opcode.@int,	"Ib"),
+				new InterruptOpRec(Opcode.@int,	"Ib"),
 				new Alternative64OpRec(
                     new SingleByteOpRec(Opcode.into,	""),
                     new SingleByteOpRec(Opcode.illegal)),

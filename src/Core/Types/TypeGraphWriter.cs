@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,6 +26,10 @@ using System.Text;
 
 namespace Reko.Core.Types
 {
+    /// <summary>
+    /// Generates a more compact and easily parsed string version
+    /// of a datatype. For final output, use Reko.Output.TypeFormatter
+    /// </summary>
     public class TypeGraphWriter : IDataTypeVisitor<Formatter>
     {
         private HashSet<DataType> visited;
@@ -49,9 +53,38 @@ namespace Reko.Core.Types
             return writer;
         }
 
+        public Formatter VisitClass(ClassType ct)
+        {
+            if (this.visited == null)
+                visited = new HashSet<DataType>();
+
+            writer.Write("(class");
+            if (ct.Name != null)
+            {
+                writer.Write(" \"{0}\"", ct.Name);
+            }
+            if (ct.Size != 0)
+            {
+                writer.Write(" {0:X4}", ct.Size);
+            }
+
+            if (!visited.Contains(ct) && (!reference || ct.Name == null))
+            {
+                visited.Add(ct);
+                foreach (ClassField f in ct.Fields)
+                {
+                    writer.Write(" ({0:X} ", f.Offset);
+                    f.DataType.Accept(this);
+                    writer.Write(" {0} {1})", f.Name, f.Protection);
+                }
+            }
+            writer.Write(")");
+            return writer;
+        }
+
         public Formatter VisitCode(CodeType c)
         {
-            writer.Write("code", c.Size);
+            writer.Write("code");
             return writer;
         }
 
@@ -69,18 +102,21 @@ namespace Reko.Core.Types
         public Formatter VisitFunctionType(FunctionType ft)
         {
             writer.Write("(fn ");
-            if (ft.ReturnType != null)
-                ft.ReturnType.Accept(this);
+            if (ft.ReturnValue!= null)
+                ft.ReturnValue.DataType.Accept(this);
             else
                 writer.Write("void");
             writer.Write(" (");
 
             string separator = "";
-            for (int i = 0; i < ft.ArgumentTypes.Length; ++i)
+            if (ft.Parameters != null)
             {
-                writer.Write(separator);
-                separator = ", ";
-                ft.ArgumentTypes[i].Accept(this);
+                for (int i = 0; i < ft.Parameters.Length; ++i)
+                {
+                    writer.Write(separator);
+                    separator = ", ";
+                    ft.Parameters[i].DataType.Accept(this);
+                }
             }
             writer.Write("))");
             return writer;
@@ -109,6 +145,14 @@ namespace Reko.Core.Types
 			writer.Write(")");
             return writer;
 		}
+
+        public Formatter VisitReference(ReferenceTo refTo)
+        {
+            writer.Write("(ref ");
+            WriteReference(refTo.Referent);
+            writer.Write(")");
+            return writer;
+        }
 
         public Formatter VisitString(StringType str)
         {
@@ -192,7 +236,7 @@ namespace Reko.Core.Types
                 {
                     writer.Write(" (");
                     alt.DataType.Accept(this);
-                    writer.Write(" {0})", alt.MakeName(i));
+                    writer.Write(" {0})", alt.Name);
                     ++i;
                 }
             }

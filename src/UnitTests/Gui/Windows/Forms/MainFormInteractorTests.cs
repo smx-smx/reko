@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -42,12 +42,14 @@ using System.Windows.Forms;
 namespace Reko.UnitTests.Gui.Windows.Forms
 {
 	[TestFixture]
+    [Category(Categories.UserInterface)]
 	public class MainFormInteractorTests
 	{
         private MockRepository mr;
+        private MockFactory mockFactory;
         private IMainForm form;
 		private TestMainFormInteractor interactor;
-        private Program prog;
+        private Program program;
         private IArchiveBrowserService archSvc;
         private IDialogFactory dlgFactory;
         private IServiceFactory svcFactory;
@@ -66,11 +68,14 @@ namespace Reko.UnitTests.Gui.Windows.Forms
         private IDecompilerService dcSvc;
         private ISearchResultService srSvc;
         private IDecompiler decompiler;
+        private IResourceEditorService resEditSvc;
+        private ICallGraphViewService cgvSvc;
 
 		[SetUp]
 		public void Setup()
 		{
             mr = new MockRepository();
+            mockFactory = new MockFactory(mr);
             services = new ServiceContainer();
             configSvc = mr.Stub<IConfigurationService>();
             services.AddService<IConfigurationService>(configSvc);
@@ -86,6 +91,8 @@ namespace Reko.UnitTests.Gui.Windows.Forms
             Given_DecompilerInstance();
             dcSvc.Stub(d => d.Decompiler = null);
             Given_SavePrompt(true);
+            fsSvc.Stub(f => f.MakeRelativePath("foo.dcproject", "foo.exe")).Return("foo.exe");
+            fsSvc.Stub(f => f.MakeRelativePath(Arg<string>.Is.Equal("foo.dcproject"), Arg<string>.Is.Null)).Return(null);
             mr.ReplayAll();
 
             When_CreateMainFormInteractor();
@@ -109,6 +116,8 @@ namespace Reko.UnitTests.Gui.Windows.Forms
             Given_DecompilerInstance();
             Given_SavePrompt(true);
             dcSvc.Expect(d => d.Decompiler = null);
+            fsSvc.Stub(f => f.MakeRelativePath("foo.dcproject", "foo.exe")).Return("foo.exe");
+            fsSvc.Stub(f => f.MakeRelativePath(Arg<string>.Is.Equal("foo.dcproject"), Arg<string>.Is.Null)).Return(null);
             mr.ReplayAll();
 
             When_CreateMainFormInteractor();
@@ -126,11 +135,12 @@ namespace Reko.UnitTests.Gui.Windows.Forms
             Given_MainFormInteractor();
             Given_DecompilerInstance();
             dcSvc.Expect(d => d.Decompiler = null);
-            brSvc.Expect(b => b.Clear());
             Expect_UiPreferences_Loaded();
             Expect_MainForm_SizeSet();
             Given_SavePrompt(true);
             diagnosticSvc.Stub(d => d.ClearDiagnostics());
+            fsSvc.Stub(f => f.MakeRelativePath("foo.dcproject", "foo.exe")).Return("foo.exe");
+            fsSvc.Stub(f => f.MakeRelativePath(Arg<string>.Is.Equal("foo.dcproject"), Arg<string>.Is.Null)).Return(null);
             mr.ReplayAll();
 
             When_CreateMainFormInteractor();
@@ -164,6 +174,8 @@ namespace Reko.UnitTests.Gui.Windows.Forms
             Given_SavePrompt(true);
             dcSvc.Stub(d => d.Decompiler = null);
             uiSvc.Stub(u => u.DocumentWindows).Return(new List<IWindowFrame>());
+            fsSvc.Stub(f => f.MakeRelativePath("foo.dcproject", "foo.exe")).Return("foo.exe");
+            fsSvc.Stub(f => f.MakeRelativePath(Arg<string>.Is.Equal("foo.dcproject"), Arg<string>.Is.Null)).Return(null);
             mr.ReplayAll();
 
             When_CreateMainFormInteractor();
@@ -177,14 +189,18 @@ namespace Reko.UnitTests.Gui.Windows.Forms
 
         private void Given_Loader()
         {
-            loader = mr.StrictMock<ILoader>();
             var bytes = new byte[1000];
+            var mem = new MemoryArea(Address.SegPtr(0x0C00, 0x0000), bytes);
+            loader = mr.StrictMock<ILoader>();
             loader.Stub(l => l.LoadImageBytes(null, 0)).IgnoreArguments()
                 .Return(bytes);
             loader.Stub(l => l.LoadExecutable(null, null, null)).IgnoreArguments()
                 .Return(new Program
                 {
-                    Image = new LoadedImage(Address.SegPtr(0x0C00,0x0000), bytes)
+                    SegmentMap = new SegmentMap(
+                        mem.BaseAddress,
+                        new ImageSegment("0C00", mem, AccessMode.ReadWriteExecute)),
+                    Platform = mockFactory.CreatePlatform()
                 });
         }
 
@@ -195,6 +211,9 @@ namespace Reko.UnitTests.Gui.Windows.Forms
             Given_MainFormInteractor();
             Given_LoadPreferences();
             Given_DecompilerInstance();
+            fsSvc.Stub(f => f.MakeRelativePath("foo.dcproject", "foo.exe")).Return("foo.exe");
+            fsSvc.Stub(f => f.MakeRelativePath(Arg<string>.Is.Equal("foo.dcproject"), Arg<string>.Is.Null)).Return(null);
+
             mr.ReplayAll();
 
             When_CreateMainFormInteractor();
@@ -205,23 +224,26 @@ namespace Reko.UnitTests.Gui.Windows.Forms
                 Name = "MyProc", 
             };
             var program = dcSvc.Decompiler.Project.Programs[0];
-            program.UserProcedures.Add(Address.Ptr32(0x12345), p);
+            program.User.Procedures.Add(Address.Ptr32(0x12345), p);
+            program.User.Heuristics.Add("shingle");
 
             interactor.Save();
             string s =
 @"<?xml version=""1.0"" encoding=""utf-16""?>
-<project xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xmlns:xsd=""http://www.w3.org/2001/XMLSchema"" xmlns=""http://schemata.jklnet.org/Decompiler/v2"">
+<project xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xmlns:xsd=""http://www.w3.org/2001/XMLSchema"" xmlns=""http://schemata.jklnet.org/Reko/v4"">
+  <arch>x86-protected-32</arch>
+  <platform>TestPlatform</platform>
   <input>
     <filename>foo.exe</filename>
-    <address>00010000</address>
-    <procedure name=""MyProc"">
-      <address>00012345</address>
-    </procedure>
-    <options>
-      <HeuristicScanning>false</HeuristicScanning>
-    </options>
+    <user>
+      <processor />
+      <procedure name=""MyProc"">
+        <address>00012345</address>
+      </procedure>
+      <heuristic name=""shingle"" />
+      <registerValues />
+    </user>
   </input>
-  <output />
 </project>";
             Assert.AreEqual(s, interactor.Test_SavedProjectXml);
             mr.VerifyAll();
@@ -233,6 +255,8 @@ namespace Reko.UnitTests.Gui.Windows.Forms
             Given_MainFormInteractor();
             Given_Loader();
             Given_DecompilerInstance();
+            fsSvc.Stub(f => f.MakeRelativePath("foo.dcproject", "foo.exe")).Return("foo.exe");
+            fsSvc.Stub(f => f.MakeRelativePath(Arg<string>.Is.Equal("foo.dcproject"), Arg<string>.Is.Null)).Return(null);
             mr.ReplayAll();
 
             When_CreateMainFormInteractor();
@@ -334,15 +358,22 @@ namespace Reko.UnitTests.Gui.Windows.Forms
         {
             this.decompiler = mr.StrictMock<IDecompiler>();
             // Having a compiler presupposes having a project.
+            var platform = mockFactory.CreatePlatform();
+            var mem = new MemoryArea(Address.Ptr32(0x00010000), new byte[100]);
             var project = new Project
             {
-                Programs = { new Program 
-                { 
+                Programs = { new Program
+                {
                     Filename="foo.exe" ,
-                    Image = new LoadedImage(Address.Ptr32(0x00010000), new byte[100]) 
+                    SegmentMap = new SegmentMap(
+                        mem.BaseAddress,
+                        new ImageSegment(".text", mem, AccessMode.ReadExecute)),
+                    Platform = platform,
+                    Architecture = platform.Architecture,
                 }
                 }
             };
+            
             dcSvc.Stub(d => d.Decompiler).Return(decompiler);
             decompiler.Stub(d => d.Project).Return(project);
             decompiler.Stub(d => d.Load(Arg<string>.Is.NotNull)).Return(false);
@@ -353,43 +384,11 @@ namespace Reko.UnitTests.Gui.Windows.Forms
             dcSvc.Stub(d => d.Decompiler).Return(null);
         }
 
-        [Test]
-        public void MainForm_ViewMemoryWindow()
-        {
-            Given_MainFormInteractor();
-            var disasmSvc = mr.StrictMock<IDisassemblyViewService>();
-            Given_UiSvc_IgnoresCommands();
-            svcFactory.Stub(s => s.CreateDisassemblyViewService()).Return(disasmSvc);       //$REVIEW: this shouldn't be necessary -- only if user explicitly asks for it.
-            memSvc.Expect(x => x.ShowWindow());
-            memSvc.Expect(m => m.ViewImage(Arg<Program>.Is.NotNull));
-            Given_DecompilerInstance();
-            mr.ReplayAll();
-
-            When_MainFormInteractorWithLoader();
-            interactor.Execute(new CommandID(CmdSets.GuidReko, CmdIds.ViewMemory));
-
-            mr.VerifyAll();
-        }
-
         private void ReplaceService<T>(T svcInstance)
         {
             var sc = interactor.Services.RequireService<IServiceContainer>();
             sc.RemoveService(typeof(T));
             sc.AddService(typeof(T), svcInstance);
-        }
-
-        [Test]
-        public void MainForm_ViewDisassemblyWindow()
-        {
-            Given_MainFormInteractor();
-            disasmSvc.Expect(x => x.ShowWindow());
-            Given_UiSvc_IgnoresCommands();
-            mr.ReplayAll();
-
-            When_MainFormInteractorWithLoader();
-            interactor.Execute(new CommandID(CmdSets.GuidReko, CmdIds.ViewDisassembly));
-
-            mr.VerifyAll();
         }
 
         private void Given_UiSvc_IgnoresCommands()
@@ -449,7 +448,11 @@ namespace Reko.UnitTests.Gui.Windows.Forms
             Given_Loader();
             Given_MainFormInteractor();
             Given_DecompilerInstance();
-            decompiler.Expect(d => d.LoadMetadata("foo.def")).Return(new TypeLibrary());
+            loader.Expect(d => d.LoadMetadata(
+                Arg<string>.Is.Equal("foo.def"),
+                Arg<IPlatform>.Is.NotNull,
+                Arg<TypeLibrary>.Is.NotNull))
+                    .Return(new TypeLibrary());
             services.AddService(typeof(IDecompilerService), dcSvc);
             uiSvc.Expect(u => u.ShowOpenFileDialog(null)).IgnoreArguments().Return("foo.def");
             Given_CommandNotHandledBySubwindow();
@@ -471,11 +474,13 @@ namespace Reko.UnitTests.Gui.Windows.Forms
             Given_CommandNotHandledBySubwindow();
             uiSvc.Stub(u => u.DocumentWindows).Return(new List<IWindowFrame>());
             //form.Expect(f => f.CloseAllDocumentWindows());
-            brSvc.Expect(b => b.Clear());
             diagnosticSvc.Expect(d => d.ClearDiagnostics());
             Given_DecompilerInstance();
             Given_SavePrompt(true);
             dcSvc.Expect(d => d.Decompiler = Arg<IDecompiler>.Is.Anything);
+            fsSvc.Stub(f => f.MakeRelativePath("foo.dcproject", "foo.exe")).Return("foo.exe");
+            fsSvc.Stub(f => f.MakeRelativePath(Arg<string>.Is.Anything, Arg<string>.Is.Null)).Return(null);
+
             mr.ReplayAll();
 
             When_CreateMainFormInteractor();
@@ -495,14 +500,17 @@ namespace Reko.UnitTests.Gui.Windows.Forms
         private Program CreateFakeProgram()
         {
             Program prog = new Program();
-            prog.Architecture = new IntelArchitecture(ProcessorMode.Real);
-            prog.Image = new LoadedImage(Address.SegPtr(0xC00, 0), new byte[300]);
+            prog.Architecture = new X86ArchitectureReal();
+            var mem = new MemoryArea(Address.SegPtr(0xC00, 0), new byte[300]);
+            prog.SegmentMap = new SegmentMap(
+                mem.BaseAddress,
+                new ImageSegment("0C00", mem, AccessMode.ReadWriteExecute));
             return prog; 
         }
 
         private void Given_MainFormInteractor()
         {
-            prog = CreateFakeProgram();
+            program = CreateFakeProgram();
             svcFactory = mr.StrictMock<IServiceFactory>();
             archSvc = mr.StrictMock<IArchiveBrowserService>();
             dlgFactory = mr.StrictMock<IDialogFactory>();
@@ -510,13 +518,16 @@ namespace Reko.UnitTests.Gui.Windows.Forms
             memSvc = mr.StrictMock<ILowLevelViewService>();
             disasmSvc = mr.StrictMock<IDisassemblyViewService>();
             typeLibSvc = mr.StrictMock<ITypeLibraryLoaderService>();
-            brSvc = mr.StrictMock<IProjectBrowserService>();
+            brSvc = mr.Stub<IProjectBrowserService>();
             uiPrefs = mr.StrictMock<IUiPreferencesService>();
             fsSvc = mr.StrictMock<IFileSystemService>();
             tcHostSvc = mr.StrictMock<ITabControlHostService>();
             dcSvc = mr.StrictMock<IDecompilerService>();
             srSvc = MockRepository.GenerateMock<ISearchResultService, IWindowPane>();
             diagnosticSvc = MockRepository.GenerateMock<IDiagnosticsService, IWindowPane>();
+            resEditSvc = mr.StrictMock<IResourceEditorService>();
+            cgvSvc = mr.StrictMock<ICallGraphViewService>();
+            loader = mr.StrictMock<ILoader>();
 
             svcFactory.Stub(s => s.CreateArchiveBrowserService()).Return(archSvc);
             svcFactory.Stub(s => s.CreateDecompilerConfiguration()).Return(new FakeDecompilerConfiguration());
@@ -535,8 +546,11 @@ namespace Reko.UnitTests.Gui.Windows.Forms
             svcFactory.Stub(s => s.CreateTabControlHost(Arg<TabControl>.Is.NotNull)).Return(tcHostSvc);
             svcFactory.Stub(s => s.CreateLoader()).Return(loader);
             svcFactory.Stub(s => s.CreateSearchResultService(Arg<ListView>.Is.NotNull)).Return(srSvc);
+            svcFactory.Stub(s => s.CreateResourceEditorService()).Return(resEditSvc);
+            svcFactory.Stub(s => s.CreateCallGraphViewService()).Return(cgvSvc);
             services.AddService(typeof(IDialogFactory), dlgFactory);
             services.AddService(typeof(IServiceFactory), svcFactory);
+            brSvc.Stub(b => b.Clear());
 
             form = mr.StrictMock<IMainForm>();
             var listView = new ListView();
@@ -546,19 +560,24 @@ namespace Reko.UnitTests.Gui.Windows.Forms
             var tabControl = new TabControl { TabPages = { tabResults, tabDiagnostics } };
             var toolStrip = new ToolStrip { };
             var statusStrip = new StatusStrip { Items = { new ToolStripLabel() } };
+            var brToolbar = new ToolStrip();
             var projectBrowser = mr.Stub<ITreeView>();
             form.Stub(f => f.DiagnosticsList).Return(listView);
             form.Stub(f => f.ImageList).Return(imagelist);
             form.Stub(f => f.Menu).SetPropertyAndIgnoreArgument();
             form.Stub(f => f.AddToolbar(null)).IgnoreArguments();
+            form.Stub(f => f.AddProjectBrowserToolbar(null)).IgnoreArguments();
             form.Stub(f => f.Dispose());
             form.Stub(f => f.TabControl).Return(tabControl);
             form.Stub(f => f.FindResultsPage).Return(tabResults);
             form.Stub(f => f.DiagnosticsPage).Return(tabDiagnostics);
             form.Stub(f => f.FindResultsList).Return(listView);
             form.Stub(f => f.ToolBar).Return(toolStrip);
+            form.Stub(f => f.ProjectBrowserToolbar).Return(toolStrip);
             form.Stub(f => f.ProjectBrowser).Return(projectBrowser);
             form.Stub(f => f.StatusStrip).Return(statusStrip);
+            form.Stub(f => f.AddProjectBrowserToolbar(null)).IgnoreArguments();
+            form.Stub(f => f.ProjectBrowserToolbar).Return(brToolbar);
             form.Load += null;
             LastCall.IgnoreArguments();
             form.Closed += null;
@@ -582,7 +601,7 @@ namespace Reko.UnitTests.Gui.Windows.Forms
             var services = new ServiceContainer();
             services.AddService(typeof(IDialogFactory), dlgFactory);
             services.AddService(typeof(IServiceFactory), svcFactory);
-            interactor = new TestMainFormInteractor(prog, services);
+            interactor = new TestMainFormInteractor(program, services);
             interactor.LoadForm();
             form.Raise(f => f.Load += null, form, EventArgs.Empty);
         }

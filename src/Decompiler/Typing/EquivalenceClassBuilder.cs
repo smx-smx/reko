@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,6 +25,7 @@ using Reko.Core.Operators;
 using Reko.Core.Types;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Reko.Typing
 {
@@ -35,30 +36,31 @@ namespace Reko.Typing
 	{
 		private TypeFactory factory;
 		private TypeStore store;
-		private ProcedureSignature signature;
+		private FunctionType signature;
         private Dictionary<ushort, TypeVariable> segTypevars;
+        private Dictionary<string, EquivalenceClass> typeReferenceClasses;
 
 		public EquivalenceClassBuilder(TypeFactory factory, TypeStore store)
-		{
+        {
 			this.factory = factory;
 			this.store = store;
 			this.signature = null;
             this.segTypevars = new Dictionary<ushort, TypeVariable>();
+            this.typeReferenceClasses = new Dictionary<string, EquivalenceClass>();
 		}
 
-		public void Build(Program prog)
-		{
+		public void Build(Program program)
+        {
             // Special case for the global variables. In essence,
             // a memory map of all the globals.
-			store.EnsureExpressionTypeVariable(factory, prog.Globals, "globals_t");
+			var tvGlobals = store.EnsureExpressionTypeVariable(factory, program.Globals, "globals_t");
+            tvGlobals.OriginalDataType = program.Globals.DataType;
 
-            foreach (Procedure proc in prog.Procedures.Values)
+            EnsureSegmentTypeVariables(program.SegmentMap.Segments.Values);
+            foreach (Procedure proc in program.Procedures.Values)
             {
-                ProcedureSignature signature = proc.Signature;
-                if (signature != null && signature.ReturnValue != null)
-                {
-                    signature.ReturnValue.Accept(this);
-                }
+                this.signature = proc.Signature;
+                EnsureSignatureTypeVariables(this.signature);
                 
                 foreach (Statement stm in proc.Statements)
                 {
@@ -67,16 +69,61 @@ namespace Reko.Typing
             }
 		}
 
-		public TypeVariable EnsureTypeVariable(Expression e)
+        public void EnsureSegmentTypeVariables(IEnumerable<ImageSegment> segments)
+        {
+
+            foreach (var segment in segments.Where(s => s.Identifier != null))
+            {
+                var selector = segment.Address.Selector;
+                if (selector.HasValue)
+                {
+                    segment.Identifier.TypeVariable = null;
+                    var tvSeg = store.EnsureExpressionTypeVariable(factory, segment.Identifier, segment.Identifier.Name + "_t");
+                    tvSeg.OriginalDataType = segment.Identifier.DataType;
+                    this.segTypevars[selector.Value] = tvSeg;
+                }
+            }
+        }
+
+        public void EnsureSignatureTypeVariables(FunctionType signature)
+        {
+            if (signature == null || !signature.ParametersValid)
+                return;
+            if (!signature.HasVoidReturn)
+            {
+                signature.ReturnValue.Accept(this);
+            }
+            foreach (var param in signature.Parameters)
+            {
+                param.Accept(this);
+            }
+        }
+
+        public TypeVariable EnsureTypeVariable(Expression e)
 		{
-			return store.EnsureExpressionTypeVariable(factory, e);
+            var tv = store.EnsureExpressionTypeVariable(factory, e);
+            var typeref = e.DataType.ResolveAs<TypeReference>();
+            EquivalenceClass eq;
+            if (typeref != null)
+            {
+                if (this.typeReferenceClasses.TryGetValue(typeref.Name, out eq))
+                {
+                    store.MergeClasses(tv, eq.Representative);
+                }
+                else
+                {
+                    this.typeReferenceClasses.Add(typeref.Name, tv.Class);
+                }
+            }
+            return tv;
 		}
 
 		public override void VisitApplication(Application appl)
 		{
+            var oldSig = signature;
 			signature = null;
 			appl.Procedure.Accept(this);
-			ProcedureSignature sig = signature;
+			FunctionType sig = signature;
 
 			if (sig != null)
 			{
@@ -94,6 +141,7 @@ namespace Reko.Typing
 				}
 			}
 			EnsureTypeVariable(appl);
+            signature = oldSig;
 		}
 
 		public override void VisitArrayAccess(ArrayAccess acc)
@@ -151,6 +199,7 @@ namespace Reko.Typing
                 else
                 {
                     EnsureTypeVariable(c);
+
                     segTypevars[c.ToUInt16()] = c.TypeVariable;
                 }
                 return;
@@ -230,6 +279,19 @@ namespace Reko.Typing
         {
             outArg.Expression.Accept(this);
             EnsureTypeVariable(outArg);
+        }
+
+        public override void VisitReturnInstruction(ReturnInstruction ret)
+        {
+            if (ret.Expression == null)
+                return;
+            ret.Expression.Accept(this);
+            if (!signature.HasVoidReturn)
+            {
+                store.MergeClasses(
+                    signature.ReturnValue.TypeVariable,
+                    ret.Expression.TypeVariable);
+            }
         }
 
 		public override void VisitSegmentedAccess(SegmentedAccess access)

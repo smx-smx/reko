@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -112,7 +112,7 @@ namespace Reko.Scanning.Dfa
             var state = new IntermediateState(
                 new SortedSet<TreeNode>(nodeSet, nodeComparer),
                 Dstates.Count);
-            DumpState(state);
+            // DumpState(state);        // This is very verbose in the unit tests
             return state;
         }
 

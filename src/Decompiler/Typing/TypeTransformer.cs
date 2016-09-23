@@ -1,6 +1,6 @@
  #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -47,8 +47,8 @@ namespace Reko.Typing
 		private static TraceSwitch trace = new TraceSwitch("TypeTransformer", "Traces the transformation of types");
         private HashSet<DataType> visitedTypes;
 
-        public TypeTransformer(TypeFactory factory, TypeStore store, Program prog)
-            : this(factory, store, prog, new NullDecompilerEventListener())
+        public TypeTransformer(TypeFactory factory, TypeStore store, Program program)
+            : this(factory, store, program, new NullDecompilerEventListener())
         {
         }
 
@@ -60,7 +60,8 @@ namespace Reko.Typing
 			this.eventListener = eventListener;
 			this.unifier = new Unifier(factory);
 			this.comparer = new DataTypeComparer();
-		}
+            this.visitedTypes = new HashSet<DataType>();
+        }
 
 		public bool Changed
 		{
@@ -78,6 +79,8 @@ namespace Reko.Typing
 			UnionType uNew = new UnionType(u.Name, u.PreferredType);
 			foreach (UnionAlternative a in u.Alternatives.Values)
 			{
+                if (a.DataType.ResolveAs<UnionType>() == u)
+                    continue;       //$HACK gets rid of (union "foo" (int) (union "foo"))
 				unifier.UnifyIntoUnion(uNew, a.DataType);
 			}
 			return uNew;
@@ -229,13 +232,15 @@ namespace Reko.Typing
 
 		public void Transform()
 		{
-            var dpa = new DerivedPointerAnalysis(factory, store, program);
 			var ppr = new PtrPrimitiveReplacer(factory, store, program);
-            ppr.ReplaceAll();
-            dpa.FollowDerivedPointers();
+            ppr.ReplaceAll(eventListener);
+            var cpa = new ConstantPointerAnalysis(factory, store, program);
+            cpa.FollowConstantPointers();
 			int iteration = 0;
 			do
 			{
+                if (eventListener.IsCanceled())
+                    return;
 				++iteration;
                 if (iteration > 50)
                 {
@@ -247,7 +252,9 @@ namespace Reko.Typing
                 this.visitedTypes = new HashSet<DataType>();
 				foreach (TypeVariable tv in store.TypeVariables)
 				{
-					tvCur = tv;
+                    if (eventListener.IsCanceled())
+                        return;
+                    tvCur = tv;
 					EquivalenceClass eq = tv.Class;
 					if (eq.DataType != null)
 					{
@@ -259,7 +266,7 @@ namespace Reko.Typing
                     }
                     // Debug.Print("Transformed {0}:{1}", tv, tv.Class.DataType);
 				}
-				if (ppr.ReplaceAll())
+				if (ppr.ReplaceAll(eventListener))
 					Changed = true;
 				if (NestedComplexTypeExtractor.ReplaceAll(factory, store))
 					Changed = true;
@@ -284,6 +291,11 @@ namespace Reko.Typing
             return arr;
         }
 
+        public DataType VisitClass(ClassType ct)
+        {
+            throw new NotImplementedException();
+        }
+
         public DataType VisitCode(CodeType c)
         {
             return c;
@@ -301,13 +313,13 @@ namespace Reko.Typing
 
         public DataType VisitFunctionType(FunctionType fn)
         {
-            if (fn.ReturnType != null)
+            if (!fn.HasVoidReturn)
             {
-                fn.ReturnType = fn.ReturnType.Accept(this);
+                fn.ReturnValue.DataType = fn.ReturnValue.DataType.Accept(this);
             }
-            for (int i = 0; i < fn.ArgumentTypes.Length; ++i)
+            for (int i = 0; i < fn.Parameters.Length; ++i)
             {
-                fn.ArgumentTypes[i] = fn.ArgumentTypes[i].Accept(this);
+                fn.Parameters[i].DataType = fn.Parameters[i].DataType.Accept(this);
             }
             return fn;
         }
@@ -334,6 +346,12 @@ namespace Reko.Typing
             return ptr;
         }
 
+        public DataType VisitReference(ReferenceTo refTo)
+        {
+            refTo.Referent = refTo.Referent.Accept(this);
+            return refTo;
+        }
+
         public DataType VisitPrimitive(PrimitiveType pt)
         {
             return pt;
@@ -346,6 +364,9 @@ namespace Reko.Typing
 
         public DataType VisitStructure(StructureType str)
 		{
+            // Do not transform user-defined types
+            if (str.UserDefined)
+                return str;
             if (visitedTypes.Contains(str))
                 return str;
             visitedTypes.Add(str);
@@ -367,6 +388,7 @@ namespace Reko.Typing
         {
             return typeref;
         }
+
         public DataType VisitTypeVariable(TypeVariable tv)
         {
             return tv;
@@ -374,6 +396,9 @@ namespace Reko.Typing
 
 		public DataType VisitUnion(UnionType ut)
 		{
+            // Do not transform user-defined types
+            if (ut.UserDefined)
+                return ut;
             foreach (var alt in ut.Alternatives.Values)
             {
                 alt.DataType = alt.DataType.Accept(this);
@@ -389,9 +414,11 @@ namespace Reko.Typing
 			}
 
 			UnionType utNew = FactorDuplicateAlternatives(ut);
-			if (utNew.Alternatives.Count != ut.Alternatives.Count)
+            var dt = utNew.Simplify();
+            utNew = dt as UnionType;
+            if (utNew == null || utNew.Alternatives.Count != ut.Alternatives.Count)
 				Changed = true;
-			return utNew.Simplify();
+            return dt;
 		}
 
         public DataType VisitUnknownType(UnknownType unk)

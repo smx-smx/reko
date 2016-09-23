@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -35,12 +35,12 @@ namespace Reko.ImageLoaders.MzExe
 	/// </summary>
 	public class PkLiteUnpacker : ImageLoader
 	{
-        private IntelArchitecture arch;
-        private Platform platform;
+        private IProcessorArchitecture arch;
+        private IPlatform platform;
 
 		private byte [] abU;
-		private LoadedImage imgU;
-        private ImageMap imageMap;
+		private MemoryArea imgU;
+        private SegmentMap segmentMap;
 		private ushort pklCs;
 		private ushort pklIp;
 		private BitStream bitStm;
@@ -51,16 +51,16 @@ namespace Reko.ImageLoaders.MzExe
 		public PkLiteUnpacker(IServiceProvider services, string filename, byte [] rawImg) : base(services, filename, rawImg)
 		{
             var exe = new ExeImageLoader(services, filename, rawImg);
-            arch = new IntelArchitecture(ProcessorMode.Real);
-            platform = services.RequireService<IConfigurationService>()
-                .GetEnvironment("ms-dos")
+            var cfgSvc = services.RequireService<IConfigurationService>();
+            this.arch = cfgSvc.GetArchitecture("x86-real-16");
+            platform = cfgSvc.GetEnvironment("ms-dos")
                 .Load(services, arch);
 
 			uint pkLiteHdrOffset = (uint) (exe.e_cparHeader * 0x10);
 
 			if (RawImage[pkLiteHdrOffset] != 0xB8)
 				throw new ApplicationException(string.Format("Expected MOV AX,XXXX at offset 0x{0:X4}.", pkLiteHdrOffset));
-			uint cparUncompressed = LoadedImage.ReadLeUInt16(RawImage, pkLiteHdrOffset + 1);
+			uint cparUncompressed = MemoryArea.ReadLeUInt16(RawImage, pkLiteHdrOffset + 1);
 			abU = new byte[cparUncompressed * 0x10U];
 
 			if (RawImage[pkLiteHdrOffset + 0x04C] != 0x83)
@@ -74,7 +74,7 @@ namespace Reko.ImageLoaders.MzExe
 			if (exe.e_ovno != 0)
 				return false;
 
-			return LoadedImage.CompareArrays(rawImg, (int) signatureOffset, signature, signature.Length);
+			return MemoryArea.CompareArrays(rawImg, (int) signatureOffset, signature, signature.Length);
 		}
 
         public override Program Load(Address addrLoad)
@@ -207,9 +207,10 @@ l01C8:
 2DE9:01CB 83C310        ADD	BX,+10				// BX => unpackedBase + 0x100
 */
 			l01C8:
-			imgU = new LoadedImage(addrLoad, abU);
-            imageMap = imgU.CreateImageMap();
-			return new Program(imgU, imageMap, arch, platform);
+			imgU = new MemoryArea(addrLoad, abU);
+            segmentMap = new SegmentMap(imgU.BaseAddress,
+                new ImageSegment("image", imgU, AccessMode.ReadWriteExecute));
+			return new Program(segmentMap, arch, platform);
 		}
 
 		public uint CopyDictionaryWord(byte [] abU, int offset, int bytes, BitStream stm, uint dst)
@@ -237,8 +238,8 @@ l01C8:
 
         public override RelocationResults Relocate(Program program, Address addrLoad)
 		{
-            var relocations = new RelocationDictionary();
-			ushort segCode = (ushort) (addrLoad.Selector + (PspSize >> 4));
+            var relocations = imgU.Relocations;
+			ushort segCode = (ushort) (addrLoad.Selector.Value + (PspSize >> 4));
 			for (;;)
 			{
 				int relocs = (ushort) bitStm.GetByte();
@@ -254,7 +255,7 @@ l01C8:
 
 					imgU.WriteLeUInt16(relocBase + relocOff, seg);
 					relocations.AddSegmentReference(relocBase + relocOff, seg);
-					imageMap.AddSegment(Address.SegPtr(seg, 0), seg.ToString("X4"), AccessMode.ReadWriteExecute);
+					segmentMap.AddSegment(Address.SegPtr(seg, 0), seg.ToString("X4"), AccessMode.ReadWriteExecute,0);
 				} while (--relocs != 0);
 			}
 
@@ -264,8 +265,8 @@ l01C8:
 			pklIp = bitStm.GetWord();
 
 			var state = arch.CreateProcessorState();
-			state.SetRegister(Registers.ds, Constant.Word16(addrLoad.Selector));
-			state.SetRegister(Registers.es, Constant.Word16(addrLoad.Selector));
+			state.SetRegister(Registers.ds, Constant.Word16(addrLoad.Selector.Value));
+			state.SetRegister(Registers.es, Constant.Word16(addrLoad.Selector.Value));
 			state.SetRegister(Registers.cs, Constant.Word16(pklCs));
 			state.SetRegister(Registers.ax, Constant.Word16(0));
 			state.SetRegister(Registers.bx, Constant.Word16(0));
@@ -276,9 +277,14 @@ l01C8:
 			state.SetRegister(Registers.si, Constant.Word16(0));
 			state.SetRegister(Registers.di, Constant.Word16(0));
 
+            var sym = new ImageSymbol(Address.SegPtr(pklCs, pklIp))
+            {
+                Type = SymbolType.Procedure,
+                ProcessorState = state
+            };
             return new RelocationResults(
-                new List<EntryPoint> {new EntryPoint(Address.SegPtr(pklCs, pklIp), state) },
-                relocations);
+                new List<ImageSymbol> { sym },
+                new SortedList<Address, ImageSymbol> { { sym.Address, sym } });
 		}
 
 

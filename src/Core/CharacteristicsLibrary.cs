@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@
 #endregion
 
 using Reko.Core.Serialization;
+using Reko.Core.Services;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -35,10 +36,10 @@ namespace Reko.Core
             Entries = new Dictionary<string, Serialization.ProcedureCharacteristics>();
         }
 
-        public static CharacteristicsLibrary Load(string filename)
+        public static CharacteristicsLibrary Load(string filename, IFileSystemService fsSvc)
         {
             XmlSerializer ser = new XmlSerializer(typeof(Serialization.CharacteristicsLibrary_v1));
-            using (var stm = new FileStream(filename, FileMode.Open, FileAccess.Read))
+            using (var stm = fsSvc.CreateFileStream(filename, FileMode.Open, FileAccess.Read))
             {
                 var slib = (Serialization.CharacteristicsLibrary_v1) ser.Deserialize(stm);
                 return new CharacteristicsLibrary

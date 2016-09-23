@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,6 +27,7 @@ using Reko.UnitTests.Mocks;
 using NUnit.Framework;
 using System;
 using System.Collections.Generic;
+using Rhino.Mocks;
 
 namespace Reko.UnitTests.Analysis
 {
@@ -42,9 +43,9 @@ namespace Reko.UnitTests.Analysis
 		public void Setup()
 		{
 			program = new Program();
-			program.Architecture = new IntelArchitecture(ProcessorMode.Protected32);
+			program.Architecture = new X86ArchitectureFlat32();
             program.Platform = new DefaultPlatform(null, program.Architecture);
-			gcr = new GlobalCallRewriter(program, null);
+			gcr = new GlobalCallRewriter(program, null, new FakeDecompilerEventListener());
             proc = new Procedure("foo", program.Architecture.CreateFrame());
 			flow = new ProcedureFlow(proc, program.Architecture);
 		}
@@ -52,7 +53,7 @@ namespace Reko.UnitTests.Analysis
 		[Test]
 		public void RegisterArgument()
 		{
-			flow.MayUse[Registers.eax.Number] = true;
+            flow.MayUse.Add(Registers.eax); ;
 			gcr.EnsureSignature(proc, flow);
 			Assert.AreEqual("void foo(Register word32 eax)", proc.Signature.ToString(proc.Name));
 		}
@@ -60,8 +61,8 @@ namespace Reko.UnitTests.Analysis
 		[Test]
 		public void RegisterOutArgument()
 		{
-			flow.LiveOut[Registers.eax.Number] = true;		// becomes the return value.
-			flow.LiveOut[Registers.ebx.Number] = true;
+			flow.LiveOut.Add(Registers.eax);		// becomes the return value.
+			flow.LiveOut.Add(Registers.ebx);
 			gcr.EnsureSignature(proc, flow);
 			Assert.AreEqual("Register word32 foo(Register out ptr32 ebxOut)", proc.Signature.ToString(proc.Name));
 		}
@@ -77,7 +78,7 @@ namespace Reko.UnitTests.Analysis
 		[Test]
 		public void FpuOutArgument()
 		{
-			flow.LiveOut[Registers.eax.Number] = true;
+            flow.LiveOut.Add(Registers.eax);
 			proc.Frame.EnsureFpuStackVariable(0, PrimitiveType.Real80);
 			proc.Frame.EnsureFpuStackVariable(1, PrimitiveType.Real80);
 			proc.Signature.FpuStackDelta = 1;
@@ -99,7 +100,7 @@ namespace Reko.UnitTests.Analysis
 		public void GenerateUseInstructionsForSpecifiedSignature()
 		{
             Procedure proc = new Procedure("foo", program.Architecture.CreateFrame());
-			proc.Signature = new ProcedureSignature(
+			proc.Signature = new FunctionType(
 				new Identifier("eax", PrimitiveType.Word32, Registers.eax),
 				new Identifier [] { 
 					new Identifier("ecx", PrimitiveType.Word32, Registers.ecx),
@@ -122,7 +123,7 @@ namespace Reko.UnitTests.Analysis
 			f.EnsureStackVariable(Constant.Word16( 6), 2, PrimitiveType.Word16);
 			f.EnsureStackVariable(Constant.Word16( 0x0E), 2, PrimitiveType.Word32);
 
-			GlobalCallRewriter gcr = new GlobalCallRewriter(null, null);
+			GlobalCallRewriter gcr = new GlobalCallRewriter(null, null, new FakeDecompilerEventListener());
 			using (FileUnitTester fut = new FileUnitTester("Analysis/GcrStackParameters.txt"))
 			{
 				foreach (KeyValuePair<int,Identifier> de in gcr.GetSortedStackArguments(f))

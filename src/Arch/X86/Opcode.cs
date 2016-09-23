@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -207,6 +207,7 @@ namespace Reko.Arch.X86
         movsb,
         movshdup,
         movsx,
+        movups,
         movzx,
         mul,
         neg,
@@ -282,5 +283,10 @@ namespace Reko.Arch.X86
         xgetbv,
         xlat,
         xor,
+
+        // Borland implemented an x87 emulator, and introduced these
+        // pseudo-instructions.
+        BOR_exp,
+        BOR_ln
     }
 }

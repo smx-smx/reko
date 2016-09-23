@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -55,11 +55,6 @@ namespace Reko.Structure
             return ass;
         }
 
-        public void EmitCaseLabel(StructureNode node, int i)
-        {
-            stms.Add(new AbsynCase(i));
-        }
-
         public void EmitBreak()
         {
             stms.Add(new AbsynBreak());
@@ -70,45 +65,15 @@ namespace Reko.Structure
             stms.Add(new AbsynContinue());
         }
 
-        public void EmitGoto(StructureNode dest)
-        {
-            stms.Add(new AbsynGoto(dest.Block.Name));
-        }
-
         public void EmitReturn(Expression expr)
         {
             stms.Add(new AbsynReturn(expr));
-        }
-
-        public void EmitLabel(StructureNode node)
-        {
-            stms.Add(new AbsynLabel(node.Block.Name));
-        }
-
-        public void EmitForever(StructureNode node, List<AbsynStatement> body)
-        {
-            AbsynWhile whileStm = new AbsynWhile(Constant.True(), body);
-            stms.Add(whileStm);
         }
 
         public void EmitDoWhile(List<AbsynStatement> body, Expression expr)
         {
             AbsynDoWhile doWhile = new AbsynDoWhile(body, expr);
             stms.Add(doWhile);
-        }
-
-        public void EmitWhile(StructureNode node, Expression expr, List<AbsynStatement> body)
-        {
-            if (node.Then == node.Loop.Follow)
-                expr = expr.Invert();
-            stms.Add(new AbsynWhile(expr, body));
-        }
-
-        public AbsynSwitch EmitSwitch(StructureNode node, Expression exp, List<AbsynStatement> stmts)
-        {
-            AbsynSwitch switchStm = new AbsynSwitch(exp, stmts);
-            stms.Add(switchStm);
-            return switchStm;
         }
 
         public bool StripDeclarations { get; set; }

@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,20 +28,34 @@ namespace Reko.UnitTests.Core
     public class AddressTests
     {
         [Test]
+        [Category(Categories.UnitTests)]
         public void Addr_ToString()
         {
             Address addr = Address.SegPtr(0xC00, 0x1234);
-            string str = addr.ToString();
             Assert.AreEqual("0C00:1234", addr.ToString());
         }
 
         [Test(Description="Found this in a regression.")]
-        [Category("Regressions")]
+        [Category(Categories.Regressions)]
         public void Addr_Ge()
         {
             Assert.IsTrue(Address.Ptr32(4001) >= Address.Ptr32(4000));
             Assert.IsTrue(Address.Ptr32(4000) >= Address.Ptr32(4000));
             Assert.IsFalse(Address.Ptr32(3999) >= Address.Ptr32(4000));
+        }
+
+        [Test]
+        public void Addr_Protected()
+        {
+            Assert.AreEqual(4096, Address.ProtectedSegPtr(0xF, 0).ToLinear());
+        }
+
+        [Test]
+        [Category(Categories.UnitTests)]
+        public void Addr_AddToSegmented()
+        {
+            Assert.AreEqual("1C00:0000", (Address.SegPtr(0xC00, 0xF000) + 0x1000).ToString());
+            Assert.AreEqual("1C00:1000", (Address.SegPtr(0xC00, 0xF000) + 0x2000).ToString());
         }
     }
 }

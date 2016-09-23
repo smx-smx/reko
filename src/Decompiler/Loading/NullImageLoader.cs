@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -38,12 +38,12 @@ namespace Reko.Loading
         {
             this.imageBytes = image;
             this.baseAddr = Address.Ptr32(0);
-            this.EntryPoints = new List<EntryPoint>();
+            this.EntryPoints = new List<ImageSymbol>();
         }
 
         public IProcessorArchitecture Architecture { get; set; }
-        public List<EntryPoint> EntryPoints { get; private set; }
-        public Platform Platform { get; set; }
+        public List<ImageSymbol> EntryPoints { get; private set; }
+        public IPlatform Platform { get; set; }
         public override Address PreferredBaseAddress
         {
             get { return this.baseAddr; }
@@ -54,17 +54,18 @@ namespace Reko.Loading
         {
             if (addrLoad == null)
                 addrLoad = PreferredBaseAddress;
-            var image = new LoadedImage(addrLoad, imageBytes);
+            var mem = new MemoryArea(addrLoad, imageBytes);
             return new Program(
-                image,
-                image.CreateImageMap(),
+                new SegmentMap(
+                    mem.BaseAddress,
+                    new ImageSegment("code", mem, AccessMode.ReadWriteExecute)),
                 Architecture,
                 Platform ?? new DefaultPlatform(Services, Architecture));
         }
 
         public override RelocationResults Relocate(Program program, Address addrLoad)
         {
-            return new RelocationResults(EntryPoints, new RelocationDictionary());
+            return new RelocationResults(EntryPoints, new SortedList<Address, ImageSymbol>());
         }
     }
 }

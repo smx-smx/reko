@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,7 +28,10 @@ namespace Reko.ImageLoaders.Elf
     public class ElfSymbol
     {
         public string Name;
-        public uint Value;
+        public ElfSymbolType Type;
+        public ulong Value;
         public byte Info;
+        public uint SectionIndex;
+        public ulong Size;
     }
 }

@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -41,6 +41,11 @@ namespace Reko.Core.Types
             return at;
         }
 
+        public DataType VisitClass(ClassType ct)
+        {
+            throw new NotImplementedException();
+        }
+
         public DataType VisitCode(CodeType c)
         {
             return c;
@@ -58,11 +63,11 @@ namespace Reko.Core.Types
 
         public DataType VisitFunctionType(FunctionType ft)
         {
-            if (ft.ReturnType != null)
-                ft.ReturnType = ft.ReturnType.Accept(this);
-            for (int i = 0; i < ft.ArgumentTypes.Length; ++i)
+            if (ft.ReturnValue != null)
+                ft.ReturnValue.DataType = ft.ReturnValue.DataType.Accept(this);
+            for (int i = 0; i < ft.Parameters.Length; ++i)
             {
-                ft.ArgumentTypes[i] = ft.ArgumentTypes[i].Accept(this);
+                ft.Parameters[i].DataType = ft.Parameters[i].DataType.Accept(this);
             }
             return ft;
         }
@@ -83,6 +88,12 @@ namespace Reko.Core.Types
         {
             ptr.Pointee = ptr.Pointee.Accept(this);
             return ptr;
+        }
+
+        public DataType VisitReference(ReferenceTo refTo)
+        {
+            refTo.Referent = refTo.Referent.Accept(this);
+            return refTo;
         }
 
         public DataType VisitString(StringType str)

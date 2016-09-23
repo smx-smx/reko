@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -38,7 +38,7 @@ namespace Reko.UnitTests.Core.Serialization
 
 		public ArgumentTests()
 		{
-			arch = new IntelArchitecture(ProcessorMode.Real);
+			arch = new X86ArchitectureReal();
 		}
 
 		[Test]
@@ -46,7 +46,7 @@ namespace Reko.UnitTests.Core.Serialization
 		{
 			Argument_v1 sarg = new Argument_v1 {
 			    Name = "foo",
-			    Type = new SerializedTypeReference("int"),
+			    Type = new TypeReference_v1("int"),
 			    Kind = new Register_v1("eax"),
             };
 			Verify(sarg, "Core/SargWriteRegisterArgument.txt");
@@ -57,7 +57,7 @@ namespace Reko.UnitTests.Core.Serialization
 		{
 			Argument_v1 sarg = new Argument_v1
             {
-			    Type = new SerializedTypeReference("int"),
+			    Type = new TypeReference_v1("int"),
 			    Kind = new Register_v1("eax"),
             };
 			Verify(sarg, "Core/SargWriteNamelessRegisterArgument.txt");
@@ -69,7 +69,7 @@ namespace Reko.UnitTests.Core.Serialization
 			Argument_v1 sarg = new Argument_v1
             {
 			    Name = "bar",
-			    Type = new SerializedTypeReference("int"),
+			    Type = new TypeReference_v1("int"),
 			    Kind = new StackVariable_v1()
             };
 			Verify(sarg, "Core/SargWriteStackArgument.txt");
@@ -81,7 +81,7 @@ namespace Reko.UnitTests.Core.Serialization
 			Argument_v1 sarg = new Argument_v1
             {
 			    Name = "bxOut",
-			    Type = new SerializedTypeReference("int"),
+			    Type = new TypeReference_v1("int"),
 			    OutParameter = true,
 			    Kind = new Register_v1("bx")
             };
@@ -126,7 +126,11 @@ namespace Reko.UnitTests.Core.Serialization
 
 		public override void WriteEndAttribute()
 		{
-			ignore = false;
+            if (!ignore)
+            {
+                base.WriteEndAttribute();
+            }
+            ignore = false;
 		}
 	}
 }

@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -36,6 +36,7 @@ namespace Reko.UnitTests.Analysis
     public class IntraBlockDeadRegistersTests
     {
         private string testResult;
+
         private static string ToExpectedString(params string [] lines)
         {
             var stringlist = new List<string>();
@@ -44,6 +45,7 @@ namespace Reko.UnitTests.Analysis
             stringlist.Add ("");
             return String.Join (Environment.NewLine, stringlist.ToArray ());
         }
+
         private void RunTest(Action<ProcedureBuilder> m)
         {
             var builder = new ProcedureBuilder();
@@ -62,7 +64,7 @@ namespace Reko.UnitTests.Analysis
         {
             RunTest(m =>
             {
-                var a = m.Frame.EnsureRegister(new RegisterStorage("a", 0, PrimitiveType.Word32));
+                var a = m.Frame.EnsureRegister(RegisterStorage.Reg32("a", 0));
                 m.Assign(a, 2);
                 m.Assign(a, 3);
             });
@@ -77,7 +79,7 @@ namespace Reko.UnitTests.Analysis
         {
             RunTest(m =>
             {
-                var a = m.Frame.EnsureRegister(new RegisterStorage("a", 0, PrimitiveType.Word32));
+                var a = m.Frame.EnsureRegister(RegisterStorage.Reg32("a", 0));
                 m.Assign(a, 2);
                 m.Call("foo", 4);
                 m.Assign(a, 3);
@@ -96,12 +98,13 @@ namespace Reko.UnitTests.Analysis
         {
             RunTest(m =>
             {
-                var CN = m.Frame.EnsureFlagGroup(0x3, "CN", PrimitiveType.Byte);
-                var C = m.Frame.EnsureFlagGroup(0x1, "C", PrimitiveType.Bool);
-                var N = m.Frame.EnsureFlagGroup(0x2, "N", PrimitiveType.Bool);
-                var Z = m.Frame.EnsureFlagGroup(0x4, "Z", PrimitiveType.Bool);
+                var flags = new FlagRegister("flags", PrimitiveType.Word32);
+                var CN = m.Frame.EnsureFlagGroup(flags, 0x3, "CN", PrimitiveType.Byte);
+                var C = m.Frame.EnsureFlagGroup(flags, 0x1, "C", PrimitiveType.Bool);
+                var N = m.Frame.EnsureFlagGroup(flags, 0x2, "N", PrimitiveType.Bool);
+                var Z = m.Frame.EnsureFlagGroup(flags, 0x4, "Z", PrimitiveType.Bool);
                 
-                var a = m.Frame.EnsureRegister(new RegisterStorage("a", 0, PrimitiveType.Word32));
+                var a = m.Frame.EnsureRegister(RegisterStorage.Reg32("a", 0));
                 m.Assign(N, m.Cond(a));
                 m.Assign(C, m.Cond(a));
                 m.BranchIf(m.Test(ConditionCode.LE, CN), "foo");
@@ -119,11 +122,12 @@ namespace Reko.UnitTests.Analysis
         {
             RunTest(m =>
             {
-                var CN = m.Frame.EnsureFlagGroup(0x3, "CN", PrimitiveType.Byte);
-                var C = m.Frame.EnsureFlagGroup(0x1, "C", PrimitiveType.Bool);
-                var N = m.Frame.EnsureFlagGroup(0x2, "N", PrimitiveType.Bool);
-                var Z = m.Frame.EnsureFlagGroup(0x4, "Z", PrimitiveType.Bool);
-                var a = m.Frame.EnsureRegister(new RegisterStorage("a", 0, PrimitiveType.Word32));
+                var flags = new FlagRegister("flags", PrimitiveType.Word32);
+                var CN = m.Frame.EnsureFlagGroup(flags, 0x3, "CN", PrimitiveType.Byte);
+                var C = m.Frame.EnsureFlagGroup(flags, 0x1, "C", PrimitiveType.Bool);
+                var N = m.Frame.EnsureFlagGroup(flags, 0x2, "N", PrimitiveType.Bool);
+                var Z = m.Frame.EnsureFlagGroup(flags, 0x4, "Z", PrimitiveType.Bool);
+                var a = m.Frame.EnsureRegister(new RegisterStorage("a", 0, 0, PrimitiveType.Word32));
                 m.Assign(a, m.IAdd(a, 3));
                 m.Assign(N, m.Cond(a));
                 m.Assign(a, m.IAdd(a, a));
@@ -138,6 +142,24 @@ namespace Reko.UnitTests.Analysis
             );
 
             Assert.AreEqual(expected, testResult);
+        }
+
+        [Test(Description = "if a statement uses bl, then bx is live")]
+        [Category(Categories.UnitTests)]
+        public void Ibdr_PartialUse()
+        {
+            RunTest(m =>
+            {
+                var al = m.Frame.EnsureRegister(new RegisterStorage("al", 0, 0, PrimitiveType.Byte));
+                var bx = m.Frame.EnsureRegister(new RegisterStorage("bx", 3, 0, PrimitiveType.Word16));
+                var bl = m.Frame.EnsureRegister(new RegisterStorage("bl", 3, 0, PrimitiveType.Byte));
+                m.Assign(bx, m.Cast(PrimitiveType.Word16, al));
+                m.SideEffect(m.Fn("foo", bl));
+            });
+            string sExp = ToExpectedString(
+                "bx = (word16) al",
+                "foo(bl)");
+            Assert.AreEqual(sExp, testResult);
         }
     }
 }

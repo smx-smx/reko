@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,6 +24,7 @@ using Reko.Core.Types;
 using NUnit.Framework;
 using System;
 using System.IO;
+using Reko.Core.Expressions;
 
 namespace Reko.UnitTests.Core
 {
@@ -39,8 +40,10 @@ namespace Reko.UnitTests.Core
         public void SetUp()
         {
             sw = new StringWriter();
-            tyfo = new TypeFormatter(new TextFormatter(sw), false);
-            tyreffo = new TypeReferenceFormatter(new TextFormatter(sw), false);
+            var tf = new TextFormatter(sw) { Indentation = 0 };
+            tyfo = new TypeFormatter(tf, false);
+            tf = new TextFormatter(sw) { Indentation = 0 };
+            tyreffo = new TypeReferenceFormatter(tf);
         }
         
         [Test]
@@ -64,7 +67,7 @@ namespace Reko.UnitTests.Core
 		{
 			DataType dt = new Pointer(PrimitiveType.Real32, 4);
 			tyreffo.WriteDeclaration(dt, "test");
-			Assert.AreEqual("real32* test", sw.ToString());
+			Assert.AreEqual("real32 * test", sw.ToString());
 		}
 
 		[Test]
@@ -72,7 +75,7 @@ namespace Reko.UnitTests.Core
 		{
 			DataType dt = new Pointer(PrimitiveType.Real32, 4);
             tyreffo.WriteTypeReference(dt);
-			Assert.AreEqual("real32*", sw.ToString());
+			Assert.AreEqual("real32 *", sw.ToString());
 		}
 
 		[Test]
@@ -99,8 +102,8 @@ namespace Reko.UnitTests.Core
 			tyfo.Write(u, "bar");
 			Assert.AreEqual(
 @"union foo {
-	int32 u0;
-	real32 u1;
+	int32 u1;
+	real32 u0;
 } bar", 
 				sw.ToString());
 		}
@@ -139,8 +142,9 @@ struct a {
 		[Test]
 		public void TyfoFn()
 		{
-			FunctionType fn = new FunctionType(null, PrimitiveType.Int32, 
-				new DataType[] { PrimitiveType.Word32 }, null);
+			FunctionType fn = new FunctionType(
+                new Identifier("", PrimitiveType.Int32, null), 
+				new Identifier[] { new Identifier("", PrimitiveType.Word32, null) });
 			tyreffo.WriteDeclaration(fn, "fn");
 			Assert.AreEqual("int32 fn(word32)", 
 				sw.ToString());
@@ -149,8 +153,8 @@ struct a {
 		[Test]
 		public void TyfoPfn()
 		{
-			FunctionType fn = new FunctionType(null, null, 
-				new DataType[] { PrimitiveType.Word32 }, null);
+			FunctionType fn = FunctionType.Action(
+				new Identifier[] { new Identifier("", PrimitiveType.Word32, null)});
 			Pointer pfn = new Pointer(fn, 4);
 			tyreffo.WriteDeclaration(pfn, "pfn");
 			Assert.AreEqual("void (* pfn)(word32)", 
@@ -169,8 +173,10 @@ struct a {
 		[Test]
 		public void TyfoManyArgs()
 		{
-			FunctionType fn = new FunctionType(null, null, 
-				new DataType[] { PrimitiveType.Pointer32, PrimitiveType.Int64 }, null);
+            FunctionType fn = FunctionType.Action(
+                new Identifier[] {
+                    new Identifier("", PrimitiveType.Pointer32,  null),
+                    new Identifier("", PrimitiveType.Int64 , null)});
 			tyreffo.WriteDeclaration(fn, "fn");
 			Assert.AreEqual("void fn(ptr32, int64)", sw.ToString());
 		}
@@ -178,7 +184,7 @@ struct a {
         [Test]
         public void TypeReference()
         {
-            tyreffo = new TypeReferenceFormatter(new TextFormatter(sw), true);
+            tyreffo = new TypeReferenceFormatter(new TextFormatter(sw));
             EquivalenceClass b = new EquivalenceClass(new TypeVariable(1));
             b.DataType = new StructureType("b", 0) { Fields = { { 4, PrimitiveType.Word32 } } };
 
@@ -193,17 +199,17 @@ struct a {
 
             StructureType s = new StructureType("s", 0);
             s.Fields.Add(
-                42, new MemberPointer(seg, PrimitiveType.Word32, 2));
+                42,
+                new MemberPointer(seg, PrimitiveType.Word32, 2));
             tyfo.Write(s, "meeble");
             string sExp = 
 @"struct s {
-	word32 seg::*ptr002A;	// 2A
+	word32 seg::* ptr002A;	// 2A
 } meeble";
             Assert.AreEqual(sExp, sw.ToString());
         }
 
         [Test]
-        [Ignore("This test isn't working presently; focus on passing more important tests first then fix")]
         public void TyfoMemberPointerCycle()
         {
             var seg = new StructureType("seg", 100);
@@ -219,13 +225,13 @@ struct a {
             string sExp =
                 "struct b;" + nl +
                 "struct a {" + nl +
-                "\tstruct b seg::*ptr0000;\t// 0" + nl +
+                "\tstruct b seg::* ptr0000;\t// 0" + nl +
                 "};" + nl +
                 nl +
                 "struct b {" + nl +
-                "\tstruct a seg::*ptr0000;\t// 0" + nl +
-                "};" + nl;
-            
+                "\tstruct a seg::* ptr0000;\t// 0" + nl +
+                "};" + nl + nl;
+
             Assert.AreEqual(sExp, sw.ToString());
         }
 
@@ -257,8 +263,78 @@ struct a {
             var ptr2 = new Pointer(ptr, 4);
             tyreffo.WriteDeclaration(ptr2, "ppi");
 
-            string sExp = "int32** ppi";
+            string sExp = "int32 ** ppi";
             Assert.AreEqual(sExp, sw.ToString());
         }
-	}
+
+        [Test]
+        public void TyfoStructOfArray()
+        {
+            var str = new StructureType("str1", 0)
+            {
+                Fields = {
+                    { 0, new ArrayType(PrimitiveType.Char, 10) }
+                }
+            };
+            tyfo.Write(str, "meeble");
+            var sExp =
+                "struct str1 {" + nl +
+                "\tchar a0000[10];\t// 0" + nl +
+                "} meeble";
+            Assert.AreEqual(sExp, sw.ToString());
+        }
+
+        [Test]
+        public void TyfoPtrToTypeReference()
+        {
+            var typeReference = new TypeReference("testDataType", PrimitiveType.Int32);
+            var ptr = new Pointer(typeReference, 4);
+            tyfo.Write(ptr, "var");
+
+            string sExp = "testDataType * var";
+            Assert.AreEqual(sExp, sw.ToString());
+        }
+
+        [Test]
+        public void TyfoClass_Simple()
+        {
+            var ct = new ClassType();
+            ct.Name = "TestClass";
+            ct.Fields.Add(new ClassField
+            {
+                Protection = ClassProtection.Private,
+                Offset = 4,
+                Name = "m_n0004",
+                DataType = PrimitiveType.Int32
+            });
+            ct.Fields.Add(new ClassField
+            {
+                Protection = ClassProtection.Private,
+                Offset = 8,
+                Name = "m_ptr0008",
+                DataType = new Pointer(ct, 4),
+            });
+
+            ct.Methods.Add(new ClassMethod
+            {
+                Protection = ClassProtection.Public,
+                Attribute = ClassMemberAttribute.Virtual,
+                Procedure = new Procedure("do_something", null),
+                Name = "do_something",
+            });
+            tyfo.Write(ct, null);
+
+            var sExp =
+            #region Expected
+@"class TestClass {
+public:
+	do_something();
+private:
+	int32 m_n0004;	// 4
+	TestClass * m_ptr0008;	// 8
+}";
+            #endregion
+            Assert.AreEqual(sExp, sw.ToString());
+        }
+    }
 }

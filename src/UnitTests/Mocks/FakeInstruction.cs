@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,24 +29,48 @@ namespace Reko.UnitTests.Mocks
     {
         private Operation operation;
         private MachineOperand[] ops;
+        private InstructionClass iClass;
 
         public FakeInstruction(Operation operation, params MachineOperand[] ops)
         {
             this.operation = operation;
             this.ops = ops;
+            this.iClass = InstructionClass.Invalid;
         }
 
+        public FakeInstruction(InstructionClass iClass, Operation operation, params MachineOperand[] ops)
+        {
+            this.iClass = iClass;
+            this.operation = operation;
+            this.ops = ops;
+        }
+
+        public override bool IsValid { get { return operation != Operation.Invalid; } }
         public override int OpcodeAsInteger { get { return (int)operation; } }
         public Operation Operation { get { return operation; } }
         public MachineOperand[] Operands { get { return ops; } }
+        public override InstructionClass InstructionClass { get { return iClass; } }
+
+        public override MachineOperand GetOperand(int i)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void Render(MachineInstructionWriter writer)
+        {
+            writer.WriteOpcode(operation.ToString().ToLower());
+        }
     }
 
     public enum Operation
     {
+        Invalid = -1,
         Nop,
         Add,
+        Sub,
         Mul,
         Jump,
         Branch,
+        Ret,
     }
 }

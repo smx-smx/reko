@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2010 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -40,13 +40,13 @@ namespace Reko.UnitTests.Arch.Intel
         ProcedureBuilder emitter;
         X86Assembler asm;
         OperandRewriter orw;
-        List<IntelInstruction> instrs;
+        List<X86Instruction> instrs;
 
         [SetUp]
         public void Fstsw_Setup()
         {
-            arch = new IntelArchitecture(ProcessorMode.Protected32);
-            asm = new X86Assembler(arch, Address.Ptr32(0x10000), new List<EntryPoint>());
+            arch = new X86ArchitectureFlat32();
+            asm = new X86Assembler(null, new DefaultPlatform(null, new X86ArchitectureFlat32()), Address.Ptr32(0x10000), new List<ImageSymbol>());
             Procedure proc = new Procedure("test", arch.CreateFrame());
             orw = new OperandRewriter32(arch, proc.Frame, null);
             emitter = new ProcedureBuilder();
@@ -122,13 +122,10 @@ namespace Reko.UnitTests.Arch.Intel
         private FstswChainMatcher GetMatcher()
         {
             Program lr = asm.GetImage();
-            X86Disassembler dasm = new X86Disassembler(
-                lr.Image.CreateLeReader(0),
-                PrimitiveType.Word32,
-                PrimitiveType.Word32,
-                false);
-            instrs = new List<IntelInstruction>();
-            return new FstswChainMatcher(dasm.ToArray(), orw);
+            var dasm = arch.CreateDisassembler(
+                lr.SegmentMap.Segments.Values.First().MemoryArea.CreateLeReader(0));
+            instrs = new List<X86Instruction>();
+            return new FstswChainMatcher(dasm.Cast<X86Instruction>().ToArray(), orw);
         }
     }
 }

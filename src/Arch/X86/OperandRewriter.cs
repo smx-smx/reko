@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,6 +24,7 @@ using Reko.Core.Operators;
 using Reko.Core.Types;
 using Reko.Core;
 using System;
+using System.Diagnostics;
 
 namespace Reko.Arch.X86
 {
@@ -33,7 +34,7 @@ namespace Reko.Arch.X86
     /// </summary>
     public abstract class OperandRewriter
     {
-        private readonly IntelArchitecture arch;
+        protected readonly IntelArchitecture arch;
         private readonly Frame frame;
         private readonly IRewriterHost host;
 
@@ -44,7 +45,7 @@ namespace Reko.Arch.X86
             this.host = host;
         }
 
-        public Expression Transform(IntelInstruction instr, MachineOperand op, PrimitiveType opWidth, X86State state)
+        public Expression Transform(X86Instruction instr, MachineOperand op, PrimitiveType opWidth, X86State state)
         {
             var reg = op as RegisterOperand;
             if (reg != null)
@@ -74,9 +75,9 @@ namespace Reko.Arch.X86
             return frame.EnsureRegister(reg);
         }
 
-        public Identifier AluRegister(IntelRegister reg, PrimitiveType vt)
+        public Identifier AluRegister(RegisterStorage reg, PrimitiveType vt)
         {
-            return frame.EnsureRegister(reg.GetPart(vt));
+            return frame.EnsureRegister(arch.GetPart(reg, vt));
         }
 
         public Constant CreateConstant(ImmediateOperand imm, PrimitiveType dataWidth)
@@ -87,12 +88,18 @@ namespace Reko.Arch.X86
                 return Constant.Create(imm.Width, imm.Value.ToUInt32());
         }
 
-        public Expression CreateMemoryAccess(IntelInstruction instr, MemoryOperand mem, DataType dt, X86State state)
+        public Expression CreateMemoryAccess(X86Instruction instr, MemoryOperand mem, DataType dt, X86State state)
         {
+            var exg = ImportedGlobal(instr.Address, mem.Width, mem);
+            if (exg != null)
+            {
+                return new UnaryExpression(Operator.AddrOf, dt, exg);
+            }
             var exp = ImportedProcedure(instr.Address, mem.Width, mem);
             if (exp != null)
+            {
                 return new ProcedureConstant(arch.PointerType, exp);
-
+            }
             Expression expr = EffectiveAddressExpression(instr, mem, state);
             if (IsSegmentedAccessRequired ||
                 (mem.DefaultSegment != Registers.ds && mem.DefaultSegment != Registers.ss))
@@ -110,7 +117,7 @@ namespace Reko.Arch.X86
 
         public virtual bool IsSegmentedAccessRequired { get { return false; } }
 
-        public Expression CreateMemoryAccess(IntelInstruction instr, MemoryOperand memoryOperand, X86State state)
+        public Expression CreateMemoryAccess(X86Instruction instr, MemoryOperand memoryOperand, X86State state)
         {
             return CreateMemoryAccess(instr, memoryOperand, memoryOperand.Width, state);
         }
@@ -126,7 +133,7 @@ namespace Reko.Arch.X86
         /// <param name="mem"></param>
         /// <param name="state"></param>
         /// <returns></returns>
-        public Expression EffectiveAddressExpression(IntelInstruction instr, MemoryOperand mem, X86State state)
+        public Expression EffectiveAddressExpression(X86Instruction instr, MemoryOperand mem, X86State state)
         {
             Expression eIndex = null;
             Expression eBase = null;
@@ -195,7 +202,7 @@ namespace Reko.Arch.X86
 
         public Identifier FlagGroup(FlagM flags)
         {
-            return frame.EnsureFlagGroup((uint)flags, arch.GrfToString((uint)flags), PrimitiveType.Byte);
+            return frame.EnsureFlagGroup(Registers.eflags, (uint)flags, arch.GrfToString((uint)flags), PrimitiveType.Byte);
         }
 
 
@@ -209,6 +216,17 @@ namespace Reko.Arch.X86
         public Identifier FpuRegister(int reg, X86State state)
         {
             return frame.EnsureFpuStackVariable(reg - state.FpuStackItems, PrimitiveType.Real64);
+        }
+
+        public Identifier ImportedGlobal(Address addrInstruction, PrimitiveType addrWidth, MemoryOperand mem)
+        {
+            if (mem != null && addrWidth == PrimitiveType.Word32 && mem.Base == RegisterStorage.None &&
+                mem.Index == RegisterStorage.None)
+            {
+                var id = host.GetImportedGlobal(Address.Ptr32(mem.Offset.ToUInt32()), addrInstruction);
+                return id;
+            }
+            return null;
         }
 
         public ExternalProcedure ImportedProcedure(Address addrInstruction, PrimitiveType addrWidth, MemoryOperand mem)
@@ -246,7 +264,7 @@ namespace Reko.Arch.X86
 
         public override Address ImmediateAsAddress(Address address, ImmediateOperand imm)
         {
-            return Address.SegPtr(address.Selector, imm.Value.ToUInt32());
+            return this.arch.ProcessorMode.CreateSegmentedAddress(address.Selector.Value, imm.Value.ToUInt32());
         }
 
         public override MemoryAccess StackAccess(Expression expr, DataType dt)

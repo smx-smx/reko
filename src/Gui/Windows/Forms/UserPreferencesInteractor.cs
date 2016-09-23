@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -36,11 +36,10 @@ using System.Windows.Forms;
 
 namespace Reko.Gui.Windows.Forms
 {
-    class UserPreferencesInteractor
+    public class UserPreferencesInteractor
     {
         private UserPreferencesDialog dlg;
         private Program program;
-        private TreeNode curNodeWnd;
         private UiPreferencesService localSettings;
         private ServiceContainer sc;
         private Dictionary<string, string> descs;
@@ -58,15 +57,16 @@ namespace Reko.Gui.Windows.Forms
             };
 
             dlg.Load += dlg_Load;
+            dlg.FormClosed += dlg_Closed;
             dlg.WindowTree.AfterSelect += WindowTree_AfterSelect;
             dlg.WindowFontButton.Click += WindowFontButton_Click;
             dlg.WindowFgButton.Click += WindowFgButton_Click;
             dlg.WindowBgButton.Click += WindowBgButton_Click;
+            dlg.ResetButton.Click += ResetButton_Click;
 
             dlg.ImagebarList.SelectedIndexChanged += ImagebarList_SelectedIndexChanged;
             dlg.ImagebarFgButton.Click += ImagebarFgButton_Click;
             dlg.ImagebarBgButton.Click += ImagebarBgButton_Click;
-
         }
 
         void PopulateStyleTree()
@@ -80,13 +80,14 @@ namespace Reko.Gui.Windows.Forms
                 AddStyle("Opcode", UiStyles.DisassemblerOpcode, dlg.DisassemblyControl)),
             AddControl("Code Window", UiStyles.CodeWindow, dlg.CodeControl,
                 AddStyle("Keyword", UiStyles.CodeKeyword, dlg.CodeControl),
-                AddStyle("Comment", UiStyles.CodeComment, dlg.CodeControl))
-            };
+                AddStyle("Comment", UiStyles.CodeComment, dlg.CodeControl)),
+            AddStdControl("Project Browser", UiStyles.Browser, dlg.Browser),
+            AddStdControl("Lists", UiStyles.List, dlg.List),
+        };
             dlg.WindowTree.Nodes.AddRange(nodes);
             dlg.WindowTree.SelectedNode = dlg.WindowTree.Nodes[0];
             dlg.WindowTree.ExpandAll();
         }
-        
 
         private TreeNode AddControl(string text, string styleName, Control control, params TreeNode [] nodes)
         {
@@ -99,6 +100,24 @@ namespace Reko.Gui.Windows.Forms
                     Control = control,
                     EnableFont = true,
                 },
+            };
+            node.Nodes.AddRange(nodes);
+            return node;
+        }
+
+        private TreeNode AddStdControl(string text, string styleName, Control control, params TreeNode[] nodes)
+        {
+            var des = new StdUiStyleDesigner(this)
+            {
+                Style = GetStyle(styleName),
+                Control = control,
+                EnableFont = false,
+            };
+            des.ApplyStyleToControl();
+            var node = new TreeNode
+            {
+                Text = text,
+                Tag = des,
             };
             node.Nodes.AddRange(nodes);
             return node;
@@ -128,7 +147,7 @@ namespace Reko.Gui.Windows.Forms
             public bool EnableFont;
             public UiStyle Style { get; set; }
 
-            private UserPreferencesInteractor outer;
+            public UserPreferencesInteractor outer;
 
             public UiStyleDesigner(UserPreferencesInteractor outer)
             {
@@ -151,7 +170,7 @@ namespace Reko.Gui.Windows.Forms
                     : Color.Empty;
             }
 
-            public void SetForeColor(Color color)
+            public virtual void SetForeColor(Color color)
             {
                 var style = outer.localSettings.Styles[Style.Name];
                 if (style.Foreground != null)
@@ -162,7 +181,7 @@ namespace Reko.Gui.Windows.Forms
                 Control.Refresh();
             }
 
-            public void SetBackColor(Color color)
+            public virtual void SetBackColor(Color color)
             {
                 var style = outer.localSettings.Styles[Style.Name];
                 if (style.Background != null)
@@ -171,6 +190,75 @@ namespace Reko.Gui.Windows.Forms
                 }
                 style.Background = new SolidBrush(color);
                 Control.Refresh();
+            }
+
+            public virtual void SetFont(Font font)
+            {
+                var style = outer.localSettings.Styles[Style.Name];
+                if (style.Font != null)
+                {
+                    style.Font.Dispose();
+                }
+                style.Font = font;
+                Control.Refresh();
+            }
+        }
+
+        private class StdUiStyleDesigner : UiStyleDesigner
+        {
+            public StdUiStyleDesigner(UserPreferencesInteractor outer) : base(outer)
+            {
+            }
+
+            public override void SetForeColor(Color color)
+            {
+                var style = outer.localSettings.Styles[Style.Name];
+                if (style.Foreground != null)
+                {
+                    style.Foreground.Dispose();
+                }
+                style.Foreground = new SolidBrush(color);
+                Control.ForeColor = color;
+                Control.Refresh();
+            }
+
+            public override void SetBackColor(Color color)
+            {
+                var style = outer.localSettings.Styles[Style.Name];
+                if (style.Background != null)
+                {
+                    style.Background.Dispose();
+                }
+                style.Background = new SolidBrush(color);
+                Control.BackColor = color;
+                Control.Refresh();
+            }
+
+            public override void SetFont(Font font)
+            {
+                var style = outer.localSettings.Styles[Style.Name];
+                if (style.Font != null)
+                {
+                    style.Font.Dispose();
+                }
+                style.Font = font;
+                Control.Font = font;
+                Control.Refresh();
+            }
+
+            public virtual void ApplyStyleToControl()
+            {
+                if (Style != null)
+                {
+                    if (Style.Foreground != null)
+                    {
+                        Control.ForeColor = Style.Foreground.Color;
+                    }
+                    if (Style.Background != null)
+                    {
+                        Control.BackColor = Style.Background.Color;
+                    }
+                }
             }
         }
 
@@ -181,23 +269,29 @@ namespace Reko.Gui.Windows.Forms
             PopulateStyleTree();
 
             this.sc = new ServiceContainer();
-            this.localSettings = new UiPreferencesService(null, null);
-            sc.AddService(typeof(IUiPreferencesService), localSettings);
+            var cfgSvc = dlg.Services.RequireService<IConfigurationService>();
+            var settingsSvc = dlg.Services.RequireService<ISettingsService>();
+            this.localSettings = new UiPreferencesService(cfgSvc, settingsSvc);
+            sc.AddService<IUiPreferencesService>(localSettings);
             CopyStyles(uipSvc, localSettings);
 
             GenerateSimulatedProgram();
             dlg.MemoryControl.Services = sc;
-            dlg.MemoryControl.ProgramImage = program.Image;
+            dlg.MemoryControl.SegmentMap = program.SegmentMap;
             dlg.MemoryControl.ImageMap = program.ImageMap;
             dlg.MemoryControl.Architecture = program.Architecture;
+            dlg.MemoryControl.SelectedAddress = program.SegmentMap.BaseAddress;
             dlg.MemoryControl.Font = new System.Drawing.Font("Lucida Console", 9.0f);
+            dlg.DisassemblyControl.StyleClass = UiStyles.Disassembler;
             dlg.DisassemblyControl.Services = sc;
-            dlg.DisassemblyControl.Model = new DisassemblyTextModel(program);
+            dlg.DisassemblyControl.Model = new DisassemblyTextModel(program, program.SegmentMap.Segments.Values.First());
+            dlg.CodeControl.Services = sc;
             dlg.CodeControl.Model = GenerateSimulatedHllCode();
         }
 
         private void CopyStyles(IUiPreferencesService from, IUiPreferencesService to)
         {
+            to.Styles.Clear();
             foreach (var style in from.Styles.Values)
             {
                 to.Styles[style.Name] = style.Clone();
@@ -205,37 +299,86 @@ namespace Reko.Gui.Windows.Forms
         }
 
         /// <summary>
-        /// Create a simulatd program to use in the code /data display.
+        /// Create a simulated program to use in the code /data display.
         /// </summary>
         private void GenerateSimulatedProgram()
         {
             var row = Enumerable.Range(0, 0x100).Select(b => (byte)b).ToArray();
-            var image = new LoadedImage(
+            var image = new MemoryArea(
                     Address.Ptr32(0x0010000),
                     Enumerable.Repeat(
                         row,
                         40).SelectMany(r => r).ToArray());
-            var imageMap = image.CreateImageMap();
             var addrCode = Address.Ptr32(0x0010008);
             var addrData = Address.Ptr32(0x001001A);
+            var segmentMap = new SegmentMap(
+                image.BaseAddress,
+                new ImageSegment("code", image,  AccessMode.ReadWriteExecute));
+            var imageMap = segmentMap.CreateImageMap();
             imageMap.AddItemWithSize(addrCode, new ImageMapBlock { Address = addrCode, Size = 0x0E });
             imageMap.AddItemWithSize(addrData, new ImageMapItem { Address = addrData, DataType = PrimitiveType.Byte, Size = 0x0E });
             var arch = dlg.Services.RequireService<IConfigurationService>().GetArchitecture("x86-protected-32");
             this.program = new Program
             {
-                Image = image,
-                ImageMap = imageMap,
+                SegmentMap = segmentMap,
                 Architecture = arch,
+                ImageMap = imageMap,
             };
+
+            dlg.Browser.Nodes.AddRange(new[]
+            {
+                new TreeNode {
+                    Text = "Image",
+                    ImageKey = "Binary.ico",
+                    SelectedImageKey = "Binary.ico",
+                    Nodes =
+                    {
+                        new TreeNode
+                        {
+                            Text = ".text",
+                            ImageKey = "RxSection.ico",
+                            SelectedImageKey = "RxSection.ico",
+                            Nodes =
+                            {
+                                new TreeNode
+                                {
+                                    Text = "fn0040000",
+                                    ImageKey = "EntryProcedure.ico",
+                                    SelectedImageKey = "EntryProcedure.ico",
+                                },
+                                new TreeNode
+                                {
+                                    Text = "myFunc",
+                                    ImageKey = "Usercode.ico",
+                                    SelectedImageKey = "Usercode.ico",
+                                },
+                                new TreeNode
+                                {
+                                    Text = "fn0040200",
+                                    ImageKey = "Cde.ico",
+                                    SelectedImageKey = "Code.ico",
+                                },
+                            }
+                        }
+                    }
+                },
+            });
+            dlg.Browser.ExpandAll();
+
+            dlg.List.Items.AddRange(new ListViewItem[]
+            {
+                new ListViewItem(new string[] { "foo.exe", "00400000", "Code"}),
+                new ListViewItem(new string[] { "foo.exe", "00400210", "Code"}),
+                new ListViewItem(new string[] { "foo.exe", "00400800", "Data"}),
+            });
         }
 
         private TextViewModel GenerateSimulatedHllCode()
         {
             var code = new List<AbsynStatement>();
             var ase = new Structure.AbsynStatementEmitter(code);
-            var m = new ExpressionEmitter();
-            var a_id = new Identifier("a", null, null);
-            var sum_id = new Identifier("sum", null, null);
+            var a_id = new Identifier("a", PrimitiveType.Int32, null);
+            var sum_id = new Identifier("sum", PrimitiveType.Int32, null);
             ase.EmitAssign(a_id, Constant.Int32(10));
             ase.EmitAssign(sum_id, Constant.Int32(0));
 
@@ -262,7 +405,6 @@ namespace Reko.Gui.Windows.Forms
         {
             var desc = descs[(string)dlg.ImagebarList.SelectedItem];
         }
-
 
         private UiStyleDesigner GetSelectedDesigner()
         {
@@ -292,8 +434,16 @@ namespace Reko.Gui.Windows.Forms
             dlg.FontPicker.Font = dlg.MemoryControl.Font;
             if (dlg.FontPicker.ShowDialog(dlg) == DialogResult.OK)
             {
-                dlg.MemoryControl.Font = dlg.FontPicker.Font;
+                GetSelectedDesigner().SetFont(dlg.FontPicker.Font);
             }
+        }
+
+        void ResetButton_Click(object sender, EventArgs e)
+        {
+            var des = GetSelectedDesigner();
+            var name = des.Style.Name;
+            localSettings.ResetStyle(name);
+            des.Control.Refresh();
         }
 
         void WindowTree_AfterSelect(object sender, TreeViewEventArgs e)
@@ -303,12 +453,17 @@ namespace Reko.Gui.Windows.Forms
             if (node.Parent != null)
                 nodeWnd = node.Parent;
 
-            if (nodeWnd != curNodeWnd)
-            {
-                var designer = (UiStyleDesigner)nodeWnd.Tag;
-                dlg.WindowFontButton.Enabled = designer.EnableFont;
-                designer.Control.BringToFront();
-            }
+            var designer = (UiStyleDesigner)nodeWnd.Tag;
+            dlg.WindowFontButton.Enabled = designer.EnableFont;
+            dlg.ResetButton.Enabled = designer.EnableFont;
+            designer.Control.BringToFront();
+        }
+
+        private void dlg_Closed(object sender, FormClosedEventArgs e)
+        {
+            if (dlg.DialogResult != DialogResult.OK)
+                return;
+            CopyStyles(localSettings, uipSvc);
         }
     }
 }

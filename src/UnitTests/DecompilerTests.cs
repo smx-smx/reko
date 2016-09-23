@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,8 +21,10 @@
 using NUnit.Framework;
 using Reko.Arch.X86;
 using Reko.Core;
+using Reko.Core.Configuration;
 using Reko.Core.Serialization;
 using Reko.Core.Services;
+using Reko.Core.Types;
 using Reko.Environments.Msdos;
 using Reko.UnitTests.Mocks;
 using Rhino.Mocks;
@@ -39,51 +41,41 @@ namespace Reko.UnitTests
         MockRepository mr;
         ILoader loader;
         TestDecompiler decompiler;
+        private ServiceContainer sc;
+        private IFileSystemService fsSvc;
 
         [SetUp]
         public void Setup()
         {
             mr = new MockRepository();
-            var config = new FakeDecompilerConfiguration();
+            fsSvc = mr.Stub<IFileSystemService>();
+            var cfgSvc = mr.Stub<IConfigurationService>();
+            var tlSvc = mr.Stub<ITypeLibraryLoaderService>();
             var host = new FakeDecompilerHost();
-            var sp = new ServiceContainer();
+            sc = new ServiceContainer();
             loader = mr.StrictMock<ILoader>();
-            sp.AddService(typeof(DecompilerEventListener), new FakeDecompilerEventListener());
+            sc.AddService<DecompilerEventListener>(new FakeDecompilerEventListener());
+            sc.AddService<IFileSystemService>(new FileSystemServiceImpl());
+            sc.AddService<DecompilerHost>(host);
+            sc.AddService<IConfigurationService>(cfgSvc);
+            sc.AddService<ITypeLibraryLoaderService>(tlSvc);
             loader.Replay();
-            decompiler = new TestDecompiler(loader, host, sp);
+            decompiler = new TestDecompiler(loader, sc);
             loader.BackToRecord();
-        }
-
-        [Test]
-        public void Dec_LoadProjectFileNoBom()
-        {
-            byte [] bytes = new byte[1000];
-            loader.Stub(l => l.LoadImageBytes("test.dcproject", 0))
-                .Return(new UTF8Encoding(false).GetBytes("<?xml version=\"1.0\" encoding=\"UTF-8\"?><project xmlns=\"http://schemata.jklnet.org/Decompiler\">" +
-                    "<input><filename>foo.bar</filename></input></project>"));
-            loader.Stub(l => l.LoadImageBytes("foo.bar", 0)).Return(bytes);
-            loader.Stub(l => l.LoadExecutable(null, null, null)).IgnoreArguments().Return(new Program());
-            mr.ReplayAll();
-
-            decompiler.Load("test.dcproject");
-
-            Assert.AreEqual("foo.bar", decompiler.Project.Programs[0].Filename);
-            mr.VerifyAll();
         }
 
         [Test]
         public void Dec_LoadCallSignatures()
         {
-            var arch = new IntelArchitecture(ProcessorMode.Real);
+            var arch = new X86ArchitectureReal();
             Program program = new Program { 
                 Architecture = arch,
-                Platform = new MsdosPlatform(null, arch)
+                Platform = new MsdosPlatform(sc, arch)
             };
             decompiler.Project = new Project
             {
                 Programs = { program },
             };
-            List<SerializedCall_v1> al = new List<SerializedCall_v1>();
             SerializedSignature sig = new SerializedSignature();
             sig.Arguments = new Argument_v1[] {
 			    new Argument_v1 {
@@ -93,18 +85,20 @@ namespace Reko.UnitTests
 			        Kind = new Register_v1("bx"),
                 }
             };
-            al.Add(new SerializedCall_v1(Address.SegPtr(0x0C32, 0x3200), sig));
+            var al = new List<SerializedCall_v1> {
+                new SerializedCall_v1(Address.SegPtr(0x0C32, 0x3200), sig)
+            };
             var sigs = decompiler.LoadCallSignatures(program, al);
 
-            ProcedureSignature ps = sigs[Address.SegPtr(0x0C32, 0x3200)];
+            FunctionType ps = sigs[Address.SegPtr(0x0C32, 0x3200)];
             Assert.IsNotNull(ps, "Expected a call signature for address");
         }
     }
 
     public class TestDecompiler : DecompilerDriver
     {
-        public TestDecompiler(ILoader loader, DecompilerHost host, IServiceProvider sp)
-            : base(loader, host, sp)
+        public TestDecompiler(ILoader loader, IServiceProvider sp)
+            : base(loader, sp)
         {
         }
     }

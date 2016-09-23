@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -46,7 +46,7 @@ namespace Reko.UnitTests.Arch.PowerPC
                 (rb << 11) |
                 (xo << 1) |
                 rc;
-            LoadedImage img = new LoadedImage(Address.Ptr32(0x00100000), new byte[4]);
+            MemoryArea img = new MemoryArea(Address.Ptr32(0x00100000), new byte[4]);
             img.WriteBeUInt32(0, w);
             return Disassemble(img);
         }
@@ -789,6 +789,13 @@ namespace Reko.UnitTests.Arch.PowerPC
         public void PPCDis_mtfsf()
         {
             AssertCode(0xfdfe058e, "mtfsf\tFF,f0");
+        }
+
+        [Test]
+        public void PPCDis_regression5()
+        {
+            AssertCode(0x7D2E4AEE, "lhaux\tr9,r14,r9");
+            AssertCode(0x7D0301D4, "addme\tr8,r3");
         }
     }
 }

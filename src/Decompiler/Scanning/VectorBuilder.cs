@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,9 +22,11 @@ using Reko.Core;
 using Reko.Core.Expressions;
 using Reko.Core.Lib;
 using Reko.Core.Machine;
+using Reko.Core.Services;
 using Reko.Core.Types;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 
 namespace Reko.Scanning
@@ -35,18 +37,19 @@ namespace Reko.Scanning
     /// </summary>
     public class VectorBuilder : IBackWalkHost
     {
-        private IScanner scanner;
+        private IServiceProvider services;
         private Program program;
-        private int cbTable;
         private Backwalker bw;
         private DirectedGraphImpl<object> jumpGraph;        //$TODO:
 
-        public VectorBuilder(IScanner scanner, Program program, DirectedGraphImpl<object> jumpGraph)
+        public VectorBuilder(IServiceProvider services, Program program, DirectedGraphImpl<object> jumpGraph)
         {
-            this.scanner = scanner;
+            this.services = services;
             this.program = program;
             this.jumpGraph = jumpGraph;
         }
+
+        public int TableByteSize { get; private set; }
 
         public List<Address> Build(Address addrTable, Address addrFrom, ProcessorState state)
         {
@@ -80,14 +83,22 @@ namespace Reko.Scanning
             if (limit == 0)
                 return PostError("Unable to determine limit", addrFrom, bw.VectorAddress);
 
-            return BuildTable(bw.VectorAddress, limit, permutation, bw.Stride, state);
+            return BuildTable(
+                bw.VectorAddress, 
+                limit, 
+                permutation,
+                (bw.Stride == 1 || bw.Stride == 0) && bw.JumpSize > 1 
+                    ? bw.JumpSize 
+                    : bw.Stride,
+                state);
         }
 
         private int[] BuildMapping(BackwalkDereference deref, int limit)
         {
             int[] map = new int[limit];
             var addrTableStart = Address.Ptr32((uint)deref.TableOffset); //$BUG: breaks on 64- and 16-bit platforms.
-            
+            if (!program.SegmentMap.IsValidAddress(addrTableStart))
+                return new int[0];      //$DEBUG: look into this case.
             var rdr = program.CreateImageReader(addrTableStart);
             for (int i = 0; i < limit; ++i)
             {
@@ -104,10 +115,16 @@ namespace Reko.Scanning
         /// <param name="permutation">If not null, a permutation of the items in the table</param>
         /// <param name="stride">The size of the individual addresses in the table.</param>
         /// <param name="state">Current processor state.</param>
-        /// <returns></returns>
-        private List<Address> BuildTable(Address addrTable, int limit, int[] permutation, int stride, ProcessorState state)
+        /// <returns>The target addresses reached by the vector</returns>
+        public List<Address> BuildTable(
+            Address addrTable,
+            int limit, 
+            int[] permutation,
+            int stride,
+            ProcessorState state)
         {
             List<Address> vector = new List<Address>();
+
             if (permutation != null)
             {
                 int cbEntry = stride;
@@ -116,30 +133,41 @@ namespace Reko.Scanning
                 {
                     if (permutation[i] > iMax)
                         iMax = permutation[i];
-                    var entryAddr = (uint) (addrTable-program.Image.BaseAddress) + (uint)(permutation[i] * cbEntry);
-                    var addr = Address.Ptr32(program.Image.ReadLeUInt32(entryAddr));                     //$BUG: will fail on 64-bit arch.
+                    var entryAddr = addrTable + (uint)(permutation[i] * cbEntry);
+                    var addr = program.Architecture.ReadCodeAddress(0, program.CreateImageReader(entryAddr), state);
                     vector.Add(addr);    
                 }
             }
             else
             {
-                ImageReader rdr = scanner.CreateReader(addrTable);
-                int cItems = limit / (int)stride;
-                var image = program.Image;
+                ImageReader rdr = program.CreateImageReader(addrTable);
+                int cItems = limit / stride;
+                var segmentMap = program.SegmentMap;
                 var arch = program.Architecture;
                 for (int i = 0; i < cItems; ++i)
                 {
                     var entryAddr = program.Architecture.ReadCodeAddress(stride, rdr, state);
-                    if (!image.IsValidAddress(entryAddr))
+                    if (!segmentMap.IsValidAddress(entryAddr))
                     {
-                        scanner.Warn(addrTable, "The call or jump table has invalid addresses; stopping.");
+                        if (services != null)
+                        {
+                            var diagSvc = services.RequireService<DecompilerEventListener>();
+                            diagSvc.Warn(
+                                diagSvc.CreateAddressNavigator(program, addrTable),
+                                "The call or jump table has invalid addresses; stopping.");
+                        }
                         break;
                     }
                     vector.Add(entryAddr);
                 }
-                cbTable = limit;
+                TableByteSize = limit;
             }
             return vector;
+        }
+
+        public RegisterStorage GetSubregister(RegisterStorage reg, int offset, int width)
+        {
+            throw new NotImplementedException();
         }
 
         public Block GetSinglePredecessor(Block block)
@@ -181,6 +209,11 @@ namespace Reko.Scanning
             return program.Platform.MakeAddressFromConstant(c);
         }
 
+        public Address MakeSegmentedAddress(Constant seg, Constant off)
+        {
+            return program.Architecture.MakeSegmentedAddress(seg, off);
+        }
+
         public RegisterStorage IndexRegister
         {
             get { return bw != null ? bw.Index: RegisterStorage.None; }
@@ -188,18 +221,13 @@ namespace Reko.Scanning
 
         private List<Address> PostError(string err, Address addrInstr, Address addrTable)
         {
-            System.Diagnostics.Trace.WriteLine(string.Format("Instruction at {0}, table at {1}: {2}", addrInstr, addrTable, err));
+            Debug.WriteLine(string.Format("Instruction at {0}, table at {1}: {2}", addrInstr, addrTable, err));
             return new List<Address>();
-        }
-
-        public int TableByteSize
-        {
-            get { return cbTable; }
         }
 
         public bool IsValidAddress(Address addr)
         {
-            return program.Image.IsValidAddress(addr);
+            return program.SegmentMap.IsValidAddress(addr);
         }
     }
 }

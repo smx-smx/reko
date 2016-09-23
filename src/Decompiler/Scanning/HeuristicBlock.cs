@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@
 #endregion
 
 using Reko.Core;
+using Reko.Core.Machine;
 using Reko.Core.Rtl;
 using System;
 using System.Collections.Generic;
@@ -29,26 +30,31 @@ namespace Reko.Scanning
 {
     public class HeuristicBlock
     {
-        //private static int cntr = 0; 
-
         public HeuristicBlock(Address address, string name)
         {
             this.Address = address;
             this.Name = name; // +"-" + (++cntr);
-            this.Statements = new List<RtlInstructionCluster>();
+            this.Instructions = new List<MachineInstruction>();
+            this.IsValid = true;
         }
 
         public Address Address { get; private set; }
         public string Name { get; private set; }
-        public List<RtlInstructionCluster> Statements { get; private set; }
+        public List<MachineInstruction> Instructions { get; private set; }
+        public bool IsValid { get; set; }
 
         public Address GetEndAddress()
         {
-            int iLast = Statements.Count - 1;
+            int iLast = Instructions.Count - 1;
             if (iLast < 0)
                 return Address;
-            var instr = Statements[iLast];
+            var instr = Instructions[iLast];
             return instr.Address + instr.Length;
+        }
+
+        public override string ToString()
+        {
+            return string.Format("block({0})", Address);
         }
     }
 }

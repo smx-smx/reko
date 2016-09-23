@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,8 +28,8 @@ using System.IO;
 namespace Reko.Core.Types
 {
     /// <summary>
-    /// Stores, for a particular program, all type variables, equivalence classes, and their mappings to
-    /// each other.
+    /// Stores, for a particular program, all type variables, equivalence 
+    /// classes, and their mappings to each other.
     /// </summary>
     public interface ITypeStore
     {
@@ -45,7 +45,6 @@ namespace Reko.Core.Types
     {
         private SortedList<int, EquivalenceClass> usedClasses;
         private Dictionary<TypeVariable, Expression> tvSources;
-        private DataTypeComparer tycomp = new DataTypeComparer();
 
         public TypeStore()
         {
@@ -111,9 +110,13 @@ namespace Reko.Core.Types
                 EquivalenceClass c = tv.Class;
                 DataType dtOld = c.DataType;
                 if (dtOld != null)
+                {
                     dt = u.Unify(dt, dtOld);
+                }
                 else if (dt != null)
+                {
                     dt = dt.Clone();        // why clone???
+                }
                 c.DataType = dt;
             }
         }
@@ -248,6 +251,20 @@ namespace Reko.Core.Types
         {
             expr.TypeVariable.DataType = dt;
             expr.TypeVariable.OriginalDataType = dt;
+        }
+
+        public void Clear()
+        {
+            foreach(var e in tvSources.Values)
+            {
+                e.TypeVariable = null;
+                ProcedureConstant pc = e as ProcedureConstant;
+                if (pc != null && pc.Procedure.Signature != null)
+                    pc.Procedure.Signature.TypeVariable = null;
+            }
+            TypeVariables.Clear();
+            usedClasses.Clear();
+            tvSources.Clear();
         }
     }
 }

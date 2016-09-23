@@ -16,12 +16,12 @@ void Fn()
 Fn_entry:
 	// succ:  l1
 l1:
-	a = globals->a123456;
-	a[i].dw0000 = 0x0000002A;
+	a = globals->a123456
+	a[i].dw0000 = 0x0000002A
 Fn_exit:
 
 // Equivalence classes ////////////
-Eq_1: (struct "Eq_1" (123456 (arr Eq_9) a123456))
+Eq_1: (struct "Globals" (123456 (arr Eq_9) a123456))
 	globals_t (in globals : (ptr (struct "Globals")))
 Eq_9: (struct "Eq_9" 0008 (0 word32 dw0000))
 	T_9
@@ -29,12 +29,12 @@ Eq_9: (struct "Eq_9" 0008 (0 word32 dw0000))
 globals_t: (in globals : (ptr (struct "Globals")))
   Class: Eq_1
   DataType: (ptr Eq_1)
-  OrigDataType: (ptr (struct))
+  OrigDataType: (ptr (struct "Globals"))
 T_2: (in 0x00123456 : word32)
   Class: Eq_2
   DataType: (ptr (arr Eq_9))
   OrigDataType: word32
-T_3: (in a : word32)
+T_3: (in a : (arr Eq_9))
   Class: Eq_2
   DataType: (ptr (arr Eq_9))
   OrigDataType: (ptr (struct (0 (arr T_9) a0000)))

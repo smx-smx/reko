@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,9 +31,10 @@ using System.Linq;
 namespace Reko.Analysis
 {
     /// <summary>
-    /// Builds the alias graph for a procedure. The idea is to discover relationships like
-    /// (on the x86 architecture) eax <=> ax, eax <=> ah, etc. Similarly, relationships 
-    /// like the one between the sequence edx:eax and dh are discovered.
+    /// Builds the alias graph for a procedure. The idea is to discover
+    /// relationships like(on the x86 architecture) eax <=> ax, eax <=> ah, 
+    /// etc. Similarly, relationships like the one between the sequence
+    /// edx:eax and dh are discovered.
     /// </summary>
 	public class Aliases : InstructionVisitorBase
 	{
@@ -80,7 +81,7 @@ namespace Reko.Analysis
 			}
 		}
 
-		/// We've encountered a variable that is defined. We must generate an
+		// We've encountered a variable that is defined. We must generate an
 		// alias statement for all aliased variables.
 		private void Def(Identifier idar)
 		{
@@ -104,10 +105,14 @@ namespace Reko.Analysis
 				text.Write(":");
 				id.Storage.Write(text);
 				text.Write(" (aliases:", id);
-				foreach (var a in aliases[id])
-				{
-					text.Write(" {0}", a.Name);
-				}
+                List<Identifier> aa;
+                if (aliases.TryGetValue(id, out aa))
+                {
+                    foreach (var a in aliases[id])
+                    {
+                        text.Write(" {0}", a.Name);
+                    }
+                }
 				text.WriteLine(")");
 			}
 		}
@@ -218,13 +223,16 @@ namespace Reko.Analysis
 				// We are replacing a part of a wider register with a narrower one.
 
 				SequenceStorage seq = varTo.Storage as SequenceStorage;
-				if (seq != null && (seq.Head == varFrom || seq.Tail == varFrom))
+				if (seq != null && (seq.Head == varFrom.Storage || seq.Tail == varFrom.Storage))
 				{
-					aliasExpr = new MkSequence(varTo.DataType, seq.Head, seq.Tail);
+					aliasExpr = new MkSequence(
+                        varTo.DataType,
+                        proc.Frame.EnsureIdentifier(seq.Head), 
+                        proc.Frame.EnsureIdentifier(seq.Tail));
 				}
 				else
 				{
-					aliasExpr = new DepositBits(varTo, varFrom, offsetTo, cbitsFrom);
+					aliasExpr = new DepositBits(varTo, varFrom, offsetTo);
 				}
 			}		
 			else if (cbitsFrom > cbitsTo)
@@ -274,15 +282,14 @@ namespace Reko.Analysis
 		}
 	}
 
-
     public class AliasDeadVariableMarker : StorageVisitor<Storage>
     {
         private Identifier idCur;
-        private BitSet liveRegs;
+        private HashSet<RegisterStorage> liveRegs;
         private uint liveGrf;
         private HashSet<Identifier> liveVars;
 
-        public AliasDeadVariableMarker(BitSet regs, uint grfLive)
+        public AliasDeadVariableMarker(HashSet<RegisterStorage> regs, uint grfLive)
         {
             this.liveRegs = regs;
             this.liveGrf = grfLive;
@@ -332,6 +339,11 @@ namespace Reko.Analysis
             return null;
         }
 
+        public Storage VisitFlagRegister(FlagRegister freg)
+        {
+            return null;
+        }
+
         public Storage VisitTemporaryStorage(TemporaryStorage temp)
         {
             return null;
@@ -354,7 +366,7 @@ namespace Reko.Analysis
 
         public Storage VisitRegisterStorage(RegisterStorage reg)
         {
-            if (liveRegs[reg.Number])
+            if (liveRegs.Contains(reg))
                 liveVars.Add(idCur);
             else 
                 liveVars.Remove(idCur);

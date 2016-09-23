@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -63,6 +63,7 @@ namespace Reko.Arch.M68k
             {
                 di = dasm.Current;
                 ric = new RtlInstructionCluster(di.Address, di.Length);
+                ric.Class = RtlClass.Linear;
                 emitter = new RtlEmitter(ric.Instructions);
                 orw = new OperandRewriter(arch, this.emitter, this.frame, di.dataWidth);
                 switch (di.code)
@@ -100,6 +101,7 @@ VS Overflow Set 1001 V
                 case Opcode.bmi: RewriteBcc(ConditionCode.LT, FlagM.NF); break;
                 case Opcode.bne: RewriteBcc(ConditionCode.NE, FlagM.ZF); break;
                 case Opcode.bpl: RewriteBcc(ConditionCode.GT, FlagM.NF); break;
+                case Opcode.bvs: RewriteBcc(ConditionCode.OV, FlagM.VF); break;
                 case Opcode.bchg: RewriteBchg(); break;
                 case Opcode.bra: RewriteBra(); break;
                 case Opcode.bset: RewriteBclrBset("__bset"); break;
@@ -109,10 +111,14 @@ VS Overflow Set 1001 V
                 case Opcode.cmp: RewriteCmp(); break;
                 case Opcode.cmpa: RewriteCmp(); break;
                 case Opcode.cmpi: RewriteCmp(); break;
+                case Opcode.cmpm: RewriteCmp(); break;
+                case Opcode.dbeq: RewriteDbcc(ConditionCode.EQ, FlagM.ZF); break;
                 case Opcode.dble: RewriteDbcc(ConditionCode.GT, FlagM.NF | FlagM.VF | FlagM.ZF); break;
                 case Opcode.dbhi: RewriteDbcc(ConditionCode.ULE, FlagM.CF | FlagM.ZF); break;
+                case Opcode.dbne: RewriteDbcc(ConditionCode.NE, FlagM.ZF); break;
                 case Opcode.dbra: RewriteDbcc(ConditionCode.None, 0); break;
-                case Opcode.divu: RewriteDiv(Operator.UDiv); break;
+                case Opcode.divs: RewriteDiv(emitter.SDiv, PrimitiveType.Int16); break;
+                case Opcode.divu: RewriteDiv(emitter.UDiv, PrimitiveType.UInt16); break;
                 case Opcode.eor: RewriteLogical((s, d) => emitter.Xor(d, s)); break;
                 case Opcode.eori: RewriteLogical((s, d) => emitter.Xor(d, s)); break;
                 case Opcode.exg: RewriteExg(); break;
@@ -133,7 +139,7 @@ VS Overflow Set 1001 V
                 case Opcode.mulu: RewriteMul((s, d) => emitter.UMul(d, s)); break;
                 case Opcode.neg: RewriteUnary(s => emitter.Neg(s), AllConditions); break;
                 case Opcode.negx: RewriteUnary(RewriteNegx, AllConditions); break;
-                case Opcode.nop: continue;
+                case Opcode.nop: emitter.Nop(); break;
                 case Opcode.not: RewriteUnary(s => emitter.Comp(s), LogicalConditions); break;
                 case Opcode.or: RewriteLogical((s, d) => emitter.Or(d, s)); break;
                 case Opcode.ori: RewriteLogical((s, d) => emitter.Or(d, s)); break;
@@ -142,7 +148,7 @@ VS Overflow Set 1001 V
                 case Opcode.ror: RewriteRotation(PseudoProcedure.Ror);  break;
                 case Opcode.roxl: RewriteRotationX(PseudoProcedure.RolC);  break;
                 case Opcode.roxr: RewriteRotationX(PseudoProcedure.RorC);  break;
-                case Opcode.rts: emitter.Return(4, 0); break;
+                case Opcode.rts: RewriteRts(); break;
                 case Opcode.scc: RewriteScc(ConditionCode.UGE, FlagM.CF); break;
                 case Opcode.scs: RewriteScc(ConditionCode.ULT, FlagM.CF); break;
                 case Opcode.seq: RewriteScc(ConditionCode.EQ, FlagM.ZF); break;
@@ -161,7 +167,7 @@ VS Overflow Set 1001 V
                 case Opcode.suba: RewriteArithmetic((s, d) => emitter.ISub(d, s)); break;
                 case Opcode.subi: RewriteArithmetic((s, d) => emitter.ISub(d, s)); break;
                 case Opcode.subq: RewriteAddSubq((s, d) => emitter.ISub(d, s)); break;
-                case Opcode.subx: RewriteArithmetic((s, d) => emitter.ISub(emitter.ISub(d, s), frame.EnsureFlagGroup((uint)FlagM.XF, "X", PrimitiveType.Bool))); break;
+                case Opcode.subx: RewriteArithmetic((s, d) => emitter.ISub(emitter.ISub(d, s), frame.EnsureFlagGroup(Registers.ccr, (uint)FlagM.XF, "X", PrimitiveType.Bool))); break;
                 case Opcode.swap: RewriteSwap(); break;
                 case Opcode.tst: RewriteTst(); break;
                 case Opcode.unlk: RewriteUnlk(); break;
@@ -181,23 +187,10 @@ VS Overflow Set 1001 V
             return GetEnumerator();
         }
 
-        //$REVIEW: push PseudoProc into the RewriterHost interface"
-        public Expression PseudoProc(string name, DataType retType, params Expression[] args)
+        private RegisterStorage GetRegister(MachineOperand op)
         {
-            var ppp = host.EnsurePseudoProcedure(name, retType, args.Length);
-            return PseudoProc(ppp, retType, args);
-        }
-
-        public Expression PseudoProc(PseudoProcedure ppp, DataType retType, params Expression[] args)
-        {
-            if (args.Length != ppp.Arity)
-                throw new ArgumentOutOfRangeException(
-                    string.Format("Pseudoprocedure {0} expected {1} arguments, but was passed {2}.",
-                    ppp.Name,
-                    ppp.Arity,
-                    args.Length));
-
-            return emitter.Fn(new ProcedureConstant(arch.PointerType, ppp), retType, args);
+            var rOp = op as RegisterOperand;
+            return rOp != null ? rOp.Register : null;
         }
     }
 }

@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,8 +30,8 @@ namespace Reko.Typing
 	/// <summary>
 	/// Transform certain expressions to equivalents, to simplify type inference.
 	/// Locates array expressions and converts them to array access expressions. 
-	/// This simplifies work for later stages of the type inference, when we want to identify
-	/// array accesses quickly.
+	/// This simplifies work for later stages of the type inference, when we want
+    /// to identify array accesses quickly.
 	/// </summary>
 	public class ExpressionNormalizer : InstructionTransformer
 	{
@@ -78,15 +78,13 @@ namespace Reko.Typing
                 }
                 return aem.Transform(null, access.DataType);
             }
-            else if (access.EffectiveAddress is Identifier)
-            {
-                access.EffectiveAddress = AddZeroToEffectiveAddress(access.EffectiveAddress);
+            BinaryExpression bin;
+            if (access.EffectiveAddress.As(out bin) && bin.Operator == Operator.IAdd)
                 return access;
-            }
-            else
-            {
+            if (access.EffectiveAddress is Constant)
                 return access;
-            }
+            access.EffectiveAddress = AddZeroToEffectiveAddress(access.EffectiveAddress);
+            return access;
         }
 
         public override Expression VisitSegmentedAccess(SegmentedAccess access)
@@ -96,15 +94,13 @@ namespace Reko.Typing
             {
                 return aem.Transform(access.BasePointer, access.DataType);
             }
-            else if (access.EffectiveAddress is Identifier)
-            {
-                access.EffectiveAddress = AddZeroToEffectiveAddress(access.EffectiveAddress);
+            BinaryExpression bin;
+            if (access.EffectiveAddress.As(out bin) && bin.Operator == Operator.IAdd)
                 return access;
-            }
-            else
-            {
+            if (access.EffectiveAddress is Constant)
                 return access;
-            }
+            access.EffectiveAddress = AddZeroToEffectiveAddress(access.EffectiveAddress);
+                return access;
         }
 
 		public void Transform(Program prog)

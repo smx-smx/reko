@@ -1,6 +1,6 @@
 #region License
 /* 
-* Copyright (C) 1999-2015 John Källén.
+* Copyright (C) 1999-2016 John Källén.
 *
 * This program is free software; you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -37,18 +37,12 @@ namespace Reko.Gui.Windows.Forms
 
 	public class AnalyzedPageInteractorImpl : PhasePageInteractorImpl, IAnalyzedPageInteractor
 	{
-        private IDecompilerService decompilerSvc;
-        private ICodeViewerService codeViewerSvc;
-        private ILowLevelViewService memViewerSvc;
         private IDisassemblyViewService disasmViewerSvc;
         private IProjectBrowserService projectSvc;
         private bool canAdvance;
 
 		public AnalyzedPageInteractorImpl(IServiceProvider services) : base(services)
 		{
-            decompilerSvc = services.RequireService<IDecompilerService>();
-            codeViewerSvc = services.RequireService<ICodeViewerService>();
-            memViewerSvc = services.RequireService<ILowLevelViewService>();
             disasmViewerSvc = services.RequireService<IDisassemblyViewService>();
             projectSvc = services.RequireService<IProjectBrowserService>();
 
@@ -71,35 +65,9 @@ namespace Reko.Gui.Windows.Forms
             projectSvc.Reload();
         }
 
-
 		public override bool LeavePage()
 		{
 			return true;
-        }
-
-        private void EditSignature()
-        {
-            throw new NotImplementedException();
-            //$TODO: need "current program"
-            Platform platform = null;
-            var ser = platform.CreateProcedureSerializer(new TypeLibraryLoader(platform, true), "stdapi");
-            var proc = ser.Serialize(SelectedProcedureEntry.Value, SelectedProcedureEntry.Key);
-            var i = new ProcedureDialogInteractor(platform.Architecture, proc);
-            using (ProcedureDialog dlg = i.CreateDialog())
-            {
-                if (DialogResult.OK == UIService.ShowModalDialog(dlg))
-                {
-                    //$REVIEW: Need to pass InputFile into the SelectedProcedureEntry piece.
-                    var program =  Decompiler.Project.Programs[0]; 
-                    program.UserProcedures[SelectedProcedureEntry.Key] =
-                        i.SerializedProcedure;
-                    ser = platform.CreateProcedureSerializer(new TypeLibraryLoader(platform, true), "stdapi");
-                    SelectedProcedureEntry.Value.Signature =
-                        ser.Deserialize(i.SerializedProcedure.Signature, SelectedProcedureEntry.Value.Frame);
-
-                    canAdvance = false;
-                }
-            }
         }
 
         public KeyValuePair<Address, Procedure> SelectedProcedureEntry
@@ -117,10 +85,9 @@ namespace Reko.Gui.Windows.Forms
             {
                 switch (cmdId.ID)
                 {
-                case CmdIds.ActionEditSignature:
-                    status.Status = MenuStatus.Visible;
-                    if (SelectedProcedureEntry.Key != null)
-                        status.Status |= MenuStatus.Enabled;
+                case CmdIds.ActionNextPhase:
+                    status.Status = MenuStatus.Visible | MenuStatus.Enabled;
+                    text.Text = Resources.ReconstructDataTypes;
                     return true;
                 }
             }
@@ -131,12 +98,6 @@ namespace Reko.Gui.Windows.Forms
         {
             if (cmdId.Guid == CmdSets.GuidReko)
             {
-                switch (cmdId.ID)
-                {
-                case CmdIds.ActionEditSignature:
-                    EditSignature();
-                    return true;
-                }
             }
             return base.Execute(cmdId);
         }

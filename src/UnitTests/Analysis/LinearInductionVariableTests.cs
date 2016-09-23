@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -62,7 +62,12 @@ namespace Reko.UnitTests.Analysis
             m.Label("b3");
             m.Return();
             this.dom = m.Procedure.CreateBlockDominatorGraph();
-            var ssa = new SsaTransform(new ProgramDataFlow(), m.Procedure, dom);
+            var ssa = new SsaTransform(
+                new ProgramDataFlow(),
+                m.Procedure,
+                null, 
+                dom,
+                new HashSet<RegisterStorage>());
 
             /*
             
@@ -291,11 +296,10 @@ namespace Reko.UnitTests.Analysis
                 m.Store(m.Word32(0x4232), id);
                 m.Return(id);
             });
-            proc.Dump(true);
             var liv = new LinearInductionVariableFinder(proc, ssaIds, doms);
             liv.Find();
 			var iv = liv.InductionVariables[0];
-			Assert.AreEqual("(9 -1 -1 signed)", iv.ToString());
+			Assert.AreEqual("(0x00000009 -1 0xFFFFFFFF signed)", iv.ToString());
 		}
 
 		[Test]
@@ -333,20 +337,25 @@ namespace Reko.UnitTests.Analysis
 		{
 			this.proc = proc;
             doms = proc.CreateBlockDominatorGraph();
-			SsaTransform sst = new SsaTransform(new ProgramDataFlow(), proc, doms);
+			SsaTransform sst = new SsaTransform(
+                new ProgramDataFlow(),
+                proc,
+                null,
+                doms,
+                new HashSet<RegisterStorage>());
 			SsaState ssa = sst.SsaState;
 			ssaIds = ssa.Identifiers;
 
-			var cce = new ConditionCodeEliminator(ssaIds, new DefaultPlatform(null,new FakeArchitecture()));
+            var arch = new FakeArchitecture();
+            var cce = new ConditionCodeEliminator(ssa, new DefaultPlatform(null, arch));
 			cce.Transform();
 
 			DeadCode.Eliminate(proc, ssa);
 
-			var vp = new ValuePropagator(ssa.Identifiers, proc);
+			var vp = new ValuePropagator(arch, ssa);
 			vp.Transform();
 
 			DeadCode.Eliminate(proc, ssa);
-            proc.Dump(true); //$DEBUG
 		}
 
         private void Prepare(Action<ProcedureBuilder> m)

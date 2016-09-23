@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,11 +25,13 @@ using Reko.Core.Rtl;
 using Reko.Core.Machine;
 using System;
 using System.Collections.Generic;
+using Reko.Core.Types;
 
 namespace Reko.Core
 {
     /// <summary>
-    /// ProcessorState simulates the state of the processor and a part of the stack during scanning.
+    /// ProcessorState simulates the state of the processor and a part of the
+    /// stack during scanning.
     /// </summary>
     public abstract class ProcessorState : EvaluationContext
     {
@@ -62,7 +64,7 @@ namespace Reko.Core
         public abstract void SetInstructionPointer(Address addr);
 
         public abstract void OnProcedureEntered();                 // Some registers need to be updated when a procedure is entered.
-        public abstract void OnProcedureLeft(ProcedureSignature procedureSignature);
+        public abstract void OnProcedureLeft(FunctionType procedureSignature);
 
         /// <summary>
         /// Captures the the processor's state before calling a procedure.
@@ -77,7 +79,7 @@ namespace Reko.Core
         /// specified signature.
         /// </summary>
         /// <param name="sigCallee">The signature of the called procedure.</param>
-        public abstract void OnAfterCall(Identifier stackReg, ProcedureSignature sigCallee, ExpressionVisitor<Expression> eval);
+        public abstract void OnAfterCall(FunctionType sigCallee);
 
         private bool IsStackRegister(Expression ea)
         {
@@ -167,6 +169,11 @@ namespace Reko.Core
         public Expression GetDefiningExpression(Identifier id)
         {
             return null;
+        }
+
+        public Expression MakeSegmentedAddress(Constant seg, Constant off)
+        {
+            return Architecture.MakeSegmentedAddress(seg, off);
         }
 
         public void RemoveIdentifierUse(Identifier id)

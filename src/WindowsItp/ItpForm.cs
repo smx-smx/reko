@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,10 +19,12 @@
 #endregion
 
 using Reko.Arch.X86;
+using Reko.Core;
 using Reko.Core.Assemblers;
 using Reko.Core.Configuration;
-using Reko.Environments.Win32;
+using Reko.Environments.Windows;
 using Reko.Gui;
+using Reko.Gui.Windows.Controls;
 using Reko.Gui.Windows.Forms;
 using Reko.ImageLoaders.MzExe;
 using Reko.ImageLoaders.OdbgScript;
@@ -31,12 +33,15 @@ using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel.Design;
 using System.IO;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace Reko.WindowsItp
 {
     public partial class ItpForm : Form
     {
+        private ProcedurePropertiesDialog procDlg;
+
         public ItpForm()
         {
             InitializeComponent();
@@ -108,6 +113,11 @@ namespace Reko.WindowsItp
             public void Save()
             {
             }
+
+            public void Delete(string name)
+            {
+                throw new NotImplementedException();
+            }
         }
 
         private void treeViewToolStripMenuItem_Click(object sender, EventArgs e)
@@ -157,208 +167,6 @@ namespace Reko.WindowsItp
             }
         }
 
-        private class FakeSettingsService : ISettingsService
-        {
-            public object Get(string settingName, object defaultValue)
-            {
-                return defaultValue;
-            }
-
-            public string[] GetList(string settingName)
-            {
-                throw new NotImplementedException();
-            }
-
-            public void SetList(string name, IEnumerable<string> values)
-            {
-                throw new NotImplementedException();
-            }
-
-            public void Set(string name, object value)
-            {
-                throw new NotImplementedException();
-            }
-
-            public void Load()
-            {
-                throw new NotImplementedException();
-            }
-
-            public void Save()
-            {
-                throw new NotImplementedException();
-            }
-        }
-
-        private class FakeUiPreferencesService : IUiPreferencesService
-        {
-            public event EventHandler UiPreferencesChanged;
-
-            public FakeUiPreferencesService()
-            {
-                this.Styles = new Dictionary<string, Gui.UiStyle>();
-
-            }
-            public IDictionary<string,Gui.UiStyle> Styles { get; private set; }
-
-            public System.Drawing.Font DisassemblerFont
-            {
-                get
-                {
-                    throw new NotImplementedException();
-                }
-                set
-                {
-                    throw new NotImplementedException();
-                }
-            }
-
-            public System.Drawing.Font SourceCodeFont
-            {
-                get
-                {
-                    throw new NotImplementedException();
-                }
-                set
-                {
-                    throw new NotImplementedException();
-                }
-            }
-
-            public System.Drawing.Color SourceCodeForegroundColor
-            {
-                get
-                {
-                    throw new NotImplementedException();
-                }
-                set
-                {
-                    throw new NotImplementedException();
-                }
-            }
-
-            public System.Drawing.Color SourceCodeBackgroundColor
-            {
-                get
-                {
-                    throw new NotImplementedException();
-                }
-                set
-                {
-                    throw new NotImplementedException();
-                }
-            }
-
-            public System.Drawing.Size WindowSize
-            {
-                get
-                {
-                    throw new NotImplementedException();
-                }
-                set
-                {
-                    throw new NotImplementedException();
-                }
-            }
-
-            public FormWindowState WindowState
-            {
-                get
-                {
-                    throw new NotImplementedException();
-                }
-                set
-                {
-                    throw new NotImplementedException();
-                }
-            }
-
-            public void Load()
-            {
-                throw new NotImplementedException();
-            }
-
-            public void Save()
-            {
-                throw new NotImplementedException();
-            }
-        }
-
-        private class FakeConfigurationService : IConfigurationService
-        {
-            public ICollection GetImageLoaders()
-            {
-                throw new NotImplementedException();
-            }
-
-            public System.Collections.ICollection GetArchitectures()
-            {
-                throw new NotImplementedException();
-            }
-
-            public System.Collections.ICollection GetEnvironments()
-            {
-                throw new NotImplementedException();
-            }
-
-            public ICollection GetRawFiles()
-            {
-                throw new NotImplementedException();
-            }
-
-            public OperatingEnvironment GetEnvironment(string envName)
-            {
-                throw new NotImplementedException();
-            }
-
-            public Core.IProcessorArchitecture GetArchitecture(string archLabel)
-            {
-                return new X86ArchitectureFlat32();
-            }
-
-            public System.Collections.ICollection GetSignatureFiles()
-            {
-                throw new NotImplementedException();
-            }
-
-            public ICollection GetAssemblers()
-            {
-                throw new NotImplementedException();
-            }
-
-            public Assembler GetAssembler(string assemblerName)
-            {
-                throw new NotImplementedException();
-            }
-
-            public RawFileElement GetRawFile(string rawFileFormat)
-            {
-                throw new NotImplementedException();
-            }
-
-            public string GetPath(string path)
-            {
-                throw new NotImplementedException();
-            }
-
-            public IEnumerable<Core.Configuration.UiStyle> GetDefaultPreferences()
-            {
-                return new Core.Configuration.UiStyle[] {
-                    new UiStyleElement { Name = UiStyles.MemoryWindow, FontName="Lucida Console, 9pt"},
-                    new UiStyleElement { Name = UiStyles.MemoryCode, ForeColor = "#000000", BackColor="#FFC0C0", },
-                    new UiStyleElement { Name = UiStyles.MemoryHeuristic, ForeColor = "#000000", BackColor="#FFE0E0"},
-                    new UiStyleElement { Name = UiStyles.MemoryData, ForeColor="#000000", BackColor="#C0C0FF" },
-                               
-                    new UiStyleElement { Name = UiStyles.Disassembler,  FontName="Lucida Console, 9pt" },
-                    new UiStyleElement { Name = UiStyles.DisassemblerOpcode, ForeColor = "#801010" },
-                               
-                    new UiStyleElement { Name = UiStyles.CodeWindow, FontName = "Lucida Console, 9pt"},
-                    new UiStyleElement { Name = UiStyles.CodeKeyword, ForeColor="#00C0C0" },
-                    new UiStyleElement { Name = UiStyles.CodeComment, ForeColor="#00C000" },
-                };
-            }
-        }
-
         private void emulatorToolStripMenuItem_Click(object sender, EventArgs e)
         {
             var sc = new ServiceContainer();
@@ -371,8 +179,8 @@ namespace Reko.WindowsItp
             var addr = peLdr.PreferredBaseAddress;
             var program = peLdr.Load(addr);
             var rr = peLdr.Relocate(program, addr);
-            var win32 = new Win32Emulator(program.Image, program.Platform, program.ImportReferences);
-            var emu = new X86Emulator((IntelArchitecture) program.Architecture, program.Image, win32);
+            var win32 = new Win32Emulator(program.SegmentMap, program.Platform, program.ImportReferences);
+            var emu = new X86Emulator((IntelArchitecture) program.Architecture, program.SegmentMap, win32);
             emu.InstructionPointer = rr.EntryPoints[0].Address;
             emu.ExceptionRaised += delegate { throw new Exception(); };
             emu.WriteRegister(Registers.esp, (uint) peLdr.PreferredBaseAddress.ToLinear() + 0x0FFC);
@@ -399,6 +207,59 @@ namespace Reko.WindowsItp
             var dlg = new AssumedRegisterValuesDialog();
             dlg.Architecture = new X86ArchitectureFlat64();
             dlg.ShowDialog(this);
+        }
+
+        private void textViewToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var dlg = new TextViewDialog();
+            dlg.ShowDialog(this);
+        }
+
+        private void controlsToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void codeViewToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            throw new NotImplementedException();
+        }
+
+        private void byteMapViewToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            byte[] buf = GenerateImageData();
+            var mem = new MemoryArea(Address.Ptr32(0x0040000), buf);
+            var dlg = new ByteMapDialog();
+            var ctrl = new ByteMapView();
+            dlg.Controls.Add(ctrl);
+            ctrl.Dock = DockStyle.Fill;
+            ctrl.SegmentMap = new SegmentMap(Address.Ptr32(0x0040000),
+                new ImageSegment("foo", mem, AccessMode.ReadWriteExecute));
+            dlg.ShowDialog();
+        }
+
+        private byte[] GenerateImageData()
+        {
+#if RANDOM
+            var rnd = new Random();
+            var buf = new byte[0x4000];
+            rnd.NextBytes(buf);
+            return buf;
+#else
+            return Enumerable.Range(0, 4000)
+                .Select(n => (byte)n)
+                .ToArray();
+#endif
+        }
+
+        private void procedureToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (this.procDlg == null)
+            {
+                this.procDlg = new ProcedurePropertiesDialog();
+                this.procDlg.FormClosed += delegate { this.procDlg = null; };
+            }
+            this.procDlg.Show();
         }
     }
 }

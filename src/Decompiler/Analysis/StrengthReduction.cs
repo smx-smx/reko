@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,11 +30,13 @@ using System.Text;
 namespace Reko.Analysis
 {
     /// <summary>
-    /// If an induction variable i is being used in an addition with a constant (i + c) and it
-    /// initially is assigned a constant value i = Q, this class simplifies the variable so that 
-    /// the initial assigment becomes i = (Q + c) and the induction variable is simply used as i.
-    /// This overcomes problems in hand-coded assembly programs where the programmer has been thinking
-    /// in offsets rather than straightforward pointers.
+    /// If an induction variable i is being used in an addition with a
+    /// constant (i + c) and it initially is assigned a constant value
+    /// i = Q, this class simplifies the variable so that the initial
+    /// assigment becomes i = (Q + c) and the induction variable is
+    /// simply used as i. This overcomes problems in hand-coded assembly
+    /// programs where the programmer has been thinking in offsets rather
+    /// than straightforward pointers.
     /// </summary>
     public class StrengthReduction
     {

@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,6 +23,7 @@ using Reko.Core.Code;
 using Reko.Core.Lib;
 using Reko.Core.Output;
 using Reko.Core.Serialization;
+using Reko.Core.Types;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -45,7 +46,7 @@ namespace Reko.Core
             this.blocks = new List<Block>();
             this.ControlGraph = new BlockGraph(blocks);
 			this.Frame = frame;
-			this.Signature = new ProcedureSignature();
+			this.Signature = new FunctionType();
             this.EntryBlock = AddBlock(Name + "_entry");
 			this.ExitBlock = AddBlock(Name + "_exit");
 		}
@@ -76,14 +77,14 @@ namespace Reko.Core
 		{
 			if (name == null)
 			{
-				name = addr.GenerateName("fn", "");
+				name = GenerateName(addr);     //$TODO: should be a user option, move out of here.
 			}
 			return new Procedure(name, f);
 		}
 
 		public static Procedure Create(Address addr, Frame f)
 		{
-			return new Procedure(addr.GenerateName("fn", ""), f);
+			return new Procedure(GenerateName(addr), f);
 		}
 
         [Conditional("DEBUG")]
@@ -100,6 +101,11 @@ namespace Reko.Core
         public BlockDominatorGraph CreateBlockDominatorGraph()
         {
             return new BlockDominatorGraph(new BlockGraph(blocks), EntryBlock);
+        }
+
+        public static string GenerateName(Address addr)
+        {
+            return addr.GenerateName("fn", "");
         }
 
         /// <summary>
@@ -128,6 +134,20 @@ namespace Reko.Core
         }
 
         /// <summary>
+        /// If the procedure is a member of a class, write the class name first.
+        /// </summary>
+        /// <returns></returns>
+        public string QualifiedName()
+        {
+            if (EnclosingType == null)
+                return Name;
+            var str = EnclosingType as StructType_v1;
+            if (str != null)
+                return string.Format("{0}::{1}", str.Name, Name);
+            return Name;
+        }
+
+        /// <summary>
         /// Writes the blocks sorted by address ascending.
         /// </summary>
         /// <param name="emitFrame"></param>
@@ -139,11 +159,11 @@ namespace Reko.Core
 
 		public void Write(bool emitFrame, bool showEdges, TextWriter writer)
         {
-			writer.WriteLine("// {0}", Name);
+			writer.WriteLine("// {0}", QualifiedName());
             writer.WriteLine("// Return size: {0}", this.Signature.ReturnAddressOnStack);
 			if (emitFrame)
 				Frame.Write(writer);
-            Signature.Emit(Name, ProcedureSignature.EmitFlags.None, new TextFormatter(writer));
+            Signature.Emit(QualifiedName(), FunctionType.EmitFlags.None, new TextFormatter(writer));
 			writer.WriteLine();
             var formatter = new CodeFormatter(new TextFormatter(writer));
             new ProcedureFormatter(this, new BlockDecorator { ShowEdges = showEdges }, formatter).WriteProcedureBlocks();
@@ -155,7 +175,7 @@ namespace Reko.Core
             if (emitFrame)
                 Frame.Write(writer);
             var formatter = new TextFormatter(writer);
-            Signature.Emit(Name, ProcedureSignature.EmitFlags.None, new TextFormatter(writer));
+            Signature.Emit(Name, FunctionType.EmitFlags.None, new TextFormatter(writer));
             writer.WriteLine();
             var codeFormatter = new CodeFormatter(formatter);
             new ProcedureFormatter(this, decorator, codeFormatter).WriteProcedureBlocks();
@@ -185,7 +205,7 @@ namespace Reko.Core
 		/// <summary>
 		/// The effects of this procedure on registers, stack, and FPU stack.
 		/// </summary>
-		public override ProcedureSignature Signature { get; set; }
+		public override FunctionType Signature { get; set; }
 
         /// <summary>
         /// True if the user specified this procedure by adding it to the project
@@ -206,6 +226,7 @@ namespace Reko.Core
             blocks.Add(block);
             return block;
         }
+
 
         public void AddBlock(Block block)
         {

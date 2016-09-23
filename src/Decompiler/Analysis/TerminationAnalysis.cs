@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
+using Reko.Core.Services;
 
 namespace Reko.Analysis
 {
@@ -33,10 +34,12 @@ namespace Reko.Analysis
     {
         private Block curBlock;
         private ProgramDataFlow flow;
+        private DecompilerEventListener eventListener;
 
-        public TerminationAnalysis(ProgramDataFlow flow)
+        public TerminationAnalysis(ProgramDataFlow flow, DecompilerEventListener eventListener)
         {
             this.flow = flow;
+            this.eventListener = eventListener;
         }
 
         public void Analyze(Block b)
@@ -117,6 +120,8 @@ namespace Reko.Analysis
             var gr = new ProcedureGraph(program);
             foreach (var proc in new DfsIterator<Procedure>(gr).PostOrder())
             {
+                if (this.eventListener.IsCanceled())
+                    break;
                 Analyze(proc);
             }
         }

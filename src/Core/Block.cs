@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -35,7 +35,7 @@ namespace Reko.Core
 		public Block(Procedure proc, string name)
 		{
             if (string.IsNullOrEmpty(name))
-                throw new ArgumentException("Blocks must have a valid name.", "name"); 
+                throw new ArgumentException("Blocks must have a valid name.", "name");
 			this.Procedure = proc;
 			this.Name = name;
 			this.Statements = new StatementList(this);
@@ -45,7 +45,8 @@ namespace Reko.Core
 		}
 
         /// <summary>
-        /// The starting address of the Block. Blocks are _not_ guaranteed to have a starting address. 
+        /// The starting address of the Block. Blocks are _not_ guaranteed 
+        /// to have a starting address. 
         /// </summary>
         public Address Address { get; set; }
         public string Name { get; private set; }
@@ -82,7 +83,17 @@ namespace Reko.Core
 			next.Succ.Clear();
 		}
 
-		public static bool ReplaceJumpsFrom(Block block, Block next)
+        /// <summary>
+        /// Generates the name for a block stating at address <paramref name="addr"/>.
+        /// </summary>
+        /// <param name="addr"></param>
+        /// <returns>The name as a string.</returns>
+        public static string GenerateName(Address addr)
+        {
+            return addr.GenerateName("l", "");
+        }
+
+        public static bool ReplaceJumpsFrom(Block block, Block next)
 		{
 			bool change = false;
 			foreach (Block s in block.Succ)
@@ -118,14 +129,17 @@ namespace Reko.Core
 						change = true;
 					}
 				}
-				if (!next.Pred.Contains(p))
-				{
-					next.Pred.Add(p);
-					change = true;
-				}
-			}
-			next.Pred.Remove(block);
-			block.Pred.Clear();
+                for (int ip = 0; ip < next.Pred.Count; ++ip)
+                {
+                    if (next.Pred[ip] == block)
+                    {
+                        next.Pred[ip] = p;
+                        change = true;
+                        break; // replace only one.
+                    }
+                }
+            }
+            block.Pred.Clear();
 			return change;
 		}
 

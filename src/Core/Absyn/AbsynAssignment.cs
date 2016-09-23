@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -36,12 +36,18 @@ namespace Reko.Core.Absyn
 			this.Src = src;
 		}
 
-		public override void Accept(IAbsynVisitor visitor)
-		{
-			visitor.VisitAssignment(this);
-		}
-
-		public Expression Dst  {get; private set; }
+		public Expression Dst { get; private set; }
 		public Expression Src { get; private set; }
+
+
+        public override void Accept(IAbsynVisitor visitor)
+        {
+            visitor.VisitAssignment(this);
+        }
+
+        public override T Accept<T>(IAbsynVisitor<T> visitor)
+        {
+            return visitor.VisitAssignment(this);
+        }
 	}
 }

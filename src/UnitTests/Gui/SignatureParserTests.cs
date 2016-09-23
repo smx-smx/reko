@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -35,7 +35,7 @@ namespace Reko.UnitTests.Gui
     class SignatureParserTests
     {
         private SignatureParser sp;
-        private IntelArchitecture arch = new IntelArchitecture(ProcessorMode.Protected32);
+        private IntelArchitecture arch = new X86ArchitectureFlat32();
 
         [SetUp]
         public void Setup()

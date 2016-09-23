@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@
 #endregion
 
 using NUnit.Framework;
+using Reko.Core;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -26,6 +27,10 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Xml;
+using Reko.Core.Expressions;
+using Reko.Core.Machine;
+using Reko.Core.Rtl;
+using Reko.Core.Types;
 
 #if DEBUG
 namespace Reko.Tools.C2Xml.UnitTests
@@ -33,6 +38,119 @@ namespace Reko.Tools.C2Xml.UnitTests
     [TestFixture]
     public class XmlConverterTests
     {
+        public class FakeArchitecture : ProcessorArchitecture
+        {
+            public FakeArchitecture()
+            {
+                base.PointerType = PrimitiveType.Pointer32;
+            }
+
+            public override IEnumerable<MachineInstruction> CreateDisassembler(ImageReader imageReader)
+            {
+                throw new NotImplementedException();
+            }
+
+            public override ImageReader CreateImageReader(MemoryArea img, ulong off)
+            {
+                throw new NotImplementedException();
+            }
+
+            public override ImageReader CreateImageReader(MemoryArea image, Address addrBegin, Address addrEnd)
+            {
+                throw new NotImplementedException();
+            }
+
+            public override ImageReader CreateImageReader(MemoryArea img, Address addr)
+            {
+                throw new NotImplementedException();
+            }
+
+            public override ImageWriter CreateImageWriter()
+            {
+                throw new NotImplementedException();
+            }
+
+            public override ImageWriter CreateImageWriter(MemoryArea img, Address addr)
+            {
+                throw new NotImplementedException();
+            }
+
+            public override IEqualityComparer<MachineInstruction> CreateInstructionComparer(Normalize norm)
+            {
+                throw new NotImplementedException();
+            }
+
+            public override IEnumerable<Address> CreatePointerScanner(SegmentMap map, ImageReader rdr, IEnumerable<Address> knownAddresses, PointerScannerFlags flags)
+            {
+                throw new NotImplementedException();
+            }
+
+            public override ProcessorState CreateProcessorState()
+            {
+                throw new NotImplementedException();
+            }
+
+            public override IEnumerable<RtlInstructionCluster> CreateRewriter(ImageReader rdr, ProcessorState state, Frame frame, IRewriterHost host)
+            {
+                throw new NotImplementedException();
+            }
+
+            public override Expression CreateStackAccess(Frame frame, int cbOffset, DataType dataType)
+            {
+                throw new NotImplementedException();
+            }
+
+            public override FlagGroupStorage GetFlagGroup(string name)
+            {
+                throw new NotImplementedException();
+            }
+
+            public override FlagGroupStorage GetFlagGroup(uint grf)
+            {
+                throw new NotImplementedException();
+            }
+
+            public override RegisterStorage GetRegister(string name)
+            {
+                throw new NotImplementedException();
+            }
+
+            public override RegisterStorage GetRegister(int i)
+            {
+                throw new NotImplementedException();
+            }
+
+            public override RegisterStorage[] GetRegisters()
+            {
+                throw new NotImplementedException();
+            }
+
+            public override string GrfToString(uint grf)
+            {
+                throw new NotImplementedException();
+            }
+
+            public override Address MakeAddressFromConstant(Constant c)
+            {
+                throw new NotImplementedException();
+            }
+
+            public override Address ReadCodeAddress(int size, ImageReader rdr, ProcessorState state)
+            {
+                throw new NotImplementedException();
+            }
+
+            public override bool TryGetRegister(string name, out RegisterStorage reg)
+            {
+                throw new NotImplementedException();
+            }
+
+            public override bool TryParseAddress(string txtAddr, out Address addr)
+            {
+                throw new NotImplementedException();
+            }
+        }
+
         void RunTest(string c_code, string expectedXml)
         {
             StringReader reader = null;
@@ -45,7 +163,9 @@ namespace Reko.Tools.C2Xml.UnitTests
                 {
                     Formatting = Formatting.Indented
                 };
-                var xc = new XmlConverter(reader, xWriter);
+                var arch = new FakeArchitecture();
+                var platform = new DefaultPlatform(null, arch);
+                var xc = new XmlConverter(reader, xWriter, platform);
                 xc.Convert();
                 writer.Flush();
                 Assert.AreEqual(expectedXml, writer.ToString());
@@ -108,7 +228,7 @@ namespace Reko.Tools.C2Xml.UnitTests
   <Types>
     <struct name=""link"">
       <field offset=""0"" name=""next"">
-        <ptr>
+        <ptr size=""4"">
           <struct name=""link"" />
         </ptr>
       </field>
@@ -131,7 +251,7 @@ namespace Reko.Tools.C2Xml.UnitTests
         <type>size_t</type>
       </return>
       <arg>
-        <ptr>
+        <ptr size=""4"">
           <prim domain=""Character"" size=""1"" />
         </ptr>
       </arg>
@@ -208,7 +328,7 @@ namespace Reko.Tools.C2Xml.UnitTests
         <prim domain=""SignedInt"" size=""4"" />
       </return>
       <arg name=""pfoo"">
-        <ptr>
+        <ptr size=""4"">
           <type>FOO</type>
         </ptr>
       </arg>
@@ -233,7 +353,7 @@ namespace Reko.Tools.C2Xml.UnitTests
         <prim domain=""SignedInt"" size=""4"" />
       </alt>
       <alt name=""s"">
-        <ptr>
+        <ptr size=""4"">
           <prim domain=""Character"" size=""1"" />
         </ptr>
       </alt>
@@ -424,7 +544,7 @@ namespace Reko.Tools.C2Xml.UnitTests
         <prim domain=""SignedInt"" size=""4"" />
       </arg>
       <arg name=""foo"">
-        <ptr>
+        <ptr size=""4"">
           <prim domain=""Character"" size=""1"" />
         </ptr>
       </arg>
@@ -448,7 +568,7 @@ namespace Reko.Tools.C2Xml.UnitTests
       <enum name=""_foo"" />
     </typedef>
     <typedef name=""PFoo"">
-      <ptr>
+      <ptr size=""4"">
         <enum name=""_foo"" />
       </ptr>
     </typedef>
@@ -470,7 +590,7 @@ namespace Reko.Tools.C2Xml.UnitTests
       <enum name=""enum_0"" />
     </typedef>
     <typedef name=""PFoo"">
-      <ptr>
+      <ptr size=""4"">
         <enum name=""enum_0"" />
       </ptr>
     </typedef>
@@ -494,7 +614,7 @@ namespace Reko.Tools.C2Xml.UnitTests
       <struct name=""struct_0"" />
     </typedef>
     <typedef name=""PFoo"">
-      <ptr>
+      <ptr size=""4"">
         <struct name=""struct_0"" />
       </ptr>
     </typedef>
@@ -510,7 +630,7 @@ namespace Reko.Tools.C2Xml.UnitTests
 <library xmlns=""http://schemata.jklnet.org/Decompiler"">
   <Types>
     <typedef name=""HANDLE"">
-      <ptr>
+      <ptr size=""4"">
         <void />
       </ptr>
     </typedef>
@@ -551,7 +671,7 @@ namespace Reko.Tools.C2Xml.UnitTests
         <type>SHORT</type>
       </arg>
       <arg name=""outp"">
-        <ptr>
+        <ptr size=""4"">
           <type>SHORT</type>
         </ptr>
       </arg>
@@ -596,7 +716,7 @@ namespace Reko.Tools.C2Xml.UnitTests
 <library xmlns=""http://schemata.jklnet.org/Decompiler"">
   <Types>
     <typedef name=""PRTL_RUN_ONCE_INIT_FN"">
-      <ptr>
+      <ptr size=""4"">
         <fn>
           <return>
             <prim domain=""SignedInt"" size=""4"" />
@@ -711,7 +831,7 @@ namespace Reko.Tools.C2Xml.UnitTests
         <prim domain=""SignedInt"" size=""4"" />
       </return>
       <arg name=""pfoo"">
-        <ptr>
+        <ptr size=""4"">
           <struct name=""foo"" />
         </ptr>
       </arg>
@@ -735,7 +855,7 @@ namespace Reko.Tools.C2Xml.UnitTests
         <prim domain=""SignedInt"" size=""4"" />
       </return>
       <arg name=""main"">
-        <ptr>
+        <ptr size=""4"">
           <fn>
             <return>
               <prim domain=""SignedInt"" size=""4"" />
@@ -744,15 +864,15 @@ namespace Reko.Tools.C2Xml.UnitTests
               <prim domain=""SignedInt"" size=""4"" />
             </arg>
             <arg>
-              <ptr>
-                <ptr>
+              <ptr size=""4"">
+                <ptr size=""4"">
                   <prim domain=""Character"" size=""1"" />
                 </ptr>
               </ptr>
             </arg>
             <arg>
-              <ptr>
-                <ptr>
+              <ptr size=""4"">
+                <ptr size=""4"">
                   <prim domain=""Character"" size=""1"" />
                 </ptr>
               </ptr>
@@ -764,14 +884,14 @@ namespace Reko.Tools.C2Xml.UnitTests
         <prim domain=""SignedInt"" size=""4"" />
       </arg>
       <arg name=""ubp_av"">
-        <ptr>
-          <ptr>
+        <ptr size=""4"">
+          <ptr size=""4"">
             <prim domain=""Character"" size=""1"" />
           </ptr>
         </ptr>
       </arg>
       <arg name=""init"">
-        <ptr>
+        <ptr size=""4"">
           <fn>
             <return>
               <void />
@@ -780,7 +900,7 @@ namespace Reko.Tools.C2Xml.UnitTests
         </ptr>
       </arg>
       <arg name=""fini"">
-        <ptr>
+        <ptr size=""4"">
           <fn>
             <return>
               <void />
@@ -789,7 +909,7 @@ namespace Reko.Tools.C2Xml.UnitTests
         </ptr>
       </arg>
       <arg name=""rtld_fini"">
-        <ptr>
+        <ptr size=""4"">
           <fn>
             <return>
               <void />
@@ -798,7 +918,7 @@ namespace Reko.Tools.C2Xml.UnitTests
         </ptr>
       </arg>
       <arg name=""stack_end"">
-        <ptr>
+        <ptr size=""4"">
           <void />
         </ptr>
       </arg>
@@ -806,6 +926,66 @@ namespace Reko.Tools.C2Xml.UnitTests
   </procedure>
 </library>";
             RunTest(cCode, sExp);
+        }
+
+        [Test]
+        public void C2X_Parameter_Attribute()
+        {
+            var sExp = @"<?xml version=""1.0"" encoding=""utf-16""?>
+<library xmlns=""http://schemata.jklnet.org/Decompiler"">
+  <Types />
+  <procedure name=""foo"">
+    <signature>
+      <return>
+        <void />
+      </return>
+      <arg name=""parm"">
+        <prim domain=""SignedInt"" size=""4"" />
+        <reg>D0</reg>
+      </arg>
+    </signature>
+  </procedure>
+</library>";
+            RunTest(
+                "void foo([[reko::arg(register,\"D0\")]]int parm);",
+                sExp);
+
+        }
+
+        [Test]
+        public void C2X_Return_Attribute()
+        {
+            var sExp = @"<?xml version=""1.0"" encoding=""utf-16""?>
+<library xmlns=""http://schemata.jklnet.org/Decompiler"">
+  <Types />
+  <procedure name=""foo"">
+    <signature>
+      <return>
+        <prim domain=""Character"" size=""1"" />
+        <reg>D0</reg>
+      </return>
+    </signature>
+  </procedure>
+</library>";
+            RunTest(
+                "[[reko::returns(register,\"D0\")]] char foo();",
+                sExp);
+        }
+
+        [Test]
+        public void C2X_NearPtr()
+        {
+            var sExp = @"<?xml version=""1.0"" encoding=""utf-16""?>
+<library xmlns=""http://schemata.jklnet.org/Decompiler"">
+  <Types>
+    <typedef name=""PVOID"">
+      <ptr size=""2"">
+        <void />
+      </ptr>
+    </typedef>
+  </Types>
+</library>";
+            RunTest("typedef void _near * PVOID;", sExp);
         }
     }
 }

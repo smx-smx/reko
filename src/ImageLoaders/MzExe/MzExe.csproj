@@ -29,8 +29,10 @@
     <IsWebBootstrapper>false</IsWebBootstrapper>
     <UseApplicationTrust>false</UseApplicationTrust>
     <BootstrapperEnabled>true</BootstrapperEnabled>
-    <UseMSBuildEngine>False</UseMSBuildEngine>
+    <UseMSBuildEngine>True</UseMSBuildEngine>
     <TargetFrameworkProfile />
+    <ProductVersion>12.0.0</ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -52,6 +54,16 @@
     <WarningLevel>4</WarningLevel>
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'TravisRelease|AnyCPU'">
+    <OutputPath>bin\TravisRelease\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <Optimize>true</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Core" />
@@ -63,7 +75,14 @@
     <Compile Include="ExePackLoader.cs" />
     <Compile Include="LzExeUnpacker.cs" />
     <Compile Include="MsdosImageLoader.cs" />
+    <Compile Include="NeImageLoader.cs" />
     <Compile Include="PeImageLoader.cs" />
+    <Compile Include="Pe\ResourceLoader.cs" />
+    <Compile Include="Pe\ArmRelocator.cs" />
+    <Compile Include="Pe\i386Relocator.cs" />
+    <Compile Include="Pe\MipsRelocator.cs" />
+    <Compile Include="Pe\Relocator.cs" />
+    <Compile Include="Pe\x86_64Relocator.cs" />
     <Compile Include="PkLiteUnpacker.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
@@ -83,9 +102,9 @@
       <Project>{A943CF9B-7FCD-413A-B6D9-A199A69AF217}</Project>
       <Name>Msdos</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\Environments\Win32\Win32.csproj">
+    <ProjectReference Include="..\..\Environments\Windows\Windows.csproj">
       <Project>{4A298321-9855-43DE-AA9C-79E4EFA0AE56}</Project>
-      <Name>Win32</Name>
+      <Name>Windows</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

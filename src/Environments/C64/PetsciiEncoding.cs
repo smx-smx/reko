@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -301,8 +301,8 @@ namespace Reko.Environments.C64
 0xFE	0xF137	#BLACK SMALL SQUARE UPPER LEFT (CUS)
 0xFF	0x03C0	#GREEK SMALL LETTER PI
 
-     Shifted - Shifted -
-    0x00		#UNDEFINED
+Shifted - Shifted -
+0x00		#UNDEFINED
 0x01		#UNDEFINED
 0x02		#UNDEFINED
 0x03		#UNDEFINED

@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,6 +28,7 @@ using System.Text;
 using System.Drawing;
 using System.Windows.Forms;
 using System.Globalization;
+using Reko.Gui.Controls;
 
 namespace Reko.Gui
 {
@@ -38,7 +39,12 @@ namespace Reko.Gui
         public SolidBrush Foreground { get; set; }
         public SolidBrush Background { get; set; }
         public Cursor Cursor { get; set; }
+        public string TextAlign { get; set; }
         public int? Width { get; set; } // If set, the width is fixed at a certain size.
+        public float PaddingTop { get; set; }
+        public float PaddingLeft { get; set; }
+        public float PaddingBottom { get; set; }
+        public float PaddingRight { get; set; }
 
         public UiStyle Clone()
         {
@@ -50,6 +56,11 @@ namespace Reko.Gui
                 Background = Background,
                 Cursor = Cursor,
                 Width = Width,
+                TextAlign = TextAlign,
+                PaddingTop = PaddingTop,
+                PaddingLeft = PaddingLeft,
+                PaddingBottom = PaddingBottom,
+                PaddingRight = PaddingRight,
             };
         }
     }
@@ -58,8 +69,8 @@ namespace Reko.Gui
     {
         public const string MemoryWindow = "mem";
         public const string MemoryFont = "mem-font";
-        public const string MemoryForeColor= "mem-fore";
-        public const string MemoryBackColor= "mem-back";
+        public const string MemoryForeColor = "mem-fore";
+        public const string MemoryBackColor = "mem-back";
         public const string MemoryCode = "mem-code";
         public const string MemoryCodeForeColor = "mem-code-fore";
         public const string MemoryCodeBackColor = "mem-codeback";
@@ -81,12 +92,22 @@ namespace Reko.Gui
         public const string CodeFont = "code-font";
         public const string CodeForeColor = "code-fore";
         public const string CodeBackColor = "code-back";
-        public const string CodeKeyword= "code-kw";
+        public const string CodeKeyword = "code-kw";
         public const string CodeKeywordFont = "code-kw-font";
         public const string CodeKeywordColor = "code-kw-fore";
         public const string CodeComment = "code-cmt";
         public const string CodeCommentFont = "code-cmt-font";
         public const string CodeCommentColor = "code-cmt-fore";
+
+        public const string Browser = "browser";
+        public const string BrowserFont = "browser-font";
+        public const string BrowserForeColor = "browser-fore";
+        public const string BrowserBackColor = "browser-back";
+
+        public const string List = "list";
+        public const string ListFont = "list-font";
+        public const string ListForeColor = "list-fore";
+        public const string ListBackColor = "list-back";
     }
 
     public interface IUiPreferencesService
@@ -100,12 +121,16 @@ namespace Reko.Gui
 
         void Load();
         void Save();
+        void ResetStyle(string styleName);
+        void UpdateControlStyle(string styleName, Control ctrl);
+        void UpdateControlStyle(string styleName, IControl ctrl);
     }
 
     public class UiPreferencesService : IUiPreferencesService
     {
         private IConfigurationService configSvc;
         private ISettingsService settingsSvc;
+        private Dictionary<string, StyleSettingNames> SettingNames;
 
         public event EventHandler UiPreferencesChanged;
 
@@ -114,17 +139,91 @@ namespace Reko.Gui
             this.configSvc = configSvc;
             this.settingsSvc = settingsSvc;
             this.Styles = new Dictionary<string, UiStyle>();
+            this.SettingNames = new StyleSettingNames[] {
+                new StyleSettingNames
+                {
+                    Name = UiStyles.MemoryWindow,
+                    ForeColor = UiStyles.MemoryForeColor,
+                    BackColor = UiStyles.MemoryBackColor,
+                    FontName = UiStyles.MemoryFont
+                },
+                new StyleSettingNames
+                {
+                    Name = UiStyles.MemoryCode,
+                    ForeColor = UiStyles.MemoryCodeForeColor,
+                    BackColor = UiStyles.MemoryCodeBackColor,
+                },
+                new StyleSettingNames
+                {
+                    Name = UiStyles.MemoryData,
+                    ForeColor = UiStyles.MemoryDataForeColor,
+                    BackColor = UiStyles.MemoryDataBackColor,
+                },
+                new StyleSettingNames
+                {
+                    Name = UiStyles.MemoryHeuristic,
+                    ForeColor = UiStyles.MemoryHeuristicForeColor,
+                    BackColor = UiStyles.MemoryHeuristicBackColor,
+                },
+                new StyleSettingNames
+                {
+                    Name = UiStyles.Disassembler,
+                    ForeColor = UiStyles.DisassemblerForeColor,
+                    BackColor = UiStyles.DisassemblerBackColor,
+                    FontName = UiStyles.DisassemblerFont,
+                },
+                new StyleSettingNames
+                {
+                    Name = UiStyles.DisassemblerOpcode,
+                    ForeColor = UiStyles.DisassemblerOpcodeColor,
+                },
+                new StyleSettingNames
+                {
+                    Name = UiStyles.CodeWindow,
+                    ForeColor = UiStyles.CodeForeColor,
+                    BackColor = UiStyles.CodeBackColor,
+                    FontName = UiStyles.CodeFont,
+                },
+                new StyleSettingNames
+                {
+                    Name = UiStyles.CodeKeyword,
+                    ForeColor = UiStyles.CodeKeywordColor,
+                    FontName = UiStyles.CodeKeywordFont,
+                },
+                new StyleSettingNames
+                {
+                    Name = UiStyles.CodeComment,
+                    ForeColor = UiStyles.CodeCommentColor,
+                    FontName = UiStyles.CodeCommentFont,
+                },
+                new StyleSettingNames
+                {
+                    Name = UiStyles.Browser,
+                    ForeColor = UiStyles.BrowserForeColor,
+                    BackColor = UiStyles.BrowserBackColor,
+                    FontName = UiStyles.BrowserFont,
+                },
+                new StyleSettingNames
+                {
+                    Name = UiStyles.List,
+                    ForeColor = UiStyles.ListForeColor,
+                    BackColor = UiStyles.ListBackColor,
+                    FontName = UiStyles.ListFont,
+                }
+            }.ToDictionary(k => k.Name);
+        }
+
+        public class StyleSettingNames
+        {
+            internal string Name;
+            internal string ForeColor;
+            internal string BackColor;
+            internal string FontName;
         }
 
         public IDictionary<string, UiStyle> Styles { get; private set; }
 
         public Font MemoryStyle { get; set; }
-
-        public Color DisassemblerForegroundColor { get; set; }
-        public Color DisassemblerBackgroundColor { get; set; }
-
-        public Color SourceCodeForegroundColor { get; set; }
-        public Color SourceCodeBackgroundColor { get; set; }
 
         [Browsable(false)]
         public Size WindowSize { get; set; }
@@ -144,97 +243,74 @@ namespace Reko.Gui
                 int w;
                 if (Int32.TryParse(dStyle.Width, out w))
                     width = w;
+                float padTop, padLeft, padRight, padBottom;
+                float.TryParse(dStyle.PaddingTop, out padTop);
+                float.TryParse(dStyle.PaddingLeft, out padLeft);
+                float.TryParse(dStyle.PaddingBottom, out padBottom);
+                float.TryParse(dStyle.PaddingRight, out padRight);
                 AddStyle(new UiStyle
-                    {
-                        Name = dStyle.Name,
-                        Foreground = GetBrush(dStyle.ForeColor),
-                        Background = GetBrush(dStyle.BackColor),
-                        Font = GetFont(dStyle.FontName),
-                        Width = width,
-                        Cursor = GetCursor(dStyle.Cursor),
-                    });
+                {
+                    Name = dStyle.Name,
+                    Foreground = GetBrush(dStyle.ForeColor),
+                    Background = GetBrush(dStyle.BackColor),
+                    Font = GetFont(dStyle.FontName),
+                    Width = width,
+                    Cursor = GetCursor(dStyle.Cursor),
+                    PaddingTop = padTop,
+                    PaddingLeft = padLeft,
+                    PaddingBottom = padBottom,
+                    PaddingRight = padRight,
+                });
             }
-            var q = configSvc.GetDefaultPreferences();
 
-            var defMemStyle = q.Where(s => s.Name == UiStyles.MemoryWindow).Single();
-            var defMemCodeStyle = q.Where(s => s.Name == UiStyles.MemoryCode).Single();
-            var defMemHeurStyle = q.Where(s => s.Name == UiStyles.MemoryHeuristic).Single();
-            var defMemDataStyle = q.Where(s => s.Name == UiStyles.MemoryData).Single();
-            AddStyle(new UiStyle
-            {
-                Name = UiStyles.MemoryWindow,
-                Foreground = GetBrush((string)settingsSvc.Get(UiStyles.MemoryForeColor, defMemStyle.ForeColor)),
-                Background = GetBrush((string)settingsSvc.Get(UiStyles.MemoryBackColor, defMemStyle.BackColor)),
-                Font = GetFont((string)settingsSvc.Get(UiStyles.MemoryFont, defMemStyle.FontName)),
-            });
-            AddStyle(new UiStyle
-            {
-                Name = UiStyles.MemoryCode,
-                Foreground = GetBrush((string)settingsSvc.Get(UiStyles.MemoryCodeForeColor, defMemCodeStyle.ForeColor)),
-                Background = GetBrush((string)settingsSvc.Get(UiStyles.MemoryCodeBackColor, defMemCodeStyle.BackColor)),
-            });
-            AddStyle(new UiStyle
-            {
-                Name = UiStyles.MemoryHeuristic,
-                Foreground = GetBrush((string)settingsSvc.Get(UiStyles.MemoryHeuristicForeColor, defMemHeurStyle.ForeColor)),
-                Background = GetBrush((string)settingsSvc.Get(UiStyles.MemoryHeuristicBackColor, defMemHeurStyle.BackColor)),
-            });
-            AddStyle(new UiStyle
-            {
-                Name = UiStyles.MemoryData,
-                Foreground = GetBrush((string)settingsSvc.Get(UiStyles.MemoryDataForeColor, defMemDataStyle.ForeColor)),
-                Background = GetBrush((string)settingsSvc.Get(UiStyles.MemoryDataBackColor, defMemDataStyle.BackColor)),
-            });
+            SetStyle(UiStyles.MemoryWindow);
+            SetStyle(UiStyles.MemoryCode);
+            SetStyle(UiStyles.MemoryHeuristic);
+            SetStyle(UiStyles.MemoryData);
 
-            var defDisStyle = q.Where(s => s.Name == UiStyles.Disassembler).Single();
-            var disStyle = new UiStyle
+            SetStyle(UiStyles.Disassembler);
+            SetStyle(UiStyles.DisassemblerOpcode);
+
+            SetStyle(UiStyles.CodeWindow);
+            SetStyle(UiStyles.CodeKeyword);
+            SetStyle(UiStyles.CodeComment);
+
+            SetStyle(UiStyles.Browser);
+            SetStyle(UiStyles.List);
+
+            this.WindowSize = ConvertFrom<Size>(sizeCvt, (string)settingsSvc.Get("WindowSize", null));
+            this.WindowState = ConvertFrom<FormWindowState>(fwsCvt, (string) settingsSvc.Get("WindowState", "Normal"));
+
+            UiPreferencesChanged.Fire(this);
+        }
+
+        private void SetStyle(string name)
+        {
+            var defStyle = configSvc
+                .GetDefaultPreferences()
+                .Where(s => s.Name == name)
+                .Single();
+
+            var snames = this.SettingNames[name];
+
+            float padTop, padLeft, padRight, padBottom;
+            float.TryParse(defStyle.PaddingTop, out padTop);
+            float.TryParse(defStyle.PaddingLeft, out padLeft);
+            float.TryParse(defStyle.PaddingBottom, out padBottom);
+            float.TryParse(defStyle.PaddingRight, out padRight);
+            var uiStyle = new UiStyle
             {
-                Name = UiStyles.Disassembler,
-                Foreground = GetBrush((string)settingsSvc.Get(UiStyles.DisassemblerForeColor, defDisStyle.ForeColor)),
-                Background = GetBrush((string)settingsSvc.Get(UiStyles.DisassemblerBackColor, defDisStyle.BackColor)),
-                Font = GetFont((string)settingsSvc.Get(UiStyles.DisassemblerFont, defDisStyle.FontName)),
+                Name = snames.Name,
+                Foreground = GetBrush((string)settingsSvc.Get(snames.ForeColor, defStyle.ForeColor)),
+                Background = GetBrush((string)settingsSvc.Get(snames.BackColor, defStyle.BackColor)),
+                Font = GetFont((string)settingsSvc.Get(snames.FontName, defStyle.FontName)),
+                Width = string.IsNullOrEmpty(defStyle.Width) ? default(int?) : Convert.ToInt32(defStyle.Width),
+                PaddingLeft = padLeft,
+                PaddingTop = padTop,
+                PaddingRight = padRight,
+                PaddingBottom = padBottom,
             };
-            AddStyle(disStyle);
-            var defDisOpStyle = q.Where(s => s.Name == UiStyles.DisassemblerOpcode).Single();
-            var disOpStyle = new UiStyle
-            {
-                Name = UiStyles.DisassemblerOpcode,
-                Foreground = GetBrush((string)settingsSvc.Get(UiStyles.DisassemblerOpcodeColor, defDisOpStyle.ForeColor)),
-                Width = string.IsNullOrEmpty(defDisOpStyle.Width) ? default(int?) : Convert.ToInt32(defDisOpStyle.Width),
-            };
-            AddStyle(disOpStyle);
-
-
-            var defCodeStyle = q.Where(s => s.Name == UiStyles.CodeWindow).Single();
-            var codeStyle = new UiStyle
-            {
-                Name = UiStyles.CodeWindow,
-                Foreground = GetBrush((string)settingsSvc.Get(UiStyles.CodeForeColor, defCodeStyle.ForeColor)),
-                Background = GetBrush((string)settingsSvc.Get(UiStyles.CodeBackColor, defCodeStyle.BackColor)),
-                Font = GetFont((string)settingsSvc.Get(UiStyles.CodeFont, defDisStyle.FontName)),
-            };
-            AddStyle(codeStyle);
-
-            var defCodeKwStyle = q.Where(s => s.Name == UiStyles.CodeKeyword).Single();
-            var codeKwStyle = new UiStyle
-            {
-                Name = UiStyles.CodeKeyword,
-                Foreground = GetBrush((string)settingsSvc.Get(UiStyles.CodeKeywordColor, defCodeKwStyle.ForeColor)),
-                Font = GetFont((string)settingsSvc.Get(UiStyles.CodeKeywordFont, defCodeStyle.FontName))
-            };
-            AddStyle(codeKwStyle);
-
-            var defCodeCommentStyle = q.Where(s => s.Name == UiStyles.CodeComment).Single();
-            var codeCommentStyle = new UiStyle
-            {
-                Name = UiStyles.CodeComment,
-                Foreground = GetBrush((string)settingsSvc.Get(UiStyles.CodeCommentColor, defCodeCommentStyle.ForeColor)),
-                Font = GetFont((string)settingsSvc.Get(UiStyles.CodeCommentFont, defCodeStyle.FontName))
-            };
-            AddStyle(codeCommentStyle);
-
-            this.WindowSize = ConvertFrom<Size>(sizeCvt, settingsSvc.Get("WindowSize", null));
-            this.WindowState = ConvertFrom<FormWindowState>(fwsCvt, settingsSvc.Get("WindowState", "Normal"));
+            AddStyle(uiStyle);
         }
 
         private Font GetFont(string fontName)
@@ -324,22 +400,77 @@ namespace Reko.Gui
             settingsSvc.Set(UiStyles.CodeCommentColor, SaveBrush(codeCommentStyle.Foreground));
             settingsSvc.Set(UiStyles.CodeCommentFont,  SaveFont(codeStyle.Font));
 
+            var browserStyle = Styles[UiStyles.Browser];
+            settingsSvc.Set(UiStyles.BrowserForeColor, SaveBrush(browserStyle.Foreground));
+            settingsSvc.Set(UiStyles.BrowserBackColor, SaveBrush(browserStyle.Background));
+            settingsSvc.Set(UiStyles.BrowserFont, SaveFont(browserStyle.Font));
+
+            var listStyle = Styles[UiStyles.List];
+            settingsSvc.Set(UiStyles.ListForeColor, SaveBrush(listStyle.Foreground));
+            settingsSvc.Set(UiStyles.ListBackColor, SaveBrush(listStyle.Background));
+            settingsSvc.Set(UiStyles.ListFont, SaveFont(listStyle.Font));
+
             settingsSvc.Set("WindowSize", sizeCvt.ConvertToInvariantString(WindowSize));
             settingsSvc.Set("WindowState", WindowState.ToString());
             UiPreferencesChanged.Fire(this);
         }
 
-        private T ConvertFrom<T>(TypeConverter conv, object value)
+        public void ResetStyle(string styleName)
+        {
+            this.Styles.Remove(styleName);
+            var snames = SettingNames[styleName];
+            settingsSvc.Delete(snames.ForeColor);
+            settingsSvc.Delete(snames.BackColor);
+            settingsSvc.Delete(snames.FontName);
+            SetStyle(styleName);
+            UiPreferencesChanged.Fire(this);
+        }
+
+        private T ConvertFrom<T>(TypeConverter conv, string value)
         {
             if (value == null)
                 return default(T);
             try
             {
-                return (T) conv.ConvertFrom(value);
+                return (T) conv.ConvertFromInvariantString(value);
             }
             catch
             {
                 return default(T);
+            }
+        }
+
+        public void UpdateControlStyle(string list, Control ctrl)
+        {
+            if (ctrl == null) throw new ArgumentNullException("ctrl");
+            UiStyle style;
+            if (Styles.TryGetValue(UiStyles.List, out style))
+            {
+                if (style.Background != null)
+                {
+                    ctrl.BackColor = style.Background.Color;
+                }
+                if (style.Foreground != null)
+                {
+                    ctrl.ForeColor = style.Foreground.Color;
+                }
+            }
+        }
+
+        public void UpdateControlStyle(string list, IControl ctrl)
+        {
+            if (ctrl == null) throw new ArgumentNullException("ctrl");
+            UiStyle style;
+            if (Styles.TryGetValue(UiStyles.List, out style))
+            {
+                if (style.Background != null)
+                {
+                    ctrl.BackColor = style.Background.Color;
+                }
+                if (style.Foreground != null)
+                {
+                    ctrl.ForeColor = style.Foreground.Color;
+                }
             }
         }
     }

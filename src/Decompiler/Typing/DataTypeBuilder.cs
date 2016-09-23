@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,6 +23,7 @@ using Reko.Core.Code;
 using Reko.Core.Expressions;
 using Reko.Core.Types;
 using System;
+using System.Linq;
 
 namespace Reko.Typing
 {
@@ -41,9 +42,9 @@ namespace Reko.Typing
 		private ITypeStore store;
 		private TypeFactory factory;
 		private DataTypeBuilderUnifier unifier;
-        private Platform platform;
+        private IPlatform platform;
 
-		public DataTypeBuilder(TypeFactory factory, ITypeStore store, Platform platform)
+		public DataTypeBuilder(TypeFactory factory, ITypeStore store, IPlatform platform)
 		{
 			this.store = store;
 			this.factory = factory;
@@ -125,9 +126,8 @@ namespace Reko.Typing
 
 		public DataType FunctionTrait(Expression function, int funcPtrSize, TypeVariable ret, params TypeVariable [] actuals)
 		{
-			DataType [] adt = new DataType[actuals.Length];
-			actuals.CopyTo(adt, 0);
-			var fn = factory.CreateFunctionType(null, ret, adt, null);
+            Identifier[] adt = actuals.Select(a => new Identifier("", a, null)).ToArray();
+			var fn = factory.CreateFunctionType(new Identifier("", ret, null), adt);
 			var pfn = factory.CreatePointer(fn, funcPtrSize);
 			return MergeIntoDataType(function, pfn);
 		}

@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -38,36 +38,52 @@ namespace Reko.Environments.C64
     /// </summary>
     public class C64Basic : ProcessorArchitecture
     {
-        private SortedList<ushort, C64BasicInstruction> prog;
-        private RegisterStorage stackRegister = new RegisterStorage("sp", 1, PrimitiveType.Ptr16);
+        private SortedList<ushort, C64BasicInstruction> program;
+        private RegisterStorage stackRegister = new RegisterStorage("sp", 1, 0, PrimitiveType.Ptr16);
 
-        public C64Basic(SortedList<ushort, C64BasicInstruction> prog)
+        public C64Basic(SortedList<ushort, C64BasicInstruction> program)
         {
-            this.prog = prog;
+            this.program = program;
             this.PointerType = PrimitiveType.Ptr16;
             this.InstructionBitSize = 8;
             this.StackRegister = stackRegister;
+            this.FramePointerType = PrimitiveType.Ptr16;
         }
 
         public override IEnumerable<MachineInstruction> CreateDisassembler(ImageReader imageReader)
         {
-            int i = prog.IndexOfKey(imageReader.Address.ToUInt16());
+            int i = program.IndexOfKey(imageReader.Address.ToUInt16());
             if (i < 0)
                 yield break;
-            for (; i < prog.Count; ++i)
+            for (; i < program.Count; ++i)
             {
-                yield return prog.Values[i];
+                yield return program.Values[i];
             }
         }
 
-        public override ImageReader CreateImageReader(LoadedImage img, Address addr)
+        public override ImageReader CreateImageReader(MemoryArea img, Address addr)
         {
             return new LeImageReader(img, addr);
         }
 
-        public override ImageReader CreateImageReader(LoadedImage img, ulong off)
+        public override ImageReader CreateImageReader(MemoryArea image, Address addrBegin, Address addrEnd)
+        {
+            return new LeImageReader(image, addrBegin, addrEnd);
+        }
+
+        public override ImageReader CreateImageReader(MemoryArea img, ulong off)
         {
             throw new NotImplementedException();
+        }
+
+        public override ImageWriter CreateImageWriter()
+        {
+            return new LeImageWriter();
+        }
+
+        public override ImageWriter CreateImageWriter(MemoryArea mem, Address addr)
+        {
+            return new LeImageWriter(mem, addr);
         }
 
         public override IEqualityComparer<MachineInstruction> CreateInstructionComparer(Normalize norm)
@@ -80,17 +96,12 @@ namespace Reko.Environments.C64
             return new C64BasicState(this);
         }
 
-        public override Core.Lib.BitSet CreateRegisterBitset()
-        {
-            return new Core.Lib.BitSet(0x10);
-        }
-
         public override IEnumerable<RtlInstructionCluster> CreateRewriter(ImageReader rdr, ProcessorState state, Frame frame, IRewriterHost host)
         {
-            return new C64BasicRewriter(this, rdr.Address, prog, host);
+            return new C64BasicRewriter(this, rdr.Address, program, host);
         }
 
-        public override IEnumerable<Address> CreatePointerScanner(ImageMap map, ImageReader rdr, IEnumerable<Address> knownAddresses, PointerScannerFlags flags)
+        public override IEnumerable<Address> CreatePointerScanner(SegmentMap map, ImageReader rdr, IEnumerable<Address> knownAddresses, PointerScannerFlags flags)
         {
             throw new NotImplementedException();
         }
@@ -108,6 +119,11 @@ namespace Reko.Environments.C64
         public override RegisterStorage[] GetRegisters()
         {
             return new RegisterStorage[0];
+        }
+
+        public override RegisterStorage GetSubregister(RegisterStorage reg, int offset, int width)
+        {
+            throw new NotImplementedException();
         }
 
         public override bool TryGetRegister(string name, out RegisterStorage reg)
@@ -145,13 +161,10 @@ namespace Reko.Environments.C64
             throw new NotImplementedException();
         }
 
-
-
         public override bool TryParseAddress(string txtAddress, out Address addr)
         {
             return Address.TryParse16(txtAddress, out addr);
         }
-
 
         public class C64BasicState : ProcessorState
         {
@@ -186,7 +199,7 @@ namespace Reko.Environments.C64
             {
             }
 
-            public override void OnProcedureLeft(ProcedureSignature procedureSignature)
+            public override void OnProcedureLeft(FunctionType procedureSignature)
             {
             }
 
@@ -195,7 +208,7 @@ namespace Reko.Environments.C64
                 return new CallSite(2, 0);
             }
 
-            public override void OnAfterCall(Core.Expressions.Identifier stackReg, ProcedureSignature sigCallee, Core.Expressions.ExpressionVisitor<Core.Expressions.Expression> eval)
+            public override void OnAfterCall(FunctionType sigCallee)
             {
             }
         }

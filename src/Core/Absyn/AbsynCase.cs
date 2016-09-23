@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,23 +28,22 @@ namespace Reko.Core.Absyn
 {
     public class AbsynCase : AbsynStatement
     {
-        [Obsolete("Use constructor with Constant parameter")]
-        public AbsynCase(int i)
-        {
-            this.Constant = Constant.Word32(i);
-        }
-
         public AbsynCase(Constant c)
         {
             this.Constant = c;
         }
+
+        public Constant Constant { get; private set; }
 
         public override void Accept(IAbsynVisitor visitor)
         {
             visitor.VisitCase(this);
         }
 
-        public Constant Constant { get; private set; }
+        public override T Accept<T>(IAbsynVisitor<T> visitor)
+        {
+            return visitor.VisitCase(this);
+        }
     }
 
     public class AbsynDefault: AbsynStatement
@@ -56,6 +55,11 @@ namespace Reko.Core.Absyn
         public override void Accept(IAbsynVisitor visitor)
         {
             visitor.VisitDefault(this);
+        }
+
+        public override T Accept<T>(IAbsynVisitor<T> visitor)
+        {
+            return visitor.VisitDefault(this);
         }
     }
 }

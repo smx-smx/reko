@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -48,14 +48,13 @@ namespace Reko.Mono
             }
 			else
 			{
-                var host = NullDecompilerHost.Instance;
                 var listener = NullDecompilerEventListener.Instance;
 
                 services.AddService(typeof (DecompilerEventListener), listener);
                 services.AddService(typeof(IRegistryService), new WindowsFormsRegistryService());
-                services.AddService(typeof(IConfigurationService), new DecompilerConfiguration());
+                services.AddService(typeof(IConfigurationService), RekoConfigurationService.Load());
                 var ldr = new Loader(services);
-				var dec = new DecompilerDriver(ldr, host, services);
+				var dec = new DecompilerDriver(ldr, services);
 				dec.Decompile(args[0]);
 			}
 		}

@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,36 +18,43 @@
  */
 #endregion
 
+using NUnit.Framework;
 using Reko.Arch.X86;
 using Reko.Core;
 using Reko.Core.Expressions;
 using Reko.Core.Serialization;
+using Reko.Core.Services;
 using Reko.Core.Types;
-using NUnit.Framework;
+using Reko.Environments.Msdos;
 using System;
+using System.ComponentModel.Design;
 using System.IO;
 using System.Xml;
 using System.Xml.Serialization;
-using Reko.Environments.Msdos;
 
 namespace Reko.UnitTests.Core.Serialization
 {
 	[TestFixture]
 	public class SerializedSequenceTests
 	{
-        private Platform platform;
+        private IPlatform platform;
         private X86ProcedureSerializer ser;
 
         [SetUp]
         public void Setup()
         {
-            var arch = new IntelArchitecture(ProcessorMode.Real);
-            this.platform = new MsdosPlatform(null, arch);
-        }    
-        
+            var sc = new ServiceContainer();
+            sc.AddService<IFileSystemService>(new FileSystemServiceImpl());
+            var arch = new X86ArchitectureReal();
+            this.platform = new MsdosPlatform(sc, arch);
+        }
+
         private void Given_X86ProcedureSerializer()
         {
-            this.ser = new X86ProcedureSerializer((IntelArchitecture) platform.Architecture, new TypeLibraryLoader(platform, true), "stdapi");
+            this.ser = new X86ProcedureSerializer(
+                (IntelArchitecture) platform.Architecture,
+                new TypeLibraryDeserializer(platform, true, new TypeLibrary()),
+                "stdapi");
         }
 
 		[Test]
@@ -55,7 +62,7 @@ namespace Reko.UnitTests.Core.Serialization
 		{
 			Identifier head = new Identifier(Registers.dx.Name, Registers.dx.DataType, Registers.dx);
 			Identifier tail = new Identifier(Registers.ax.Name, Registers.ax.DataType, Registers.ax);
-			Identifier seq = new Identifier("dx_ax", PrimitiveType.Word32, new SequenceStorage(head, tail));
+			Identifier seq = new Identifier("dx_ax", PrimitiveType.Word32, new SequenceStorage(head.Storage, tail.Storage));
 			SerializedSequence sq = new SerializedSequence((SequenceStorage) seq.Storage);
 			Assert.AreEqual("dx", sq.Registers[0].Name);
 			Assert.AreEqual("ax", sq.Registers[1].Name);
@@ -76,7 +83,7 @@ namespace Reko.UnitTests.Core.Serialization
             Frame f = platform.Architecture.CreateFrame();
 			Identifier head = f.EnsureRegister(Registers.dx);
 			Identifier tail = f.EnsureRegister(Registers.ax);
-			Identifier seq = f.EnsureSequence(head, tail, PrimitiveType.Word32);
+			Identifier seq = f.EnsureSequence(head.Storage, tail.Storage, PrimitiveType.Word32);
 			SerializedSequence sq = new SerializedSequence((SequenceStorage) seq.Storage);
 			Argument_v1 sa = new Argument_v1();
 			sa.Kind = sq;
@@ -84,7 +91,7 @@ namespace Reko.UnitTests.Core.Serialization
 			ssig.Arguments = new Argument_v1[] { sa };
 
             Given_X86ProcedureSerializer();
-			ProcedureSignature ps = ser.Deserialize(ssig, f);
+			FunctionType ps = ser.Deserialize(ssig, f);
 			Assert.AreEqual("void foo(Sequence word32 dx_ax)", ps.ToString("foo"));
 		}
 
@@ -93,7 +100,7 @@ namespace Reko.UnitTests.Core.Serialization
 		{
 			SerializedSignature sig = new SerializedSignature();
             Given_X86ProcedureSerializer();
-            ProcedureSignature ps = ser.Deserialize(sig, platform.Architecture.CreateFrame());
+            FunctionType ps = ser.Deserialize(sig, platform.Architecture.CreateFrame());
 			Assert.AreEqual("void foo()", ps.ToString("foo"));
 			Assert.IsTrue(ps.ParametersValid);
 		}

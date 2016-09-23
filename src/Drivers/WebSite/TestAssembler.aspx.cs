@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -82,12 +82,12 @@ namespace Reko.WebSite
 
 		private void DecompileAssembler(string asmLabel, Address loadAddress)
 		{
-            var cfg = new DecompilerConfiguration();
+            var cfg = RekoConfigurationService.Load();
             var asm = cfg.GetAssembler(asmLabel);
             var prog = asm.AssembleFragment(loadAddress, txtAssembler.Text + Environment.NewLine);
             var sc = new ServiceContainer();
             var loader = new Loader(sc);
-            DecompilerDriver decomp = new DecompilerDriver(loader, host, sc);
+            DecompilerDriver decomp = new DecompilerDriver(loader, sc);
             var proj = new Project {
                 Programs = {
                     prog

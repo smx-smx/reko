@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,7 +28,11 @@ using System.Text;
 
 namespace Reko.Environments.AmigaOS.Design
 {
-    class AmigaOSPlatformDesigner : PlatformDesigner
+    /// <summary>
+    /// TreeNode designer that plugs into the project browser and which opens a 
+    /// tabbed document window to show the AmigaOS properties window pane.
+    /// </summary>
+    public class AmigaOSPlatformDesigner : PlatformDesigner
     {
         public override void Initialize(object obj)
         {
@@ -38,12 +42,13 @@ namespace Reko.Environments.AmigaOS.Design
         public override void DoDefaultAction()
         {
             var shellUiSvc = Services.RequireService<IDecompilerShellUiService>();
-            var windowFrame = shellUiSvc.FindWindow(GetType().FullName);
+            var windowFrame = shellUiSvc.FindDocumentWindow(GetType().FullName, Component);
             if (windowFrame == null)
             {
                 var platform = (AmigaOSPlatform)Component;
-                windowFrame = shellUiSvc.CreateWindow(
+                windowFrame = shellUiSvc.CreateDocumentWindow(
                     GetType().FullName,
+                    Component,
                     platform.Description,
                     new AmigaOSPropertiesInteractor(platform));
             }

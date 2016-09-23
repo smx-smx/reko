@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,6 +21,7 @@
 using Reko.Core;
 using Reko.Core.Lib;
 using Reko.Core.Rtl;
+using Reko.Core.Services;
 using Reko.Core.Types;
 using System;
 using System.Collections.Generic;
@@ -47,11 +48,13 @@ namespace Reko.Scanning
     {
         private Program program;
         private IRewriterHost host;
+        private DecompilerEventListener eventListener;
 
-        public HeuristicScanner(Program prog, IRewriterHost host)
+        public HeuristicScanner(Program program, IRewriterHost host, DecompilerEventListener eventListener)
         {
-            this.program = prog;
+            this.program = program;
             this.host = host;
+            this.eventListener = eventListener;
         }
 
         /// Plan of attack:
@@ -67,14 +70,49 @@ namespace Reko.Scanning
         /// At the end we have a list of scored candidates.
         public void ScanImageHeuristically()
         {
+            var sw = new Stopwatch();
+            sw.Start();
+            var list = new List<HeuristicBlock>();
             var ranges = FindUnscannedRanges();
-            foreach (var range in FindPossibleFunctions(ranges))
+            var fnRanges = FindPossibleFunctions(ranges).ToList();
+            int n = 0;
+            foreach (var range in fnRanges)
             {
                 var hproc = DisassembleProcedure(range.Item1, range.Item2);
-                var hps = new HeuristicProcedureScanner(program, hproc);
+                var hps = new HeuristicProcedureScanner(program, hproc, host);
                 hps.BlockConflictResolution();
+                DumpBlocks(hproc.Cfg.Nodes);
                 hps.GapResolution();
                 // TODO: add all guessed code to image map -- clearly labelled.
+                AddBlocks(hproc);
+                list.AddRange(hproc.Cfg.Nodes);
+                eventListener.ShowProgress("Estimating procedures", n, fnRanges.Count);
+                ++n;
+            }
+            eventListener.Warn(
+                new Reko.Core.Services.NullCodeLocation("Heuristics"),
+                string.Format("Scanned image in {0} seconds, finding {1} blocks.",
+                    sw.Elapsed.TotalSeconds, list.Count));
+            list.ToString();
+        }
+
+        private void AddBlocks(HeuristicProcedure hproc)
+        {
+            var proc = Procedure.Create(hproc.BeginAddress, hproc.Frame);
+            foreach (var block in hproc.Cfg.Nodes.Where(bb => bb.Instructions.Count > 0))
+            {
+                var last = block.Instructions.Last();
+                var b = new Block(proc, "l" + block.Address);
+                if (program.ImageMap.Items.ContainsKey(block.Address))
+                    continue;
+                program.ImageMap.AddItemWithSize(
+                    block.Address,
+                    new ImageMapBlock
+                    {
+                        Block = b,
+                        Address = block.Address,
+                        Size = (uint)(last.Address - block.Address) + (uint)last.Length
+                    });
             }
         }
 
@@ -83,20 +121,27 @@ namespace Reko.Scanning
         /// been identified as code/data yet.
         /// </summary>
         /// <returns></returns>
-        public IEnumerable<Tuple<Address, Address>> FindUnscannedRanges()
+        public IEnumerable<Tuple<MemoryArea, Address, Address>> FindUnscannedRanges()
         {
+#if !NOT_USE_WHOLE_IMAGE
+
             return program.ImageMap.Items
                 .Where(de => de.Value.DataType is UnknownType)
-                .Select(de => Tuple.Create(de.Key, de.Key + de.Value.Size));
+                .Select(de => Tuple.Create(this.program.SegmentMap.Segments[de.Key].MemoryArea, de.Key, de.Key + de.Value.Size));
+#else
+            return program.SegmentMap.Segments.Values
+                .Where(s => (s.Access & AccessMode.Execute) != 0)
+                .Select(s => Tuple.Create(s.MemoryArea, s.Address, s.Address + s.ContentSize));
+#endif
         }
 
         /// <summary>
-        /// Looks for byte patterns that look like 
+        /// Looks for byte patterns that look like procedure entries.
         /// </summary>
         /// <param name="addrBegin"></param>
         /// <param name="addrEnd"></param>
         /// <returns></returns>
-        public IEnumerable<Address> FindPossibleProcedureEntries(Address addrBegin, Address addrEnd)
+        public IEnumerable<Address> FindPossibleProcedureEntries(MemoryArea mem, Address addrBegin, Address addrEnd)
         {
             var h = program.Platform.Heuristics;
             if (h.ProcedurePrologs == null || h.ProcedurePrologs.Length == 0)
@@ -104,23 +149,24 @@ namespace Reko.Scanning
 
             byte[] pattern = h.ProcedurePrologs[0].Bytes;
             var search = new AhoCorasickSearch<byte>(new[] { pattern }, true, true);
-            return search.GetMatchPositions(program.Image.Bytes)
-                .Select(i => program.Image.BaseAddress + i);
+            return search.GetMatchPositions(mem.Bytes)
+                .Select(i => mem.BaseAddress + i);
         }
 
         /// <summary>
-        /// Determines the locations of all instructions that perform a 
-        /// CALL / JSR / BL to a _known_ procedure address.
+        /// Determines the locations of all instructions in a segment
+        /// that perform a  CALL / JSR / BL to a _known_ procedure 
+        /// address.
         /// </summary>
         /// <param name="knownProcedureAddresses">A sequence of addresses
         /// that are known to be procedures.</param>
         /// <returns>A sequence of linear addresses where those call 
         /// instructions are.</returns>
-        public IEnumerable<Address> FindCallOpcodes(IEnumerable<Address> knownProcedureAddresses)
+        public IEnumerable<Address> FindCallOpcodes(MemoryArea mem, IEnumerable<Address> knownProcedureAddresses)
         {
             return program.Architecture.CreatePointerScanner(
-                program.ImageMap,
-                program.Architecture.CreateImageReader(program.Image, 0),
+                program.SegmentMap,
+                program.Architecture.CreateImageReader(mem, 0),
                 knownProcedureAddresses,
                 PointerScannerFlags.Calls);
         }
@@ -131,15 +177,15 @@ namespace Reko.Scanning
         /// </summary>
         /// <returns></returns>
         public IEnumerable<Tuple<Address, Address>> FindPossibleFunctions(
-            IEnumerable<Tuple<Address, Address>> ranges)
+            IEnumerable<Tuple<MemoryArea, Address, Address>> ranges)
         {
             foreach (var range in ranges)
             {
-                var possibleEntries = FindPossibleProcedureEntries(range.Item1, range.Item2)
-                    .Concat(program.EntryPoints.Select(ep => ep.Address))
+                var possibleEntries = FindPossibleProcedureEntries(range.Item1, range.Item2, range.Item3)
+                    .Concat(program.EntryPoints.Keys)
                     .ToSortedSet();
                 var e = possibleEntries.GetEnumerator();
-                Address aEnd = range.Item1;
+                Address aEnd = range.Item2;
                 if (e.MoveNext())
                 {
                     aEnd = e.Current;
@@ -149,7 +195,7 @@ namespace Reko.Scanning
                         aEnd = e.Current;
                         yield return Tuple.Create(aStart, aEnd);
                     }
-                    yield return Tuple.Create(aEnd, range.Item2);
+                    yield return Tuple.Create(aEnd, range.Item3);
                 }
             }
         }
@@ -210,6 +256,8 @@ namespace Reko.Scanning
         [Conditional("DEBUG")]
         private void DumpBlocks(IEnumerable<HeuristicBlock> blocks)
         {
+            if (blocks != null)
+                return;
             foreach (var block in blocks.OrderBy(b => b.Address.ToLinear()))
             {
                 var addrEnd = block.GetEndAddress();

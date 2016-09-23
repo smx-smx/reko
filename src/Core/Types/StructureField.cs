@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,18 +26,15 @@ namespace Reko.Core.Types
 {
     /// <summary>
     /// Describes a field of a structure.
+    /// //$REVIEW: investigate the similarities with ImageMapItem.
     /// </summary>
-	public class StructureField
+	public class StructureField : Field
 	{
-        public TypeVariable TypeVariable;
-
-		private string name;
-
         public StructureField()
         {
         }
 
-		public StructureField(int offset, DataType type)
+        public StructureField(int offset, DataType type)
 		{
             if (type == null)
                 throw new ArgumentNullException("type");
@@ -51,23 +48,24 @@ namespace Reko.Core.Types
             this.Offset = offset; this.DataType = type; this.name = name;
 		}
 
-		public StructureField Clone()
+        public override string Name { get { if (name == null) return GenerateDefaultName(); return name; }
+            set { name = value; } }
+
+        public bool IsNameSet { get { return name != null; } }
+
+        private string name;
+
+        public int Offset { get; set; }
+
+        public StructureField Clone()
 		{
 			return new StructureField(Offset, DataType.Clone(), name);
 		}
 
-        public DataType DataType { get; set; }
-
-		public string Name
-		{
-			get 
-			{ 
-				if (name != null) return name;
-				return string.Format("{0}{1:X4}", DataType.Prefix, Offset);         //$Naming should be given at a different level.
-			}
-		}
-
-        public int Offset;
+        private string GenerateDefaultName()
+        {
+            return string.Format("{0}{1:X4}", DataType.Prefix, Offset);         //$Naming should be given at a different level.
+        }
 
         public static int ToOffset(Constant offset)
         {
@@ -105,6 +103,7 @@ namespace Reko.Core.Types
 			Add(new StructureField(offset, dt, name));
 		}
 
+        //$PERF: slow, should use binary search.
 		public void Add(StructureField f)
 		{
 			int i;
@@ -145,11 +144,6 @@ namespace Reko.Core.Types
             }
             return null;
         }
-
-        public void Insert(int i, StructureField f)
-		{
-			innerList.Insert(i, f);
-		}
 
         /// <summary>
         /// Gets the field with the highest offset that is less than or equal to the

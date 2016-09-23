@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,6 +29,13 @@ namespace Reko.Arch.PowerPC
 {
     public class PowerPcInstruction : MachineInstruction
     {
+        private const InstructionClass Transfer = InstructionClass.Transfer;
+        private const InstructionClass CondTransfer = InstructionClass.Conditional | InstructionClass.Transfer;
+        private const InstructionClass LinkTransfer = InstructionClass.Call | InstructionClass.Transfer;
+        private const InstructionClass LinkCondTransfer = InstructionClass.Call | InstructionClass.Transfer | InstructionClass.Conditional;
+
+        private static Dictionary<Opcode, InstructionClass> classOf;
+
         private Opcode opcode;
         public MachineOperand op1;
         public MachineOperand op2;
@@ -51,7 +58,19 @@ namespace Reko.Arch.PowerPC
             this.setsCR0 = setsCR0;
         }
 
+        public override bool IsValid { get { return opcode != Opcode.illegal; } }
+
         public override int OpcodeAsInteger { get { return (int)opcode; } }
+
+        public override InstructionClass InstructionClass
+        {
+            get {
+                InstructionClass cl;
+                if (!classOf.TryGetValue(opcode, out cl))
+                    cl = InstructionClass.Linear;
+                return cl; 
+            }
+        }
 
         public int Operands
         {
@@ -74,6 +93,19 @@ namespace Reko.Arch.PowerPC
         public Opcode Opcode
         {
             get { return opcode; }
+        }
+
+        public override MachineOperand GetOperand(int i)
+        {
+            switch (i)
+            {
+            case 0: return op1;
+            case 1: return op2;
+            case 2: return op3;
+            case 3: return op4;
+            case 4: return op5;
+            default: return null;
+            }
         }
 
         public override void Render(MachineInstructionWriter writer)
@@ -114,6 +146,70 @@ namespace Reko.Arch.PowerPC
             if (setsCR0)
                 return 0xF;
             return 0;
+        }
+
+        static PowerPcInstruction()
+        {
+            classOf = new Dictionary<Opcode, InstructionClass>
+            {
+                { Opcode.illegal,   InstructionClass.Invalid },
+
+                { Opcode.b,         Transfer },
+                { Opcode.bc,        CondTransfer },
+                { Opcode.bcl,       LinkCondTransfer },
+                { Opcode.bclr,      Transfer },
+                { Opcode.bclrl,     LinkTransfer },
+                { Opcode.bcctr,     CondTransfer },
+                { Opcode.bctrl,     LinkTransfer },
+                { Opcode.bdnz,      CondTransfer },
+                { Opcode.bdnzf,     CondTransfer },
+                { Opcode.bdnzfl,    LinkCondTransfer },
+                { Opcode.bdnzl,     LinkCondTransfer },
+                { Opcode.bdnzt,     CondTransfer },
+                { Opcode.bdnztl,    LinkCondTransfer },
+                { Opcode.bdz,       CondTransfer },
+                { Opcode.bdzf,      CondTransfer },
+                { Opcode.bdzfl,     LinkCondTransfer },
+                { Opcode.bdzl,      CondTransfer },
+                { Opcode.bdzt,      CondTransfer },
+                { Opcode.bdztl,     LinkCondTransfer },
+
+                { Opcode.beq,       CondTransfer },
+                { Opcode.beql,      LinkCondTransfer },
+                { Opcode.beqlr,     CondTransfer },
+                { Opcode.beqlrl,    LinkCondTransfer },
+                { Opcode.bge,       CondTransfer },
+                { Opcode.bgel,      LinkCondTransfer },
+                { Opcode.bgelr,     CondTransfer },
+                { Opcode.bgelrl,    LinkCondTransfer },
+                { Opcode.bgt,       CondTransfer },
+                { Opcode.bgtl,      LinkCondTransfer },
+                { Opcode.bgtlr,     CondTransfer },
+                { Opcode.bgtlrl,    LinkCondTransfer },
+                { Opcode.bl,        LinkTransfer },
+                { Opcode.ble,       CondTransfer },
+                { Opcode.blel,      LinkCondTransfer },
+                { Opcode.blelr,     CondTransfer },
+                { Opcode.blelrl,    LinkCondTransfer },
+                { Opcode.blr,       Transfer },
+                { Opcode.blrl,      LinkTransfer },
+                { Opcode.blt,       CondTransfer },
+                { Opcode.bltl,      LinkCondTransfer },
+                { Opcode.bltlr,     CondTransfer },
+                { Opcode.bltlrl,    LinkCondTransfer },
+                { Opcode.bne,       CondTransfer },
+                { Opcode.bnel,      LinkCondTransfer },
+                { Opcode.bnelr,     CondTransfer },
+                { Opcode.bnelrl,    LinkCondTransfer },
+                { Opcode.bns,       CondTransfer },
+                { Opcode.bnsl,      LinkCondTransfer },
+                { Opcode.bnslr,     CondTransfer },
+                { Opcode.bnslrl,    LinkCondTransfer },
+                { Opcode.bso,       CondTransfer },
+                { Opcode.bsol,      LinkCondTransfer },
+                { Opcode.bsolr,     CondTransfer },
+                { Opcode.bsolrl,    LinkCondTransfer },
+            };
         }
     }
 

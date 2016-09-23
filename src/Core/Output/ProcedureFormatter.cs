@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -96,7 +96,7 @@ namespace Reko.Core.Output
             }
         }
 
-        private void WriteBlock(Block block, CodeFormatter writer)
+        public void WriteBlock(Block block, CodeFormatter writer)
         {
             if (!string.IsNullOrEmpty(block.Name))
             {

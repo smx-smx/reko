@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,6 +29,7 @@ using NUnit.Framework;
 using System;
 using System.Collections.Generic;
 using System.Text;
+using Reko.Core.Services;
 
 namespace Reko.UnitTests.Analysis
 {
@@ -38,26 +39,31 @@ namespace Reko.UnitTests.Analysis
         ProcedureBase exit;
         ProgramBuilder progMock;
         private ProgramDataFlow flow;
-        private Program prog;
+        private Program program;
+        private DecompilerEventListener eventListener;
 
         [SetUp]
         public void Setup()
         {
             exit = new ExternalProcedure("exit", 
-                new ProcedureSignature(null, new Identifier("retCode", PrimitiveType.Int32, new StackArgumentStorage(0, PrimitiveType.Int32))));
+                new FunctionType(
+                    null, 
+                    null, 
+                    new Identifier("retCode", PrimitiveType.Int32, new StackArgumentStorage(0, PrimitiveType.Int32))));
             exit.Characteristics = new ProcedureCharacteristics();
             exit.Characteristics.Terminates = true;
 
             progMock = new ProgramBuilder();
             flow = new ProgramDataFlow();
+            eventListener = new FakeDecompilerEventListener();
         }
 
         private BlockFlow CreateBlockFlow(Block block, Frame frame)
         {
             return new BlockFlow(
                 block,
-                prog.Architecture.CreateRegisterBitset(),
-                new SymbolicEvaluationContext(prog.Architecture, frame));
+                new HashSet<RegisterStorage>(),
+                new SymbolicEvaluationContext(program.Architecture, frame));
         }
 
         [Test]
@@ -68,7 +74,7 @@ namespace Reko.UnitTests.Analysis
             var b = m.CurrentBlock;
             m.Return();
 
-            var a = new TerminationAnalysis(flow);
+            var a = new TerminationAnalysis(flow, eventListener);
             flow[b] = CreateBlockFlow(b, m.Frame);
             a.Analyze(b);
             Assert.IsTrue(flow[b].TerminatesProcess);
@@ -81,8 +87,8 @@ namespace Reko.UnitTests.Analysis
             m.Store(m.Word32(0x1231), m.Byte(0));
             var b = m.Block;
             m.Return();
-            var a = new TerminationAnalysis(flow);
-            prog = new Program
+            var a = new TerminationAnalysis(flow, eventListener);
+            program = new Program
             {
                 Architecture = new FakeArchitecture()
             };
@@ -102,7 +108,7 @@ namespace Reko.UnitTests.Analysis
             var prog = progMock.BuildProgram();
 
             flow = new ProgramDataFlow(prog);
-            var a = new TerminationAnalysis(flow);
+            var a = new TerminationAnalysis(flow, eventListener);
             a.Analyze(proc);
             Assert.IsTrue(flow[proc].TerminatesProcess);
         }
@@ -120,7 +126,7 @@ namespace Reko.UnitTests.Analysis
             var prog = progMock.BuildProgram();
 
             flow = new ProgramDataFlow(prog);
-            var a = new TerminationAnalysis(flow);
+            var a = new TerminationAnalysis(flow, eventListener);
             a.Analyze(proc);
             Assert.IsFalse(flow[proc].TerminatesProcess);
         }
@@ -139,7 +145,7 @@ namespace Reko.UnitTests.Analysis
             });
             var prog = progMock.BuildProgram();
             flow = new ProgramDataFlow(prog);
-            var a = new TerminationAnalysis(flow);
+            var a = new TerminationAnalysis(flow, eventListener);
             a.Analyze(proc);
             Assert.IsTrue(flow[proc].TerminatesProcess);
         }
@@ -161,7 +167,7 @@ namespace Reko.UnitTests.Analysis
 
             var prog = progMock.BuildProgram();
             flow = new ProgramDataFlow(prog);
-            var a = new TerminationAnalysis(flow);
+            var a = new TerminationAnalysis(flow, eventListener);
             a.Analyze(prog);
             Assert.IsTrue(flow[sub].TerminatesProcess);
             Assert.IsTrue(flow[caller].TerminatesProcess);
@@ -177,7 +183,7 @@ namespace Reko.UnitTests.Analysis
             });
             var prog = progMock.BuildProgram();
             flow = new ProgramDataFlow(prog);
-            var a = new TerminationAnalysis(flow);
+            var a = new TerminationAnalysis(flow, eventListener);
             a.Analyze(test);
             Assert.IsTrue(flow[test].TerminatesProcess);
         }

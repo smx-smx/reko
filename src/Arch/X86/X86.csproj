@@ -37,6 +37,8 @@
     <UseApplicationTrust>false</UseApplicationTrust>
     <BootstrapperEnabled>true</BootstrapperEnabled>
     <TargetFrameworkProfile />
+    <ProductVersion>12.0.0</ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <OutputPath>bin\Debug\</OutputPath>
@@ -70,6 +72,17 @@
     <ErrorReport>prompt</ErrorReport>
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'TravisRelease|AnyCPU'">
+    <OutputPath>bin\TravisRelease\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <BaseAddress>285212672</BaseAddress>
+    <Optimize>true</Optimize>
+    <FileAlignment>4096</FileAlignment>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
   <ItemGroup>
     <Reference Include="System">
       <Name>System</Name>
@@ -87,6 +100,7 @@
   <ItemGroup>
     <Compile Include="X86Disassembler.0F3A.cs" />
     <Compile Include="X86Emulator.cs" />
+    <Compile Include="X86Options.cs" />
     <Compile Include="X86PointerScanner.cs" />
     <Compile Include="X86AddressOperand.cs" />
     <Compile Include="FstswChainMatcher.cs" />
@@ -96,20 +110,19 @@
     <Compile Include="Properties\AssemblyInfo.cs">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="IntelInstruction.cs">
+    <Compile Include="X86Instruction.cs">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="X86InstructionComparer.cs">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="IntelRegister.cs" />
     <Compile Include="Registers.cs" />
     <Compile Include="X86Disassembler.cs" />
     <Compile Include="X86Disassembler.Groups.cs" />
     <Compile Include="X86Disassembler.OneByte.cs" />
     <Compile Include="X86Disassembler.TwoByte.cs" />
     <Compile Include="X86Disassembler.x87.cs" />
-    <Compile Include="X86lProcessorArchitecture.cs" />
+    <Compile Include="X86ProcessorArchitecture.cs" />
     <Compile Include="X86ProcedureSerializer.cs" />
     <Compile Include="X86Rewriter.Ext.cs" />
     <Compile Include="X86Rewriter.Fpu.cs" />

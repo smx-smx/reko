@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -48,7 +48,6 @@ namespace Reko.Gui.Windows.Forms
             mpCmdidToCommand = new Dictionary<int, MenuCommand>();
             AddCommand(new CommandID(CmdSets.GuidReko, CmdIds.ViewShowAllFragments));
             AddCommand(new CommandID(CmdSets.GuidReko, CmdIds.ViewShowUnscanned));
-            AddCommand(new CommandID(CmdSets.GuidReko, CmdIds.ViewFindFragments));
         }
 
         protected MenuCommand AddCommand(CommandID cmdId)
@@ -98,11 +97,12 @@ namespace Reko.Gui.Windows.Forms
             var hits = Decompiler.Project.Programs
                 .SelectMany(p => p.ImageMap.Items
                         .Where(i => i.Value.DataType is UnknownType)
-                        .Select(i => new AddressSearchHit { Program = p, Address = i.Key}));
+                        .Select(i => new ProgramAddress(p, i.Key)));
             srSvc.ShowSearchResults(
                 new AddressSearchResult(
                     Services,
-                    hits));
+                    hits,
+                    AddressSearchDetails.Code));
             return true;
         }
 
@@ -110,11 +110,23 @@ namespace Reko.Gui.Windows.Forms
         {
             if (cmdId.Guid == CmdSets.GuidReko)
             {
-                MenuCommand cmd;
-                if (!mpCmdidToCommand.TryGetValue(cmdId.ID, out cmd))
-                    return false;
-                status.Status = (MenuStatus) cmd.OleStatus;
-                return true;
+                switch (cmdId.ID)
+                {
+                case CmdIds.ActionFinishDecompilation:
+                case CmdIds.ActionRestartDecompilation:
+                    status.Status = MenuStatus.Visible | MenuStatus.Enabled;
+                    return true;
+                case CmdIds.ActionNextPhase:
+                    status.Status = MenuStatus.Visible | MenuStatus.Enabled;
+                    text.Text = Resources.AnalyzeDataflow;
+                    return true;
+                default:
+                    MenuCommand cmd;
+                    if (!mpCmdidToCommand.TryGetValue(cmdId.ID, out cmd))
+                        return false;
+                    status.Status = (MenuStatus)cmd.OleStatus;
+                    return true;
+                }
             }
             return false;
         }

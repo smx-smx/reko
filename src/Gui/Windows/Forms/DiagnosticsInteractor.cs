@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -35,9 +35,11 @@ namespace Reko.Gui.Windows.Forms
     /// </summary>
     public class DiagnosticsInteractor : IDiagnosticsService, IWindowPane, ICommandTarget
     {
+        private IServiceProvider services;
         private ListView listView;
         private List<KeyValuePair<ICodeLocation, Diagnostic>> pending;
-        private IServiceProvider services;
+
+        public IWindowFrame Frame { get; set; }
 
         public void Attach(ListView listView)
         {
@@ -56,6 +58,12 @@ namespace Reko.Gui.Windows.Forms
         public void SetSite(IServiceProvider sp)
         {
             this.services = sp;
+            if (services != null)
+            {
+                var uiUser = services.RequireService<IUiPreferencesService>();
+                uiUser.UiPreferencesChanged += delegate { uiUser.UpdateControlStyle(UiStyles.List, listView); };
+                uiUser.UpdateControlStyle(UiStyles.List, listView);
+            }
         }
 
         public void Close()
@@ -106,6 +114,11 @@ namespace Reko.Gui.Windows.Forms
             AddDiagnostic(new NullCodeLocation(""), new ErrorDiagnostic(message, ex));
         }
 
+        public void Error(string message, params object[] args)
+        {
+            Error(string.Format(message, args));
+        }
+
         public void Error(ICodeLocation location, string message)
         {
             AddDiagnostic(location, new ErrorDiagnostic(message));
@@ -126,6 +139,11 @@ namespace Reko.Gui.Windows.Forms
             AddDiagnostic(new NullCodeLocation(""), new WarningDiagnostic(message));
         }
 
+        public void Warn(string message, params object[] args)
+        {
+            Warn(string.Format(message, args));
+        }
+
         public void Warn(ICodeLocation location, string message)
         {
             AddDiagnostic(location, new WarningDiagnostic(message));
@@ -133,7 +151,19 @@ namespace Reko.Gui.Windows.Forms
 
         public void Warn(ICodeLocation location, string message, params object[] args)
         {
-            AddDiagnostic(location, new WarningDiagnostic(string.Format(message, args)));
+            Warn(location, string.Format(message, args));
+        }
+
+        public void Inform(string message)
+        {
+            AddDiagnostic(new NullCodeLocation(""), new InformationalDiagnostic(message));
+        }
+
+        public void Inform(string message, params object[] args)
+        {
+            AddDiagnostic(
+                new NullCodeLocation(""),
+                new InformationalDiagnostic(string.Format(message, args)));
         }
 
         public void ClearDiagnostics()
@@ -208,6 +238,11 @@ namespace Reko.Gui.Windows.Forms
             for (int i = 0; i < listView.Items.Count; ++i)
                 listView.SelectedIndices.Add(i);
             return true;
+        }
+
+        public void Error(ICodeLocation location, string message, params object[] args)
+        {
+            throw new NotImplementedException();
         }
     }
 }

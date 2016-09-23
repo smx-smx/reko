@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -51,25 +51,26 @@ namespace Reko.UnitTests.Gui.Windows
         }
 
         [Test]
+        [Category(Categories.UserInterface)]
         public void MVS_ShowingWindowCreatesWindowFrame()
         {
             ServiceContainer sc = new ServiceContainer();
             var shellUi = mr.DynamicMock<IDecompilerShellUiService>();
             var decSvc = mr.StrictMock<IDecompilerService>();
             var windowFrame = mr.DynamicMock<IWindowFrame>();
-            var uiPrefSvc = mr.Stub<IUiPreferencesService>();
             sc.AddService(typeof(IDecompilerShellUiService), shellUi);
             sc.AddService<IDecompilerService>(decSvc);
-            AddStubService<IUiPreferencesService>(sc);
+            AddStubService<IUiPreferencesService>(sc).Stub(u => u.Styles).Return(new Dictionary<string, UiStyle>());
             Given_Program();
             var service = mr.Stub<LowLevelViewServiceImpl>(sc);
             var interactor = new LowLevelViewInteractor();
             service.Stub(x => x.CreateMemoryViewInteractor()).Return(interactor);
 
             var svc = (ILowLevelViewService)service;
-            Expect.Call(shellUi.FindWindow("memoryViewWindow")).Return(null);
-            Expect.Call(shellUi.CreateWindow(
+            shellUi.Expect(s => s.FindDocumentWindow("memoryViewWindow", program)).Return(null);
+            shellUi.Expect(s => s.CreateDocumentWindow(
                 Arg<string>.Is.Anything,
+                Arg<Program>.Is.Same(program),
                 Arg<string>.Is.Equal("Memory View"),
                 Arg<IWindowPane>.Is.Anything))
                 .Return(windowFrame);
@@ -78,7 +79,7 @@ namespace Reko.UnitTests.Gui.Windows
 
             interactor.SetSite(sc);
             interactor.CreateControl();
-            svc.ShowMemoryAtAddress(program, program.Image.BaseAddress);
+            svc.ShowMemoryAtAddress(this.program, (Address)this.program.ImageMap.BaseAddress);
 
             mr.VerifyAll();
         }
@@ -86,8 +87,10 @@ namespace Reko.UnitTests.Gui.Windows
         private void Given_Program()
         {
             var addrBase = Address.Ptr32(0x10000);
-            var image = new LoadedImage(addrBase, new byte[100]);
-            var map = image.CreateImageMap();
+            var mem = new MemoryArea(addrBase, new byte[100]);
+            var map = new SegmentMap(
+                    mem.BaseAddress,
+                    new ImageSegment("code", mem, AccessMode.ReadWriteExecute));
             var arch = mr.Stub<IProcessorArchitecture>();
             var dasm = mr.Stub<IEnumerable<MachineInstruction>>();
             var e = mr.Stub<IEnumerator<MachineInstruction>>();
@@ -95,13 +98,13 @@ namespace Reko.UnitTests.Gui.Windows
             arch.Stub(a => a.CreateDisassembler(Arg<ImageReader>.Is.NotNull)).Return(dasm);
             arch.Stub(a => a.InstructionBitSize).Return(8);
             arch.Stub(a => a.CreateImageReader(
-                Arg<LoadedImage>.Is.NotNull,
-                Arg<Address>.Is.NotNull)).Return(image.CreateLeReader(addrBase));
+                Arg<MemoryArea>.Is.NotNull,
+                Arg<Address>.Is.NotNull)).Return(mem.CreateLeReader(addrBase));
             dasm.Stub(d => d.GetEnumerator()).Return(e);
             arch.Replay();
             dasm.Replay();
             e.Replay();
-            this.program = new Program(image, map, arch, null);
+            this.program = new Program(map, arch, null);
         }
 
         private T AddStubService<T>(IServiceContainer sc)
@@ -112,6 +115,7 @@ namespace Reko.UnitTests.Gui.Windows
         }
 
         [Test]
+        [Category(Categories.UserInterface)]
         public void LLI_ShowMemoryAtAddressShouldChangeMemoryControl()
         {
             var sc = new ServiceContainer();
@@ -119,10 +123,10 @@ namespace Reko.UnitTests.Gui.Windows
             var interactor = mr.DynamicMock<LowLevelViewInteractor>();
             interactor.Expect(i => i.SelectedAddress).SetPropertyWithArgument(Address.Ptr32(0x4711));
             var uiSvc = AddStubService<IDecompilerShellUiService>(sc);
-            AddStubService<IUiPreferencesService>(sc);
+            AddStubService<IUiPreferencesService>(sc).Stub(u => u.Styles).Return(new Dictionary<string, UiStyle>());
             Given_Program();
-            uiSvc.Stub(x => x.FindWindow(Arg<string>.Is.Anything)).Return(null);
-            uiSvc.Stub(x => x.CreateWindow("", "", null))
+            uiSvc.Stub(x => x.FindDocumentWindow(null, null)).IgnoreArguments().Return(null);
+            uiSvc.Stub(x => x.CreateDocumentWindow("", null, "", null))
                 .IgnoreArguments()
                 .Return(mr.Stub<IWindowFrame>());
             uiSvc.Stub(x => x.GetContextMenu(MenuIds.CtxMemoryControl)).Return(new ContextMenu());
@@ -130,7 +134,7 @@ namespace Reko.UnitTests.Gui.Windows
 
             var service = mr.Stub<LowLevelViewServiceImpl>(sc);
             service.Stub(x => x.CreateMemoryViewInteractor()).Return(interactor);
-            var image = new LoadedImage(Address.Ptr32(0x1000), new byte[300]);
+            var image = new MemoryArea(Address.Ptr32(0x1000), new byte[300]);
             mr.ReplayAll();
 
             interactor.SetSite(sc);

@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -35,7 +35,6 @@ namespace Reko.UnitTests.Scanning
     [TestFixture]
     public class HeuristicScannerTests : HeuristicTestBase
     {
-
         [SetUp]
         public override void Setup()
         {
@@ -53,8 +52,8 @@ namespace Reko.UnitTests.Scanning
             Given_RewriterHost();
             mr.ReplayAll();
 
-            var hsc = new HeuristicScanner(prog, host);
-            var addr = hsc.FindCallOpcodes(new Address[] {
+            var hsc = new HeuristicScanner(program, host, eventListener);
+            var addr = hsc.FindCallOpcodes(segment.MemoryArea, new Address[] {
                 Address.Ptr32(0x1008)
             }).ToList();
 
@@ -76,7 +75,7 @@ namespace Reko.UnitTests.Scanning
             {
                 Image = image,
                 ImageMap = image.CreateImageMap(),
-                Architecture = new IntelArchitecture(ProcessorMode.Protected32),
+                Architecture = new X86ArchitectureFlat32(),
             };
 #else
             Given_Image32(0x001000, 
@@ -88,10 +87,10 @@ namespace Reko.UnitTests.Scanning
             Given_RewriterHost();
             mr.ReplayAll();
 
-            Assert.AreEqual(18, prog.Image.Length);
+            Assert.AreEqual(18, segment.MemoryArea.Length);
 
-            var hsc = new HeuristicScanner(prog, host);
-            var linAddrs = hsc.FindCallOpcodes(new Address[]{
+            var hsc = new HeuristicScanner(program, host, eventListener);
+            var linAddrs = hsc.FindCallOpcodes(segment.MemoryArea, new Address[]{
                 Address.Ptr32(0x1010),
                 Address.Ptr32(0x1011)}).ToList();
 
@@ -110,8 +109,8 @@ namespace Reko.UnitTests.Scanning
             Given_RewriterHost();
             mr.ReplayAll();
 
-            var hsc = new HeuristicScanner(prog, host);
-            var linAddrs = hsc.FindCallOpcodes(new Address[] {
+            var hsc = new HeuristicScanner(program, host, eventListener);
+            var linAddrs = hsc.FindCallOpcodes(segment.MemoryArea, new Address[] {
                 Address.SegPtr(0x0C00, 0)}).ToList();
 
             Assert.AreEqual(1, linAddrs.Count);
@@ -127,9 +126,9 @@ namespace Reko.UnitTests.Scanning
             Given_RewriterHost();
             mr.ReplayAll();
 
-            var hsc = new HeuristicScanner(prog, host);
+            var hsc = new HeuristicScanner(program, host, eventListener);
 
-            var linAddrs = hsc.FindCallOpcodes(new Address[] {
+            var linAddrs = hsc.FindCallOpcodes(segment.MemoryArea, new Address[] {
                 Address.SegPtr(0x0C00, 0)}).ToList();
 
             Assert.AreEqual(1, linAddrs.Count);
@@ -139,20 +138,24 @@ namespace Reko.UnitTests.Scanning
         [Test]
         public void HSC_ARM32_Calls()
         {
-            var image = CreateImage(Address.Ptr32(0x1000),
+            var mem = CreateMemoryArea(Address.Ptr32(0x1000),
                 0xE1A0F00E,     // mov r15,r14 (return)
                 0xEBFFFFFD,
                 0xEBFFFFFC);
-            prog = new Program
+            this.segment = new ImageSegment(".text", mem, AccessMode.ReadExecute);
+            var imageMap = new SegmentMap(
+                mem.BaseAddress,
+                segment);
+            program = new Program
             {
-                Image = image,
+                SegmentMap = imageMap,
                 Architecture = new Arm32ProcessorArchitecture(),
             };
             var host = mr.Stub<IRewriterHost>();
             mr.ReplayAll();
 
-            var hsc = new HeuristicScanner(prog, host);
-            var linAddrs = hsc.FindCallOpcodes(new Address[] {
+            var hsc = new HeuristicScanner(program, host, eventListener);
+            var linAddrs = hsc.FindCallOpcodes(segment.MemoryArea, new Address[] {
                 Address.Ptr32(0x1000),
             }).ToList();
 
@@ -161,16 +164,15 @@ namespace Reko.UnitTests.Scanning
             Assert.IsTrue(linAddrs.Contains(Address.Ptr32(0x1008)));
         }
 
-
         [Test]
-        public void HSC_FindPossibleProcedureEntries() // "Starts"
+        public void HSC_FindPossible_x86_ProcedureEntries() // "Starts"
         {
             Given_Image32(0x10000, "CC CC CC 55 8B EC C3 00   00 00 55 8B EC");
             Given_x86_32();
             var host = mr.Stub<IRewriterHost>();
             mr.ReplayAll();
 
-            var hsc = new HeuristicScanner(prog, host);
+            var hsc = new HeuristicScanner(program, host, eventListener);
             var r = hsc.FindUnscannedRanges();
             var ranges = hsc.FindPossibleFunctions(r).ToArray();
             Assert.AreEqual(0x10003, ranges[0].Item1.ToLinear());
@@ -178,7 +180,6 @@ namespace Reko.UnitTests.Scanning
             Assert.AreEqual(0x1000A, ranges[1].Item1.ToLinear());
             Assert.AreEqual(0x1000D, ranges[1].Item2.ToLinear());
         }
-
 
         [Test]
         public void HSC_HeuristicDisassembleProc()
@@ -193,10 +194,11 @@ namespace Reko.UnitTests.Scanning
                 .Return(null);
             mr.ReplayAll();
 
-            var hsc = new HeuristicScanner(prog, host);
+            var segment = program.SegmentMap.Segments.Values.First();
+            var hsc = new HeuristicScanner(program, host, eventListener);
             var proc = hsc.DisassembleProcedure(
-                prog.Image.BaseAddress,
-                prog.Image.BaseAddress + prog.Image.Length);
+                segment.MemoryArea.BaseAddress,
+                segment.MemoryArea.BaseAddress + segment.ContentSize);
             var sExp =
                 #region Expected
  @"l00010000:  // pred:
@@ -257,6 +259,8 @@ l0001001B:  // pred: l00010019 l0001001A
     pop ebp
 l0001001C:  // pred: l0001001B
     ret 
+l0001001D:  // pred:
+    nop 
 ";
             #endregion
             AssertBlocks(sExp, proc.Cfg);

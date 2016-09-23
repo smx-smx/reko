@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -39,7 +39,7 @@ namespace Reko.Arch.X86
 
         public override uint GetLinearAddress(Address address)
         {
-            return  address.ToUInt32();
+            return address.ToUInt32();
         }
 
         public override bool MatchCall(ImageReader rdr, uint opcode, out uint target)

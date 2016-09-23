@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,17 +18,19 @@
  */
 #endregion
 
+using NUnit.Framework;
 using Reko.Arch.X86;
 using Reko.Assemblers.x86;
 using Reko.Core;
-using Reko.Core.Machine;
+using Reko.Core.Services;
 using Reko.Environments.Msdos;
 using Reko.Scanning;
 using Reko.UnitTests.Mocks;
-using NUnit.Framework;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.Design;
 using System.IO;
+using System.Linq;
 
 namespace Reko.UnitTests.Scanning
 {
@@ -38,44 +40,46 @@ namespace Reko.UnitTests.Scanning
         private IntelArchitecture arch;
         private Scanner scanner;
         private Program program;
+        private ServiceContainer sc;
 
         private void BuildTest16(Action<X86Assembler> asmProg)
         {
-            arch = new IntelArchitecture(ProcessorMode.Real);
-            BuildTest(Address.SegPtr(0x0C00, 0x0000), new MsdosPlatform(null, arch), asmProg);
+            sc = new ServiceContainer();
+            sc.AddService<IFileSystemService>(new FileSystemServiceImpl());
+            arch = new X86ArchitectureReal();
+            BuildTest(Address.SegPtr(0x0C00, 0x0000), new MsdosPlatform(sc, arch), asmProg);
         }
 
         private void BuildTest32(Action<X86Assembler> asmProg)
         {
-            arch = new IntelArchitecture(ProcessorMode.Protected32);
-            BuildTest(Address.Ptr32(0x00100000), new FakePlatform(null, null), asmProg);
+            arch = new X86ArchitectureFlat32();
+            BuildTest(Address.Ptr32(0x00100000), new FakePlatform(sc, null), asmProg);
         }
 
-        private void BuildTest(Address addrBase, Platform platform , Action<X86Assembler> asmProg)
+        private void BuildTest(Address addrBase, IPlatform platform , Action<X86Assembler> asmProg)
         {
-            var entryPoints = new List<EntryPoint>();
-            var asm = new X86Assembler(arch, addrBase, entryPoints);
+            var sc = new ServiceContainer();
+            var eventListener = new FakeDecompilerEventListener();
+            sc.AddService<DecompilerEventListener>(eventListener);
+            sc.AddService<DecompilerHost>(new FakeDecompilerHost());
+            sc.AddService<IFileSystemService>(new FileSystemServiceImpl());
+            var entryPoints = new List<ImageSymbol>();
+            var asm = new X86Assembler(sc, platform, addrBase, entryPoints);
             asmProg(asm);
 
-            var lr = asm.GetImage();
-            program = new Program(
-                lr.Image,
-                lr.ImageMap,
-                arch,
-                platform);
+            program = asm.GetImage();
             var project = new Project { Programs = { program } };
             scanner = new Scanner(
                 program,
-                new Dictionary<Address, ProcedureSignature>(),
-                new ImportResolver(project),
-                new FakeDecompilerEventListener());
-            scanner.EnqueueEntryPoint(new EntryPoint(addrBase, arch.CreateProcessorState()));
+                new ImportResolver(project, program, eventListener),
+                sc);
+            scanner.EnqueueImageSymbol(new ImageSymbol(addrBase), true);
             scanner.ScanImage();
         }
 
         private void DumpProgram(Scanner scanner)
         {
-            var dasm = arch.CreateDisassembler(program.Image.CreateLeReader(0));
+            var dasm = arch.CreateDisassembler(program.SegmentMap.Segments.Values.First().MemoryArea.CreateLeReader(0));
             foreach (var instr in dasm)
             {
                 Console.Out.WriteLine("{0} {1}", instr.Address, instr);

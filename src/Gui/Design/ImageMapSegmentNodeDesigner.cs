@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@
 #endregion
 
 using Reko.Core;
+using Reko.Core.Types;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -28,11 +29,11 @@ namespace Reko.Gui.Design
 {
     public class ImageMapSegmentNodeDesigner : TreeNodeDesigner
     {
-        private ImageMapSegment segment;
+        private ImageSegment segment;
 
         public override void Initialize(object obj)
         {
-            this.segment = (ImageMapSegment) obj;
+            this.segment = (ImageSegment) obj;
             base.TreeNode.Text = segment.Name;
             base.TreeNode.ImageName = GetImageName();
             base.TreeNode.ToolTipText = GetTooltip();
@@ -82,18 +83,39 @@ namespace Reko.Gui.Design
             var program = GetProgram();
             if (program == null)
                 return;
+            var eps = program.EntryPoints.Keys.ToHashSet();
+            var globals = GetGlobalVariables(program.ImageMap, segment);
             var desDictionary =
+                globals.Concat(
                 (from proc in program.Procedures.Where(p => segment.IsInRange(p.Key))
-                join up in program.UserProcedures on proc.Key.ToLinear() equals up.Key.ToLinear() into ups
-                from up in ups.DefaultIfEmpty()
-                select new ProcedureDesigner(program, proc.Value, up.Value, proc.Key)).
+                 join up in program.User.Procedures on proc.Key.ToLinear() equals up.Key.ToLinear() into ups
+                 from up in ups.DefaultIfEmpty()
+                 select new ProcedureDesigner(program, proc.Value, up.Value, proc.Key, eps.Contains(proc.Key))).
                 Union(
-                from up in program.UserProcedures.Where(p => segment.IsInRange(p.Key))
+                from up in program.User.Procedures.Where(p => segment.IsInRange(p.Key))
                 join proc in program.Procedures on up.Key.ToLinear() equals proc.Key.ToLinear() into ups
                 from proc in ups.DefaultIfEmpty()
-                select new ProcedureDesigner(program, proc.Value, up.Value, up.Key)
-                );
+                select new ProcedureDesigner(program, proc.Value, up.Value, up.Key, eps.Contains(up.Key))).
+                OrderBy(pd => pd.Address));
             Host.AddComponents(Component, desDictionary);
+        }
+
+        private TreeNodeDesigner[] GetGlobalVariables(ImageMap imageMap, ImageSegment segment)
+        {
+            if (imageMap.Items.Values
+                .Where(i => !(i is ImageMapBlock) && 
+                            !(i.DataType is UnknownType))
+                .Any(i => segment.IsInRange(i.Address)))
+            {
+                return new TreeNodeDesigner[]
+                {
+                    new GlobalVariablesNodeDesigner(segment)
+                };
+            }
+            else
+            {
+                return new TreeNodeDesigner[0];
+            }
         }
 
         private Program GetProgram()

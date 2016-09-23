@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -35,9 +35,12 @@ namespace Reko.Gui.Windows
         private IServiceProvider services;
         private Program program;
 
+        public IWindowFrame Frame { get; set; }
+
         public Control CreateControl()
         {
             this.segmentView = new ImageSegmentView();
+            this.segmentView.TextView.Services = services;
             this.segmentView.TextView.Navigate += TextView_Navigate;
             return this.segmentView;
         }
@@ -61,7 +64,7 @@ namespace Reko.Gui.Windows
         {
         }
 
-        public void DisplaySegment(ImageMapSegment segment, Program program)
+        public void DisplaySegment(ImageSegment segment, Program program)
         {
             try
             {

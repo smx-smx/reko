@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,6 +21,7 @@
 using Reko.Core;
 using Reko.Core.Code;
 using Reko.Core.Expressions;
+using Reko.Core.Types;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -30,7 +31,8 @@ namespace Reko.Arch.Z80
 {
     public class Z80ProcessorState : ProcessorState
     {
-        const int RegisterFileItems = 8;        // AF, BC, DE, HL, IX, IY, IR
+        const int RegisterFileItems = 32;
+
         private Z80ProcessorArchitecture arch;
         private ushort[] registerFile;
         private bool[] isValid;
@@ -47,6 +49,7 @@ namespace Reko.Arch.Z80
         {
             this.arch = state.arch;
             this.registerFile = (ushort[])state.registerFile.Clone();
+            this.isValid = (bool[])state.isValid.Clone();
         }
 
         public override IProcessorArchitecture Architecture { get { return arch; } }
@@ -56,39 +59,47 @@ namespace Reko.Arch.Z80
             return new Z80ProcessorState(this);
         }
 
-        public override Constant GetRegister(RegisterStorage r)
+        public override Constant GetRegister(RegisterStorage reg)
         {
-            throw new NotImplementedException();
+            if (reg != null && isValid[(int)reg.Domain])
+                return Constant.Create(reg.DataType, registerFile[(int)reg.Domain]);
+            else
+                return Constant.Invalid;
         }
 
-        public override void SetRegister(RegisterStorage r, Constant v)
+        public override void SetRegister(RegisterStorage reg, Constant v)
         {
-            throw new NotImplementedException();
+            if (reg != null && v != null && v.IsValid)
+            {
+                isValid[(int)reg.Domain] = true;
+                registerFile[(int)reg.Domain] = v.ToByte();
+            }
+            else
+            {
+                isValid[(int)reg.Domain] = false;
+            }
         }
 
         public override void SetInstructionPointer(Address addr)
         {
-            throw new NotImplementedException();
         }
 
         public override void OnProcedureEntered()
         {
-            throw new NotImplementedException();
+            return;
         }
 
-        public override void OnProcedureLeft(ProcedureSignature procedureSignature)
+        public override void OnProcedureLeft(FunctionType procedureSignature)
         {
-            throw new NotImplementedException();
         }
 
         public override CallSite OnBeforeCall(Identifier stackReg, int returnAddressSize)
         {
-            throw new NotImplementedException();
+            return new CallSite(returnAddressSize, 0);
         }
 
-        public override void OnAfterCall(Identifier stackReg, ProcedureSignature sigCallee, ExpressionVisitor<Expression> eval)
+        public override void OnAfterCall(FunctionType sigCallee)
         {
-            throw new NotImplementedException();
         }
     }
 }

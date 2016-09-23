@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -57,7 +57,7 @@ namespace Reko.Arch.Mos6502
             case AddressMode.AbsoluteY: fmt = "${0:X4},{1}"; break;
             case AddressMode.Indirect: fmt = "(${0:X4})"; break;
             case AddressMode.IndexedIndirect: fmt = "(${0:X2},{1})"; break;
-            case AddressMode.IndirectIndexed: fmt = "(%{0:X2}),{1}"; break;
+            case AddressMode.IndirectIndexed: fmt = "(${0:X2}),{1}"; break;
             default: throw new NotSupportedException();
             }
             writer.Write(string.Format(fmt, o, Register));

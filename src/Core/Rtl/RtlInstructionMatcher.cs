@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -62,22 +62,37 @@ namespace Reko.Core.Rtl
             return matcher.Match(ass.Dst);
         }
 
-public bool VisitGoto(RtlGoto go)
-{
- 	throw new NotImplementedException();
-}
+        public bool VisitGoto(RtlGoto go)
+        {
+            var gPat = pattern as RtlGoto;
+            if (gPat == null)
+                return false;
+            matcher.Pattern = gPat.Target;
+            return matcher.Match(go.Target);
+        }
 
-public bool VisitIf(RtlIf rtlIf)
-{
-    var pIf = pattern as RtlIf;
-    if (pIf == null)
-        return false;
-    var p = pattern;
-    pattern = pIf.Instruction;
-    var ret = rtlIf.Instruction.Accept(this);
-    pattern = p;
-    return ret;
-}
+        public bool VisitIf(RtlIf rtlIf)
+        {
+            var pIf = pattern as RtlIf;
+            if (pIf == null)
+                return false;
+            var p = pattern;
+            pattern = pIf.Instruction;
+            var ret = rtlIf.Instruction.Accept(this);
+            pattern = p;
+            return ret;
+        }
+
+        public bool VisitInvalid(RtlInvalid invalid)
+        {
+            var pInvalid = pattern as RtlInvalid;
+            return pInvalid != null;
+        }
+
+        public bool VisitNop(RtlNop nop)
+        {
+            return pattern is RtlNop;
+        }
 
         public bool VisitBranch(RtlBranch branch)
         {

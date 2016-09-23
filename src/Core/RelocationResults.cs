@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,14 +28,17 @@ namespace Reko.Core
     public class RelocationResults
     {
         // Collection into which any found entry points found should be added.
-        public readonly List<EntryPoint> EntryPoints;
-        // Each relocation is a potential constant pointer. Some platforms only relocate _segments_, though.
-        public readonly  RelocationDictionary Relocations;
+        public readonly List<ImageSymbol> EntryPoints;
 
-        public RelocationResults(List<EntryPoint> entryPoints, RelocationDictionary relocations)
+        // Symbols whose addresses are known.
+        public SortedList<Address, ImageSymbol> Symbols;
+
+        public RelocationResults(
+            List<ImageSymbol> entryPoints, 
+            SortedList<Address, ImageSymbol> symbols)
         {
             this.EntryPoints = entryPoints;
-            this.Relocations = relocations;
+            this.Symbols = symbols;
         }
     }
 }

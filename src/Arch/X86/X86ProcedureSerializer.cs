@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,101 +29,160 @@ using System.Text;
 
 namespace Reko.Arch.X86
 {
+    /// <summary>
+    /// Serializes and deserializes procedure signatures.
+    /// </summary>
+    /// <remarks>
+    /// This code is aware of the different calling convetions on 
+    /// x86 processors. Should your ABI be different, you need to
+    /// make the Platform that loaded the binary return an object
+    /// that derives from this class.
+    /// </remarks>
     public class X86ProcedureSerializer : ProcedureSerializer
     {
-        private ArgumentSerializer argser;
+        private ArgumentDeserializer argDeser;
+
         public X86ProcedureSerializer(IntelArchitecture arch, ISerializedTypeVisitor<DataType> typeLoader, string defaultCc)
             : base(arch, typeLoader, defaultCc)
         {
-
         }
 
-        public void ApplyConvention(SerializedSignature ssig, ProcedureSignature sig)
+        public void ApplyConvention(SerializedSignature ssig, FunctionType sig)
         {
             string d = ssig.Convention;
             if (d == null || d.Length == 0)
                 d = DefaultConvention;
-            if (d == "stdapi" || d == "__stdcall")  //$BUGBUG: platform-dependent!
-                sig.StackDelta = StackOffset;
-
+            sig.StackDelta = Architecture.PointerType.Size;  //$BUG: far/near pointers?
+            if (d == "stdapi" || d == "__stdcall" || d == "pascal")
+                sig.StackDelta += StackOffset;
             sig.FpuStackDelta = FpuStackOffset;
+            sig.ReturnAddressOnStack = Architecture.PointerType.Size;   //$BUG: x86 real mode?
         }
 
-        public override ProcedureSignature Deserialize(SerializedSignature ss, Frame frame)
+        public override FunctionType Deserialize(SerializedSignature ss, Frame frame)
         {
             if (ss == null)
                 return null;
-            this.argser = new ArgumentSerializer(this, Architecture, frame, ss.Convention);
+            this.argDeser = new ArgumentDeserializer(
+                this,
+                Architecture,
+                frame,
+                Architecture.PointerType.Size, //$BUG: x86 real mode?
+                Architecture.WordWidth.Size);
             Identifier ret = null;
             int fpuDelta = FpuStackOffset;
 
             FpuStackOffset = 0;
             if (ss.ReturnValue != null)
             {
-                ret = argser.DeserializeReturnValue(ss.ReturnValue);
+                ret = argDeser.DeserializeReturnValue(ss.ReturnValue);
                 fpuDelta += FpuStackOffset;
             }
 
             FpuStackOffset = 0;
             var args = new List<Identifier>();
+            if (ss.EnclosingType != null)
+            {
+                var arg = DeserializeImplicitThisArgument(ss);
+                args.Add(arg);
+            }
             if (ss.Arguments != null)
             {
-                for (int iArg = 0; iArg < ss.Arguments.Length; ++iArg)
+                if (ss.Convention == "pascal")
                 {
-                    var sArg = ss.Arguments[iArg];
-                    var arg = DeserializeArgument(sArg, iArg, ss.Convention);
-                    args.Add(arg);
+                    for (int iArg = ss.Arguments.Length -1; iArg >= 0; --iArg)
+                    {
+                        var sArg = ss.Arguments[iArg];
+                        var arg = DeserializeArgument(sArg, iArg, ss.Convention);
+                        args.Add(arg);
+                    }
+                    args.Reverse();
+                }
+                else
+                {
+                    for (int iArg = 0; iArg < ss.Arguments.Length; ++iArg)
+                    {
+                        var sArg = ss.Arguments[iArg];
+                        var arg = DeserializeArgument(sArg, iArg, ss.Convention);
+                        args.Add(arg);
+                    }
                 }
                 fpuDelta -= FpuStackOffset;
             }
             FpuStackOffset = fpuDelta;
-
-            var sig = new ProcedureSignature(ret, args.ToArray());
+            var sig = new FunctionType(ret, args.ToArray());
+            sig.IsInstanceMetod = ss.IsInstanceMethod;
             ApplyConvention(ss, sig);
             return sig;
         }
 
+        private Identifier DeserializeImplicitThisArgument(SerializedSignature ss)
+        {
+            var sArg = new Argument_v1
+            {
+                Type = new PointerType_v1(ss.EnclosingType),
+                Name = "this",
+            };
+            if (ss.Convention == "__thiscall")
+            {
+                sArg.Kind = new Register_v1("ecx");
+            }
+            else
+                sArg.Kind = new StackVariable_v1();
+            var arg = argDeser.Deserialize(sArg);
+            return arg;
+        }
+
+        /// <summary>
+        /// Deserializes an argument.
+        /// </summary>
+        /// <param name="arg"></param>
+        /// <param name="idx"></param>
+        /// <param name="convention"></param>
+        /// <returns></returns>
         public Identifier DeserializeArgument(Argument_v1 arg, int idx, string convention)
         {
             if (arg.Kind != null)
             {
-                return argser.Deserialize(arg, arg.Kind);
+                return argDeser.Deserialize(arg, arg.Kind);
             }
             if (convention == null)
-                return argser.Deserialize(arg, new StackVariable_v1());
+                return argDeser.Deserialize(arg, new StackVariable_v1());
             switch (convention)
             {
             case "":
+            case "cdecl":
+            case "pascal":
             case "stdapi":
+            case "stdcall":
             case "__cdecl":
             case "__stdcall":
-                return argser.Deserialize(arg, new StackVariable_v1 { });
             case "__thiscall":
-                if (idx == 0)
-                    return argser.Deserialize(arg, new Register_v1("ecx"));
-                else
-                    return argser.Deserialize(arg, new StackVariable_v1());
+                return argDeser.Deserialize(arg, new StackVariable_v1 { });
             }
             throw new NotSupportedException(string.Format("Unsupported calling convention '{0}'.", convention));
         }
 
         public override Storage GetReturnRegister(Argument_v1 sArg, int bitSize)
         {
+            if (bitSize == 0)
+                bitSize = Architecture.WordWidth.BitSize;
             switch (bitSize)
             {
             case 32: 
                 if (Architecture.WordWidth.BitSize == 16)
                     return new SequenceStorage(
-                        new Identifier("dx", PrimitiveType.Word16, Architecture.GetRegister("dx")),
-                        new Identifier("ax", PrimitiveType.Word16, Architecture.GetRegister("ax")));
+                        Architecture.GetRegister("dx"),
+                        Architecture.GetRegister("ax"));
                 break;
             case 64: if (Architecture.WordWidth.BitSize == 32)
                     return new SequenceStorage(
-                        new Identifier("edx", PrimitiveType.Word16, Architecture.GetRegister("edx")),
-                        new Identifier("eax", PrimitiveType.Word16, Architecture.GetRegister("eax")));
+                        Architecture.GetRegister("edx"),
+                        Architecture.GetRegister("eax"));
                 break;
             }
-            return Architecture.GetRegister("rax").GetSubregister(0, bitSize);
+            var reg = Architecture.GetRegister("rax");
+            return Architecture.GetSubregister(reg, 0, bitSize);
         }
     }
 }

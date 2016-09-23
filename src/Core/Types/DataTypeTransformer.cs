@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,6 +18,7 @@
  */
 #endregion
 
+using Reko.Core.Expressions;
 using System;
 
 namespace Reko.Core.Types
@@ -33,6 +34,11 @@ namespace Reko.Core.Types
 			at.ElementType = at.ElementType.Accept(this);
 			return at;
 		}
+
+        public virtual DataType VisitClass(ClassType ct)
+        {
+            throw new NotImplementedException();
+        }
 
         public virtual DataType VisitCode(CodeType c)
         {
@@ -50,16 +56,19 @@ namespace Reko.Core.Types
 		}
 
         public virtual DataType VisitFunctionType(FunctionType ft)
-		{
-			if (ft.ReturnType != null)
-				ft.ReturnType = ft.ReturnType.Accept(this);
+        {
+            if (ft.ReturnValue != null)
+                ft.ReturnValue.DataType = ft.ReturnValue.DataType.Accept(this);
 
-			DataType [] p = ft.ArgumentTypes;
-			for (int i = 0; i < p.Length; ++i)
-			{
-				DataType dt = p[i].Accept(this);
-				p[i] = dt;
-			}
+            Identifier[] p = ft.Parameters;
+            if (p != null)
+            { 
+                for (int i = 0; i < p.Length; ++i)
+                {
+                    DataType dt = p[i].DataType.Accept(this);
+                    p[i].DataType = dt;
+                }
+            }
 			return ft;
 		}
 
@@ -70,6 +79,9 @@ namespace Reko.Core.Types
 
         public virtual DataType VisitStructure(StructureType str)
 		{
+            // Do not transform user-defined types
+            if (str.UserDefined)
+                return str;
 			foreach (StructureField field in str.Fields)
 			{
 				field.DataType = field.DataType.Accept(this);
@@ -90,6 +102,12 @@ namespace Reko.Core.Types
 			return ptr;
 		}
 
+        public virtual DataType VisitReference(ReferenceTo refTo)
+        {
+            refTo.Referent = refTo.Referent.Accept(this);
+            return refTo;
+        }
+
         public virtual DataType VisitString(StringType str)
         {
             return str;
@@ -107,7 +125,10 @@ namespace Reko.Core.Types
 
         public virtual DataType VisitUnion(UnionType ut)
 		{
-			foreach (UnionAlternative a in ut.Alternatives.Values)
+            // Do not transform user-defined types
+            if (ut.UserDefined)
+                return ut;
+            foreach (UnionAlternative a in ut.Alternatives.Values)
 			{
 				a.DataType = a.DataType.Accept(this);
 			}

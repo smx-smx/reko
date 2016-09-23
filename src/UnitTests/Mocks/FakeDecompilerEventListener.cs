@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -57,14 +57,29 @@ namespace Reko.UnitTests.Mocks
             AddDiagnostic(location, new WarningDiagnostic(message));
         }
 
+        public void Warn(ICodeLocation location, string message, params object[] args)
+        {
+            Warn(location, string.Format(message, args));
+        }
+
         public void Error(ICodeLocation location, string message)
         {
             AddDiagnostic(location, new ErrorDiagnostic(message));
         }
 
+        public void Error(ICodeLocation location, string message, params object[] args)
+        {
+            Error(location, string.Format(message, args));
+        }
+
         public void Error(ICodeLocation location, Exception ex, string message)
         {
             AddDiagnostic(location, new ErrorDiagnostic(message, ex));
+        }
+
+        public void Error(ICodeLocation location, Exception ex, string message, params object[] args)
+        {
+            Error(location, ex, string.Format(message, args));
         }
 
         public void ShowProgress(string caption, int numerator, int denominator)
@@ -75,6 +90,11 @@ namespace Reko.UnitTests.Mocks
         public void ShowStatus(string status)
         {
             lastStatus = status;
+        }
+
+        public bool IsCanceled()
+        {
+            return false;
         }
 
         public void CodeStructuringComplete()
@@ -132,16 +152,25 @@ namespace Reko.UnitTests.Mocks
             return new NullCodeLocation(address.ToString());
         }
 
-        public ICodeLocation CreateProcedureNavigator(Procedure proc)
+        public ICodeLocation CreateProcedureNavigator(Program program, Procedure proc)
         {
             return new NullCodeLocation(proc.Name);
         }
 
-        public ICodeLocation CreateBlockNavigator(Block block)
+        public ICodeLocation CreateBlockNavigator(Program program, Block block)
         {
             return new NullCodeLocation(block.Name);
         }
 
+        public ICodeLocation CreateStatementNavigator(Program program, Statement stm)
+        {
+            return new NullCodeLocation(program.SegmentMap.MapLinearAddressToAddress(stm.LinearAddress).ToString());
+        }
+
+        public ICodeLocation CreateJumpTableNavigator(Program program, Address addrIndirectJump, Address addrVector, int stride)
+        {
+            return new NullCodeLocation(addrIndirectJump.ToString());
+        }
 
         #region IWorkerDialogService Members
 

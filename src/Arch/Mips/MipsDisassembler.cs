@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -47,13 +47,23 @@ namespace Reko.Arch.Mips
         {
             if (!rdr.IsValid)
                 return null; 
-            this.addr = rdr.Address; 
-            var wInstr = rdr.ReadBeUInt32();
-            var opRec = opRecs[wInstr >> 26];
-            Debug.Print("Decoding {0:X8} => oprec {1} {2}", wInstr, wInstr >> 26, opRec == null ? "(null!)" : "");
+            this.addr = rdr.Address;
+            OpRec opRec;
+            uint wInstr;
+            if (rdr.TryReadUInt32(out wInstr))
+            {
+                opRec = opRecs[wInstr >> 26];
+            }
+            else
+            {
+                opRec = null;
+            }
             if (opRec == null)
-                throw new NotImplementedException((wInstr >> 26).ToString());    //$REVIEW: remove this when all oprecs are in place.
-            instrCur = opRec.Decode(wInstr, this);
+                instrCur = new MipsInstruction { opcode = Opcode.illegal };
+            else 
+                instrCur = opRec.Decode(wInstr, this);
+            instrCur.Address = this.addr;
+            instrCur.Length = 4;
             return instrCur;
         }
 
@@ -61,12 +71,12 @@ namespace Reko.Arch.Mips
         {
             new SpecialOpRec(),
             new CondOpRec(),
-            new AOpRec(Opcode.j, "J"), 
-            new AOpRec(Opcode.jal, "J"), 
-            new AOpRec(Opcode.beq, "R1,R2,j"), 
-            new AOpRec(Opcode.bne, "R1,R2,j"), 
-            new AOpRec(Opcode.blez, "R1,j"), 
-            new AOpRec(Opcode.bgtz, "R1,j"), 
+            new AOpRec(Opcode.j, "J"),
+            new AOpRec(Opcode.jal, "J"),
+            new AOpRec(Opcode.beq, "R1,R2,j"),
+            new AOpRec(Opcode.bne, "R1,R2,j"),
+            new AOpRec(Opcode.blez, "R1,j"),
+            new AOpRec(Opcode.bgtz, "R1,j"),
 
             new AOpRec(Opcode.addi, "R2,R1,I"),
             new AOpRec(Opcode.addiu, "R2,R1,I"),
@@ -78,9 +88,192 @@ namespace Reko.Arch.Mips
             new AOpRec(Opcode.xori, "R2,R1,U"),
             new AOpRec(Opcode.lui, "R2,i"),
             // 10
-            null,
-            null,
-            null, 
+            new CoprocessorOpRec(
+                new AOpRec(Opcode.mfc0, "R2,R3"),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.mtc0, "R2,R3"),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, "")),
+
+            new CoprocessorOpRec(
+                new AOpRec(Opcode.mfc1, "R2,F3"),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.cfc1, "R2,f3"),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.mtc1, "R2,F3"),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.ctc1, "R2,f3"),
+                new AOpRec(Opcode.illegal, ""),
+
+                new BcNRec(Opcode.bc1f, Opcode.bc1t),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+
+                new AOpRec(Opcode.illegal, ""),
+                new FpuOpRec(PrimitiveType.Real64,
+                    // fn 00
+                    new AOpRec(Opcode.add_d, "F4,F3,F2"),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+
+                    // fn 10
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+
+                    // fn 20
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.cvt_w_d, "F4,F3"),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+
+                    // fn 30
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.illegal, ""),
+                    new AOpRec(Opcode.c_le_d, "c8,F3,F2"),
+                    new AOpRec(Opcode.illegal, "")),
+
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, "")),
+
+           new CoprocessorOpRec(
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, ""),
+                new AOpRec(Opcode.illegal, "")),
             null, 
             new AOpRec(Opcode.beql, "R1,R2,j"), 
             new AOpRec(Opcode.bnel, "R1,R2,j"), 
@@ -99,17 +292,17 @@ namespace Reko.Arch.Mips
             new AOpRec(Opcode.lb, "R2,EB"),
             new AOpRec(Opcode.lh, "R2,EH"),
             new AOpRec(Opcode.lwl, "R2,Ew"),
-            new AOpRec(Opcode.lw, "R2,EW"),
+            new AOpRec(Opcode.lw, "R2,Ew"),
                               
             new AOpRec(Opcode.lbu, "R2,Eb"),
             new AOpRec(Opcode.lhu, "R2,Eh"),
             new AOpRec(Opcode.lwr, "R2,Ew"),
             new AOpRec(Opcode.lwu, "R2,Ew"),
             
-            new AOpRec(Opcode.sb, "R2,EB"),
-            new AOpRec(Opcode.sh, "R2,EH"),
+            new AOpRec(Opcode.sb, "R2,Eb"),
+            new AOpRec(Opcode.sh, "R2,Eh"),
             new AOpRec(Opcode.swl, "R2,Ew"),
-            new AOpRec(Opcode.sw, "R2,EW"),
+            new AOpRec(Opcode.sw, "R2,Ew"),
 
             new AOpRec(Opcode.sdl, "R2,Ew"),
             new AOpRec(Opcode.sdr, "R2,Ew"),
@@ -127,7 +320,7 @@ namespace Reko.Arch.Mips
             new AOpRec(Opcode.ld, "R2,El"),
 
             new AOpRec(Opcode.sc, "R2,El"),
-            null,
+            new AOpRec(Opcode.swc1, "F2,Ew"),
             null,
             null,
 
@@ -158,6 +351,26 @@ namespace Reko.Arch.Mips
                     default: throw new NotImplementedException(string.Format("Register field {0}.", opFmt[i]));
                     }
                     break;
+                case 'F':
+                    switch (opFmt[++i])
+                    {
+                    case '1': op = FReg(wInstr >> 21); break;
+                    case '2': op = FReg(wInstr >> 16); break;
+                    case '3': op = FReg(wInstr >> 11); break;
+                    case '4': op = FReg(wInstr >> 6); break;
+                    default: throw new NotImplementedException(string.Format("Register field {0}.", opFmt[i]));
+                    }
+                    break;
+                case 'f': // FPU control register
+                    switch (opFmt[++i])
+                    {
+                    case '1': op = FCReg(wInstr >> 21); break;
+                    case '2': op = FCReg(wInstr >> 16); break;
+                    case '3': op = FCReg(wInstr >> 11); break;
+                    //case '4': op = MemOff(wInstr >> 6, wInstr); break;
+                    default: throw new NotImplementedException(string.Format("Register field {0}.", opFmt[i]));
+                    }
+                    break;
                 case 'I':
                     op = ImmediateOperand.Int32((short) wInstr);
                     break;
@@ -182,6 +395,12 @@ namespace Reko.Arch.Mips
                 case 'E':   // effective address.
                     op = Ea(wInstr, opFmt[++i]);
                     break;
+                case 'T':   // trap code
+                    op = ImmediateOperand.Word16((ushort)((wInstr >> 6) & 0x03FF));
+                    break;
+                case 'c':   // condition code
+                    op = CCodeFlag(wInstr, opFmt, ref i);
+                    break;
                 }
                 ops.Add(op);
             }
@@ -199,6 +418,27 @@ namespace Reko.Arch.Mips
         private RegisterOperand Reg(uint regNumber)
         {
             return new RegisterOperand(arch.GetRegister((int) regNumber & 0x1F));
+        }
+
+        private RegisterOperand FReg(uint regNumber)
+        {
+            return new RegisterOperand(Registers.fpuRegs[regNumber & 0x1F]);
+        }
+
+        private RegisterOperand FCReg(uint regNumber)
+        {
+            return new RegisterOperand(Registers.fpuCtrlRegs[regNumber & 0x1F]);
+        }
+
+        private RegisterOperand CCodeFlag(uint wInstr, string fmt, ref int i)
+        {
+            int pos = 0;
+            while (Char.IsDigit(fmt[++i]))
+            {
+                pos = pos * 10 + fmt[i] - '0';
+            }
+            var regNo = (wInstr >> pos) & 0x7;
+            return new RegisterOperand(Registers.ccRegs[regNo]);
         }
 
         private AddressOperand RelativeBranch(uint wInstr)

@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,7 +29,8 @@ using System.Text;
 namespace Reko.Core.Expressions
 {
     /// <summary>
-    /// Used to match expressions to a pattern and possibly capture identifiers and constants.
+    /// Used to match expressions to a pattern and possibly capture 
+    /// identifiers and constants.
     /// </summary>
     public class ExpressionMatcher : ExpressionVisitor<bool>
     {
@@ -184,8 +185,7 @@ namespace Reko.Core.Expressions
                 return false;
             if (!Match(dP.InsertedBits, d.InsertedBits))
                 return false;
-            return (dP.BitPosition == d.BitPosition &&
-                dP.BitCount == d.BitCount);
+            return (dP.BitPosition == d.BitPosition);
         }
 
         bool ExpressionVisitor<bool>.VisitDereference(Dereference deref)
@@ -285,7 +285,6 @@ namespace Reko.Core.Expressions
             return 
                 Match(smp.BasePointer, access.BasePointer) &&
                 Match(smp.EffectiveAddress, access.EffectiveAddress);
-            throw new NotImplementedException();
         }
 
         bool ExpressionVisitor<bool>.VisitSlice(Slice slice)
@@ -478,6 +477,11 @@ namespace Reko.Core.Expressions
             public string Label { get; private set; }
 
             public override T Accept<T>(IDataTypeVisitor<T> v)
+            {
+                throw new NotImplementedException();
+            }
+
+            public override void Accept(IDataTypeVisitor v)
             {
                 throw new NotImplementedException();
             }

@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,12 +28,39 @@ namespace Reko.Arch.Pdp11
 {
     public class Pdp11Instruction : MachineInstruction
     {
+        private static Dictionary<Opcodes, InstructionClass> classOf;
+
         public Opcodes Opcode;
         public PrimitiveType DataWidth;
         public MachineOperand op1;
         public MachineOperand op2;
 
+        public override bool IsValid { get { return Opcode != Opcodes.illegal; } }
+
         public override int OpcodeAsInteger { get { return (int)Opcode; } }
+
+        public override MachineOperand GetOperand(int i)
+        {
+            if (i == 0)
+                return op1;
+            else if (i == 1)
+                return op2;
+            else
+                return null;
+        }
+
+        public override InstructionClass InstructionClass
+        {
+            get
+            {
+                InstructionClass ct;
+                if (!classOf.TryGetValue(Opcode, out ct))
+                {
+                    ct = InstructionClass.Linear;
+                }
+                return ct;
+            }
+        }
 
         public override void Render(MachineInstructionWriter writer)
         {
@@ -61,6 +88,37 @@ namespace Reko.Arch.Pdp11
                 writer.Write(op.ToString());
             }
         }
+
+        static Pdp11Instruction()
+        {
+            classOf = new Dictionary<Opcodes, InstructionClass>
+            {
+                { Opcodes.bcc,   InstructionClass.Transfer|InstructionClass.Conditional },
+                { Opcodes.bcs,   InstructionClass.Transfer|InstructionClass.Conditional },
+                { Opcodes.beq,   InstructionClass.Transfer|InstructionClass.Conditional },
+                { Opcodes.bge,   InstructionClass.Transfer|InstructionClass.Conditional },
+                { Opcodes.bgt,   InstructionClass.Transfer|InstructionClass.Conditional },
+                { Opcodes.bhi,   InstructionClass.Transfer|InstructionClass.Conditional },
+                { Opcodes.ble,   InstructionClass.Transfer|InstructionClass.Conditional },
+                { Opcodes.blos,  InstructionClass.Transfer|InstructionClass.Conditional },
+                { Opcodes.blt,   InstructionClass.Transfer|InstructionClass.Conditional },
+                { Opcodes.bmi,   InstructionClass.Transfer|InstructionClass.Conditional },
+                { Opcodes.bne,   InstructionClass.Transfer|InstructionClass.Conditional },
+                { Opcodes.bpl,   InstructionClass.Transfer|InstructionClass.Conditional },
+                { Opcodes.bpt,   InstructionClass.Transfer|InstructionClass.Conditional },
+                { Opcodes.br,    InstructionClass.Transfer },
+                { Opcodes.bvc,   InstructionClass.Transfer|InstructionClass.Conditional },
+                { Opcodes.bvs,   InstructionClass.Transfer|InstructionClass.Conditional },
+                { Opcodes.halt,  InstructionClass.Transfer },
+                { Opcodes.jmp,   InstructionClass.Transfer },
+                { Opcodes.jsr,   InstructionClass.Transfer },
+                { Opcodes.reset, InstructionClass.Transfer },
+                { Opcodes.rti,   InstructionClass.Transfer },
+                { Opcodes.rtt,   InstructionClass.Transfer },
+                { Opcodes.rts,   InstructionClass.Transfer },
+                { Opcodes.trap,  InstructionClass.Transfer },
+            };
+        }
     }
 
     public enum Opcodes
@@ -69,6 +127,7 @@ namespace Reko.Arch.Pdp11
 
         adc,
         add,
+        addb,
         asl,
         asr,
         bcc,
@@ -79,7 +138,9 @@ namespace Reko.Arch.Pdp11
         bhi,
         bic,
         bis,
+        bisb,
         bit,
+        bitb,
         ble,
         blos,
         blt,
@@ -91,6 +152,7 @@ namespace Reko.Arch.Pdp11
         bvc,
         bvs,
         clr,
+        clrflags,
         cmp,
         com,
         dec,
@@ -116,6 +178,7 @@ namespace Reko.Arch.Pdp11
         mtpi,
         mtpd,
         neg,
+        nop,
 
         reset,
         rol,
@@ -125,6 +188,7 @@ namespace Reko.Arch.Pdp11
         rtt,
         rts,
         sbc,
+        setflags,
         sob,
         spl,
         sub,
@@ -132,6 +196,7 @@ namespace Reko.Arch.Pdp11
         sxt,
         trap,
         tst,
+        tstb,
         wait,
         xor,
     }

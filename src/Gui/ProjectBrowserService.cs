@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -64,6 +64,8 @@ namespace Reko.Gui
             set { SetSelectedObject(value); }
         }
 
+        public Program CurrentProgram { get { return FindCurrentProgram(); } }
+
         public void Clear()
         {
             Load(null);
@@ -71,6 +73,9 @@ namespace Reko.Gui
 
         public void Load(Project project)
         {
+            var uiPrefsSvc = Services.RequireService<IUiPreferencesService>();
+            uiPrefsSvc.UpdateControlStyle(UiStyles.Browser, tree);
+            uiPrefsSvc.UiPreferencesChanged += delegate { uiPrefsSvc.UpdateControlStyle(UiStyles.Browser, tree); };
             tree.ContextMenu = Services.RequireService<IDecompilerShellUiService>().GetContextMenu(MenuIds.CtxBrowser);
             tree.Nodes.Clear();
             this.mpitemToDesigner = new Dictionary<object, TreeNodeDesigner>();
@@ -143,9 +148,12 @@ namespace Reko.Gui
                 if (attr.Length > 0)
                 {
                     var desType = Type.GetType(
-                        ((DesignerAttribute) attr[0]).DesignerTypeName,
-                        true);
-                    des = (TreeNodeDesigner) Activator.CreateInstance(desType);
+                        ((DesignerAttribute)attr[0]).DesignerTypeName,
+                        false);
+                    if (desType != null)
+                        des = (TreeNodeDesigner)Activator.CreateInstance(desType);
+                    else
+                        des = new TreeNodeDesigner();
                 }
                 else
                 {
@@ -171,6 +179,22 @@ namespace Reko.Gui
             return node;
         }
 
+        private Program FindCurrentProgram()
+        {
+            var obj = SelectedObject;
+            while (obj != null)
+            {
+                var program = obj as Program;
+                if (program != null)
+                    return program;
+                var des = GetDesigner(obj);
+                if (des.Parent == null)
+                    return null;
+                obj = des.Parent.Component;
+            }
+            return null;
+        }
+
         public TreeNodeDesigner GetDesigner(object o)
         {
             if (o == null)
@@ -179,7 +203,7 @@ namespace Reko.Gui
             if (mpitemToDesigner.TryGetValue(o, out des))
                 return des;
             else
-                return null;
+                return o as TreeNodeDesigner;
         }
 
         public void RemoveComponent(object component)
@@ -236,17 +260,34 @@ namespace Reko.Gui
         public bool QueryStatus(CommandID cmdId, CommandStatus status, CommandText text)
         {
             var des = GetSelectedDesigner();
-            if (des == null)
-                return false;
-            return des.QueryStatus(cmdId, status, text);
+            if (des != null)
+                return des.QueryStatus(cmdId, status, text);
+            if (cmdId.Guid == CmdSets.GuidReko)
+            {
+                switch (cmdId.ID)
+                {
+                case CmdIds.CollapseAllNodes: status.Status = MenuStatus.Visible | MenuStatus.Enabled; return true;
+                }
+            }
+            return false;
         }
 
         public bool Execute(System.ComponentModel.Design.CommandID cmdId)
         {
             var des = GetSelectedDesigner();
-            if (des == null)
-                return false;
-            return des.Execute(cmdId);
+            if (des != null)
+            {
+                if (des.Execute(cmdId))
+                    return true;
+            }
+            if (cmdId.Guid == CmdSets.GuidReko)
+            {
+                switch (cmdId.ID)
+                {
+                case CmdIds.CollapseAllNodes: tree.CollapseAll(); break;
+                }
+            }
+            return false;
         }
 
         void tree_DragEnter(object sender, DragEventArgs e)

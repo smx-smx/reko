@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -50,7 +50,12 @@ namespace Reko.Typing
 			}
 		}
 
-		public DataType VisitStructure(StructureType str)
+        public DataType VisitClass(ClassType ct)
+        {
+            throw new NotImplementedException();
+        }
+
+        public DataType VisitStructure(StructureType str)
 		{
 			if (str.Name == null && eq != null)
 				str.Name = eq.Name;
@@ -61,11 +66,6 @@ namespace Reko.Typing
 		{
 			if (ut.Name == null && eq != null)
 				ut.Name = eq.Name;
-			int i = 0; 
-			foreach (UnionAlternative a in ut.Alternatives.Values)
-			{
-				a.Name = a.MakeName(i++);
-			}
             return ut;
 		}
 
@@ -92,12 +92,12 @@ namespace Reko.Typing
 
         public DataType VisitFunctionType(FunctionType ft)
         {
-            foreach (var arg in ft.ArgumentTypes)
+            foreach (var param in ft.Parameters)
             {
-                arg.Accept(this);
+                param.DataType.Accept(this);
             }
-            if (ft.ReturnType != null)
-                ft.ReturnType.Accept(this);
+            if (!ft.HasVoidReturn)
+                ft.ReturnValue.DataType.Accept(this);
             return ft;
         }
 
@@ -117,6 +117,12 @@ namespace Reko.Typing
         {
             ptr.Pointee = ptr.Pointee.Accept(this);
             return ptr;
+        }
+
+        public DataType VisitReference(ReferenceTo refTo)
+        {
+            refTo.Referent = refTo.Referent.Accept(this);
+            return refTo;
         }
 
         public DataType VisitString(StringType str)

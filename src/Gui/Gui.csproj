@@ -5,8 +5,6 @@
     <ProjectGuid>{1CA14C64-92E8-452E-A380-637F3DBB4D28}</ProjectGuid>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ApplicationIcon>
-    </ApplicationIcon>
     <AssemblyKeyContainerName>
     </AssemblyKeyContainerName>
     <AssemblyName>Reko.Gui</AssemblyName>
@@ -38,8 +36,10 @@
     <IsWebBootstrapper>false</IsWebBootstrapper>
     <UseApplicationTrust>false</UseApplicationTrust>
     <BootstrapperEnabled>true</BootstrapperEnabled>
-    <UseMSBuildEngine>False</UseMSBuildEngine>
+    <UseMSBuildEngine>True</UseMSBuildEngine>
     <TargetFrameworkProfile />
+    <ProductVersion>12.0.0</ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <OutputPath>bin\Debug\</OutputPath>
@@ -74,10 +74,27 @@
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
   <PropertyGroup />
-  <PropertyGroup>
-    <StartupObject />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'TravisRelease|AnyCPU'">
+    <OutputPath>bin\TravisRelease\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <BaseAddress>285212672</BaseAddress>
+    <Optimize>true</Optimize>
+    <FileAlignment>4096</FileAlignment>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+    <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Microsoft.Msagl">
+      <HintPath>..\..\external\Msagl\Microsoft.Msagl.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Msagl.Drawing">
+      <HintPath>..\..\external\Msagl\Microsoft.Msagl.Drawing.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Msagl.GraphViewerGdi">
+      <HintPath>..\..\external\Msagl\Microsoft.Msagl.GraphViewerGdi.dll</HintPath>
+    </Reference>
     <Reference Include="System">
       <Name>System</Name>
     </Reference>
@@ -92,9 +109,37 @@
   <ItemGroup>
     <Compile Include="AddressNavigator.cs" />
     <Compile Include="AddressSearchResult.cs" />
+    <Compile Include="Commands\Cmd_EditSignature.cs" />
+    <Compile Include="Commands\Cmd_MarkProcedures.cs" />
+    <Compile Include="Commands\Cmd_ViewWhatPointsHere.cs" />
+    <Compile Include="Commands\Command.cs" />
+    <Compile Include="Commands\CommandFactory.cs" />
+    <Compile Include="Commands\ICommand.cs" />
+    <Compile Include="Controls\IControl.cs" />
+    <Compile Include="Controls\ILabel.cs" />
+    <Compile Include="Controls\IListBox.cs" />
+    <Compile Include="Controls\INumericUpDownWrapper.cs" />
+    <Compile Include="Controls\IRadioButton.cs" />
+    <Compile Include="Controls\ITypeMarker.cs" />
     <Compile Include="Design\ArchitectureDesigner.cs" />
+    <Compile Include="Design\GlobalVariablesNodeDesigner.cs" />
     <Compile Include="Design\PlatformDesigner.cs" />
+    <Compile Include="Design\ProgramResourceGroupDesigner.cs" />
+    <Compile Include="Design\ProgramResourceInstanceDesigner.cs" />
+    <Compile Include="Forms\CallSiteInteractor.cs" />
     <Compile Include="Forms\IAssumedRegisterValuesDialog.cs" />
+    <Compile Include="Forms\IDeclarationForm.cs" />
+    <Compile Include="Forms\IJumpTableDialog.cs" />
+    <Compile Include="Forms\IProcedureDialog.cs" />
+    <Compile Include="Forms\IResourceEditor.cs" />
+    <Compile Include="Forms\ResourceEditorInteractor.cs" />
+    <Compile Include="ICallGraphViewService.cs" />
+    <Compile Include="ICommandFactory.cs" />
+    <Compile Include="IFindStringsDialog.cs" />
+    <Compile Include="IResourceEditorService.cs" />
+    <Compile Include="Forms\IWorkerDialog.cs" />
+    <Compile Include="Forms\ITextEncodingDialog.cs" />
+    <Compile Include="JumpVectorNavigator.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="BlockNavigator.cs" />
     <Compile Include="CommandGroup.cs" />
@@ -139,7 +184,7 @@
     <Compile Include="IMenuAdapter.cs" />
     <Compile Include="IProgressBar.cs" />
     <Compile Include="IProjectBrowserService.cs" />
-    <Compile Include="ISearchDialog.cs" />
+    <Compile Include="Forms\ISearchDialog.cs" />
     <Compile Include="ISearchResult.cs" />
     <Compile Include="ISearchResultService.cs" />
     <Compile Include="IServiceFactory.cs" />
@@ -165,19 +210,25 @@
     </Compile>
     <Compile Include="SearchService.cs" />
     <Compile Include="SignatureParser.cs" />
+    <Compile Include="StatementNavigator.cs" />
     <Compile Include="TreeNodeDesigner.cs" />
     <Compile Include="Windows\ButtonWrapper.cs" />
+    <Compile Include="Windows\CallGraphGenerator.cs" />
+    <Compile Include="Windows\CallGraphPane.cs" />
+    <Compile Include="Windows\CallGraphViewService.cs" />
+    <Compile Include="Windows\CfgBlockNode.cs" />
     <Compile Include="Windows\CheckBoxWrapper.cs" />
-    <Compile Include="Windows\CodeViewerPane.cs" />
+    <Compile Include="Windows\CfgGraphGenerator.cs" />
     <Compile Include="Windows\CodeViewerServiceImpl.cs" />
+    <Compile Include="Windows\CombinedCodeViewInteractor.cs" />
     <Compile Include="Windows\ComboBoxWrapper.cs" />
-    <Compile Include="Windows\Controls\CodeControl.cs" />
-    <Compile Include="Windows\Controls\CodeView.cs">
-      <SubType>UserControl</SubType>
+    <Compile Include="Windows\Controls\ByteMapView.cs">
+      <SubType>Component</SubType>
     </Compile>
-    <Compile Include="Windows\Controls\CodeView.Designer.cs">
-      <DependentUpon>CodeView.cs</DependentUpon>
+    <Compile Include="Windows\Controls\MixedCodeDataControl.cs">
+      <SubType>Component</SubType>
     </Compile>
+    <Compile Include="Windows\Controls\MixedCodeDataModel.cs" />
     <Compile Include="Windows\Controls\CommandMenuItem.cs">
       <SubType>Component</SubType>
     </Compile>
@@ -197,6 +248,9 @@
     <Compile Include="Windows\Controls\ImageMapView.Designer.cs">
       <DependentUpon>ImageMapView.cs</DependentUpon>
     </Compile>
+    <Compile Include="Windows\Controls\ImageMapView.Painter.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Include="Windows\Controls\ImageSegmentView.cs">
       <SubType>UserControl</SubType>
     </Compile>
@@ -214,10 +268,57 @@
     </Compile>
     <Compile Include="Windows\Controls\MenuStatusSetter.cs" />
     <Compile Include="Windows\Controls\MenuSystem.cs" />
+    <Compile Include="Windows\Controls\MixedCodeDataModel.SpanGenerator.cs" />
+    <Compile Include="Windows\Controls\NestedTextModel.cs" />
     <Compile Include="Windows\Controls\RegexValidator.cs">
       <SubType>Component</SubType>
     </Compile>
+    <Compile Include="Windows\ControlWrapper.cs" />
+    <Compile Include="Windows\Forms\CallSiteDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Windows\Forms\CallSiteDialog.Designer.cs">
+      <DependentUpon>CallSiteDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Forms\ICallSiteDialog.cs" />
+    <Compile Include="Windows\Controls\CombinedCodeView.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="Windows\Controls\CombinedCodeView.Designer.cs">
+      <DependentUpon>CombinedCodeView.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Windows\Controls\TextViewLayout.cs" />
+    <Compile Include="Windows\Controls\TextViewPainter.cs" />
+    <Compile Include="Windows\Forms\DeclarationFormInteractor.cs" />
+    <Compile Include="Windows\Forms\DeclarationForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Windows\Forms\DeclarationForm.Designer.cs">
+      <DependentUpon>DeclarationForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Windows\Forms\JumpTableDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Windows\Forms\JumpTableDialog.Designer.cs">
+      <DependentUpon>JumpTableDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Windows\Forms\JumpTableInteractor.cs" />
+    <Compile Include="Windows\Forms\TextEncodingDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Windows\Forms\TextEncodingDialog.Designer.cs">
+      <DependentUpon>TextEncodingDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Forms\TextEncodingInteractor.cs" />
+    <Compile Include="Windows\LabelWrapper.cs" />
+    <Compile Include="Windows\ListboxWrapper.cs" />
+    <Compile Include="Windows\NumericUpDownWrapper.cs" />
+    <Compile Include="Windows\ProgressbarWrapper.cs" />
+    <Compile Include="Windows\RadioButtonWrapper.cs" />
+    <Compile Include="Windows\StyleStack.cs" />
     <Compile Include="Windows\Controls\TextBuffer.cs" />
+    <Compile Include="Windows\Controls\TextPointer.cs" />
+    <Compile Include="Windows\Controls\TextSelection.cs" />
     <Compile Include="Windows\Controls\TextView.cs">
       <SubType>Component</SubType>
     </Compile>
@@ -289,6 +390,13 @@
       <DependentUpon>FindDialog.cs</DependentUpon>
     </Compile>
     <Compile Include="Windows\Forms\FindDialogInteractor.cs" />
+    <Compile Include="Windows\Forms\FindStringsDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Windows\Forms\FindStringsDialog.Designer.cs">
+      <DependentUpon>FindStringsDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Windows\Forms\FindStringsDialogInteractor.cs" />
     <Compile Include="Windows\Forms\InitialPageInteractor.cs" />
     <Compile Include="Windows\Forms\LoadedPageInteractor.cs" />
     <Compile Include="Windows\Forms\MainForm.cs">
@@ -318,6 +426,12 @@
       <DependentUpon>ProgramPropertiesDialog.cs</DependentUpon>
     </Compile>
     <Compile Include="Windows\Forms\ProgramPropertiesInteractor.cs" />
+    <Compile Include="Windows\Forms\ResourceEditor.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="Windows\Forms\ResourceEditor.Designer.cs">
+      <DependentUpon>ResourceEditor.cs</DependentUpon>
+    </Compile>
     <Compile Include="Windows\Forms\SearchDialog.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -325,7 +439,6 @@
       <DependentUpon>SearchDialog.cs</DependentUpon>
     </Compile>
     <Compile Include="Windows\Forms\SearchDialogInteractor.cs" />
-    <Compile Include="Windows\Forms\UnscannedBlocksResult.cs" />
     <Compile Include="Windows\Forms\UserPreferencesDialog.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -355,8 +468,8 @@
     <Compile Include="Windows\ToolStripButtonWrapper.cs" />
     <Compile Include="Windows\ToolStripItemAdapter.cs" />
     <Compile Include="Windows\ToolStripTextBoxWrapper.cs" />
-    <Compile Include="Windows\TreeViewWrapper.cs" />
-    <Compile Include="Windows\TypeMarker.cs" />
+    <Compile Include="Windows\Controls\TreeViewWrapper.cs" />
+    <Compile Include="Windows\Controls\TypeMarker.cs" />
     <Compile Include="Windows\ViewService.cs" />
     <Compile Include="Windows\WindowsDecompilerEventListener.cs" />
     <Compile Include="Windows\WindowsFormsDialogFactory.cs" />
@@ -401,10 +514,13 @@
     <Content Include="Images\Binary.ico" />
     <Content Include="Images\CloseTab.ico" />
     <Content Include="Images\Code.ico" />
+    <Content Include="Images\Collapse.ico" />
     <Content Include="Images\Cpu.ico" />
     <Content Include="Images\Data.ico" />
     <Content Include="Images\Delete.ico" />
     <Content Include="Images\DiscardableSection.ico" />
+    <None Include="Images\Error.ico" />
+    <Content Include="Images\UserEntryProcedure.ico" />
     <Content Include="Images\error.png" />
     <Content Include="Images\FinishDecompilation.ico" />
     <Content Include="Images\Forward.ico" />
@@ -413,6 +529,7 @@
     <Content Include="Images\NextPhase.ico" />
     <Content Include="Images\Open.ico" />
     <Content Include="Images\Platform.ico" />
+    <Content Include="Images\EntryProcedure.ico" />
     <Content Include="Images\Procedure.ico" />
     <Content Include="Images\RestartDecompilation.ico" />
     <Content Include="Images\RwSection.ico" />
@@ -435,8 +552,9 @@
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
     </EmbeddedResource>
-    <EmbeddedResource Include="Windows\Controls\CodeView.resx">
-      <DependentUpon>CodeView.cs</DependentUpon>
+    <EmbeddedResource Include="Resources.sv-SE.resx" />
+    <EmbeddedResource Include="Windows\Controls\CombinedCodeView.resx">
+      <DependentUpon>CombinedCodeView.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Windows\Controls\DirtyManager.resx">
       <DependentUpon>DirtyManager.cs</DependentUpon>
@@ -474,6 +592,12 @@
     <EmbeddedResource Include="Windows\Forms\AssumedRegisterValuesDialog.resx">
       <DependentUpon>AssumedRegisterValuesDialog.cs</DependentUpon>
     </EmbeddedResource>
+    <EmbeddedResource Include="Windows\Forms\CallSiteDialog.resx">
+      <DependentUpon>CallSiteDialog.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Windows\Forms\DeclarationForm.resx">
+      <DependentUpon>DeclarationForm.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="Windows\Forms\EditProjectDialog.resx">
       <DependentUpon>EditProjectDialog.cs</DependentUpon>
     </EmbeddedResource>
@@ -482,6 +606,12 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Windows\Forms\FindDialog.resx">
       <DependentUpon>FindDialog.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Windows\Forms\FindStringsDialog.resx">
+      <DependentUpon>FindStringsDialog.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Windows\Forms\JumpTableDialog.resx">
+      <DependentUpon>JumpTableDialog.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Windows\Forms\MainForm.resx">
       <DependentUpon>MainForm.cs</DependentUpon>
@@ -495,8 +625,14 @@
     <EmbeddedResource Include="Windows\Forms\ProgramPropertiesDialog.resx">
       <DependentUpon>ProgramPropertiesDialog.cs</DependentUpon>
     </EmbeddedResource>
+    <EmbeddedResource Include="Windows\Forms\ResourceEditor.resx">
+      <DependentUpon>ResourceEditor.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="Windows\Forms\SearchDialog.resx">
       <DependentUpon>SearchDialog.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Windows\Forms\TextEncodingDialog.resx">
+      <DependentUpon>TextEncodingDialog.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Windows\Forms\UserPreferencesDialog.resx">
       <DependentUpon>UserPreferencesDialog.cs</DependentUpon>
@@ -507,11 +643,14 @@
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <Target Name="BeforeBuild">
+    <Exec Condition=" '$(OS)' == 'Unix' " Command="mono $(ProjectDir)../tools/xslt.exe $(ProjectDir)Windows/Forms/cmdids.xslt $(ProjectDir)decompiler-menus.xml $(ProjectDir)Windows/Forms/CmdIds.cs" />
+    <Exec Condition=" '$(OS)' == 'Unix' " Command="mono $(ProjectDir)../tools/xslt.exe $(ProjectDir)Windows/Forms/decompiler-menus.xslt $(ProjectDir)decompiler-menus.xml $(ProjectDir)Windows/Forms/DecompilerMenus.cs" />
+    <Exec Condition=" '$(OS)' != 'Unix' " Command="&quot;$(SolutionDir)tools\xslt.exe&quot; &quot;$(ProjectDir)Windows\Forms\cmdids.xslt&quot; &quot;$(ProjectDir)decompiler-menus.xml&quot; &quot;$(ProjectDir)Windows\Forms\CmdIds.cs&quot;" />
+    <Exec Condition=" '$(OS)' != 'Unix' " Command="&quot;$(SolutionDir)tools\xslt.exe&quot; &quot;$(ProjectDir)Windows\Forms\decompiler-menus.xslt&quot; &quot;$(ProjectDir)decompiler-menus.xml&quot; &quot;$(ProjectDir)Windows\Forms\DecompilerMenus.cs&quot;" />
   </Target>
   <PropertyGroup>
-    <PreBuildEvent>"$(SolutionDir)tools\xslt" "$(ProjectDir)Windows\Forms\cmdids.xslt" "$(ProjectDir)decompiler-menus.xml" "$(ProjectDir)Windows\Forms\CmdIds.cs"
-"$(SolutionDir)tools\xslt" "$(ProjectDir)Windows\Forms\decompiler-menus.xslt" "$(ProjectDir)decompiler-menus.xml" "$(ProjectDir)Windows\Forms\DecompilerMenus.cs"
-</PreBuildEvent>
+    <PreBuildEvent>
+    </PreBuildEvent>
     <PostBuildEvent>
     </PostBuildEvent>
   </PropertyGroup>

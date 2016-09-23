@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,7 +31,8 @@ using System.Text;
 namespace Reko.Analysis
 {
     /// <summary>
-    /// Propagates expressions used in TrashedRegisters to replace expressions of the type
+    /// Propagates expressions used in TrashedRegisters to replace expressions
+    /// of the type
     ///     mem[fp + c]
     /// with
     ///     idC
@@ -59,6 +60,7 @@ namespace Reko.Analysis
         private Substitutor sub;
 
         private ProgramDataFlow flow;
+        private bool storing;
 
         public ExpressionPropagator(
             IProcessorArchitecture arch, 
@@ -177,7 +179,9 @@ namespace Reko.Analysis
         public Instruction VisitStore(Store store)
         {
             var src = store.Src.Accept(this);
+            this.storing = true;
             var dst = store.Dst.Accept(this);
+            this.storing = false;
 
             var m = dst.PropagatedExpression as MemoryAccess;
             if (m != null)
@@ -196,6 +200,7 @@ namespace Reko.Analysis
             var idDst = dst.PropagatedExpression as Identifier;
             if (idDst != null)
             {
+                ctx.SetValue(idDst, src.Value);
                 return new Assignment(idDst, src.PropagatedExpression);
             }
             else if (!(dst.PropagatedExpression is Constant))
@@ -335,8 +340,7 @@ namespace Reko.Analysis
             var d = new DepositBits(
                 dpb.Source.Accept(this).PropagatedExpression,
                 dpb.InsertedBits.Accept(this).PropagatedExpression,
-                dpb.BitPosition,
-                dpb.BitCount);
+                dpb.BitPosition);
             return SimplifyExpression(d);
         }
 
@@ -366,11 +370,20 @@ namespace Reko.Analysis
 
         public Result VisitMemoryAccess(MemoryAccess access)
         {
+            bool storing = this.storing;
+            this.storing = false;
             var m = new MemoryAccess(
                 access.MemoryId,
                 access.EffectiveAddress.Accept(this).PropagatedExpression,
                 access.DataType);
-            return ConvertToParamOrLocal(SimplifyExpression(m));
+            if (storing)
+            {
+                return ConvertToParamOrLocal(new Result { Value = Constant.Invalid, PropagatedExpression = m });
+            }
+            else
+            {
+                return ConvertToParamOrLocal(SimplifyExpression(m));
+            }
         }
 
         public Result VisitMkSequence(MkSequence seq)
@@ -428,7 +441,14 @@ namespace Reko.Analysis
                 SimplifyExpression(access.BasePointer).PropagatedExpression,
                 SimplifyExpression(access.EffectiveAddress).PropagatedExpression,
                 access.DataType);
-            return ConvertToParamOrLocal(SimplifyExpression(m));
+            if (storing)
+            {
+                return ConvertToParamOrLocal(new Result { Value = Constant.Invalid, PropagatedExpression = m });
+            }
+            else
+            {
+                return ConvertToParamOrLocal(SimplifyExpression(m));
+            }
         }
 
         public Result VisitSlice(Slice slice)

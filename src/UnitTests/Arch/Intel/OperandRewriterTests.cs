@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@ using Reko.Core.Types;
 using NUnit.Framework;
 using System;
 using System.Collections.Generic;
+using Reko.Core.Serialization;
 
 namespace Reko.UnitTests.Arch.Intel
 {
@@ -36,8 +37,8 @@ namespace Reko.UnitTests.Arch.Intel
 		private IntelArchitecture arch;
 		private X86State state;
 		private Procedure proc;
-        private Program prog;
-        private IntelInstruction instr;
+        private Program program;
+        private X86Instruction instr;
 
 		[Test]
 		public void X86Orw32_Creation()
@@ -47,22 +48,27 @@ namespace Reko.UnitTests.Arch.Intel
 		[TestFixtureSetUp]
 		public void GlobalSetup()
 		{
-			arch = new IntelArchitecture(ProcessorMode.Protected32);
+			arch = new X86ArchitectureFlat32();
 		}
 
 		[SetUp]
 		public void Setup()
 		{
-            prog = new Program();
-            prog.Image = new LoadedImage(Address.Ptr32(0x10000), new byte[4]);
+            var mem = new MemoryArea(Address.Ptr32(0x10000), new byte[4]);
+            program = new Program
+            {
+                SegmentMap = new SegmentMap(
+                    mem.BaseAddress,
+                    new ImageSegment(".text", mem, AccessMode.ReadExecute))
+            };
             var procAddress = Address.Ptr32(0x10000000);
-            instr = new IntelInstruction(Opcode.nop, PrimitiveType.Word32, PrimitiveType.Word32)
+            instr = new X86Instruction(Opcode.nop, PrimitiveType.Word32, PrimitiveType.Word32)
             {
                 Address = procAddress,
             };
             proc = Procedure.Create(procAddress, arch.CreateFrame());
 			state = (X86State) arch.CreateProcessorState();
-			orw = new OperandRewriter32(arch, proc.Frame, new FakeRewriterHost(prog));
+			orw = new OperandRewriter32(arch, proc.Frame, new FakeRewriterHost(program));
 		}
 
 		[Test]
@@ -133,18 +139,18 @@ namespace Reko.UnitTests.Arch.Intel
 
 	public class FakeRewriterHost : IRewriterHost
 	{
-        private Program prog;
-		private Dictionary<Address,ProcedureSignature> callSignatures;
+        private Program program;
+		private Dictionary<Address,FunctionType> callSignatures;
 		private Dictionary<Address,Procedure> procedures;
 
 		public FakeRewriterHost(Program prog)
 		{
-            this.prog = prog;
-			callSignatures = new Dictionary<Address,ProcedureSignature>();
+            this.program = prog;
+			callSignatures = new Dictionary<Address,FunctionType>();
 			procedures = new Dictionary<Address,Procedure>();
 		}
 
-		public void AddCallSignature(Address addr, ProcedureSignature sig)
+		public void AddCallSignature(Address addr, FunctionType sig)
 		{
 			callSignatures[addr] = sig;
 		}
@@ -167,23 +173,33 @@ namespace Reko.UnitTests.Arch.Intel
 
 		public PseudoProcedure EnsurePseudoProcedure(string name, DataType returnType, int args)
 		{
-            if (prog == null)
+            if (program == null)
 			    throw new NotImplementedException();
-            return prog.EnsurePseudoProcedure(name, returnType, args);
+            return program.EnsurePseudoProcedure(name, returnType, args);
 		}
 
         public Expression PseudoProcedure(string name , DataType returnType, params Expression[] args)
         {
-            var ppp = prog.EnsurePseudoProcedure(name, returnType, args.Length);
+            var ppp = program.EnsurePseudoProcedure(name, returnType, args.Length);
             return new Application(
                 new ProcedureConstant(PrimitiveType.Pointer32, ppp),
                 returnType,
                 args);
         }
 
-		public ProcedureSignature GetCallSignatureAtAddress(Address addrCallInstruction)
+        public Expression PseudoProcedure(string name, ProcedureCharacteristics c, DataType returnType, params Expression[] args)
+        {
+            var ppp = program.EnsurePseudoProcedure(name, returnType, args.Length);
+            ppp.Characteristics = c;
+            return new Application(
+                new ProcedureConstant(PrimitiveType.Pointer32, ppp),
+                returnType,
+                args);
+        }
+
+        public FunctionType GetCallSignatureAtAddress(Address addrCallInstruction)
 		{
-            ProcedureSignature sig;
+            FunctionType sig;
             if (callSignatures.TryGetValue(addrCallInstruction, out sig))
                 return sig;
             else
@@ -201,7 +217,12 @@ namespace Reko.UnitTests.Arch.Intel
 			return new Procedure[0];
 		}
 
-		public ExternalProcedure GetImportedProcedure(Address addrTunk, Address addrInstruction)
+        public Identifier GetImportedGlobal(Address addrTunk, Address addrInstruction)
+        {
+            return null;
+        }
+
+        public ExternalProcedure GetImportedProcedure(Address addrTunk, Address addrInstruction)
 		{
 			return null;
 		}
@@ -217,7 +238,7 @@ namespace Reko.UnitTests.Arch.Intel
 			return new Procedure[0];
 		}
 
-		public LoadedImage Image
+		public MemoryArea Image
 		{
 			get { throw new NotImplementedException(); }
 		}

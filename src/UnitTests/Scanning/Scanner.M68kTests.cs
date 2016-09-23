@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,6 +31,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.ComponentModel.Design;
+using Reko.UnitTests.Mocks;
 
 namespace Reko.UnitTests.Scanning
 {
@@ -41,13 +43,17 @@ namespace Reko.UnitTests.Scanning
         private M68kArchitecture arch;
         private Program program;
         private Scanner scanner;
+        private ServiceContainer sc;
         private DecompilerEventListener listener;
 
         [SetUp]
         public void Setup()
         {
             mr = new MockRepository();
+            sc = new ServiceContainer();
             listener = mr.Stub<DecompilerEventListener>();
+            sc.AddService<DecompilerEventListener>(listener);
+            sc.AddService<DecompilerHost>(new FakeDecompilerHost());
         }
 
         private void BuildTest32(Action<M68kAssembler> asmProg)
@@ -59,42 +65,36 @@ namespace Reko.UnitTests.Scanning
         private void BuildTest32(Address addrBase, params byte[] bytes)
         {
             arch = new M68kArchitecture();
-            var image = new LoadedImage(addrBase, bytes);
+            var mem = new MemoryArea(addrBase, bytes);
             program = new Program(
-                image,
-                image.CreateImageMap(),
+                new SegmentMap(
+                    mem.BaseAddress,
+                    new ImageSegment(
+                        "code", mem, AccessMode.ReadWriteExecute)),
                 arch,
                 new DefaultPlatform(null, arch));
             RunTest(addrBase);
         }
 
-        private void BuildTest(Address addrBase, Platform platform, Action<M68kAssembler> asmProg)
+        private void BuildTest(Address addrBase, IPlatform platform, Action<M68kAssembler> asmProg)
         {
-            var entryPoints = new List<EntryPoint>();
+            var entryPoints = new List<ImageSymbol>();
             var asm = new M68kAssembler(arch, addrBase, entryPoints);
             asmProg(asm);
 
-            var lr = asm.GetImage();
-            program = new Program
-            {
-                Architecture = arch,
-                Image = lr.Image,
-                ImageMap = lr.ImageMap,
-                Platform = platform,
-            };
+            program = asm.GetImage();
 
             RunTest(addrBase);
         }
 
         private void RunTest(Address addrBase)
         {
-            var project =     new Project { Programs = { program } };
+            var project = new Project { Programs = { program } };
             scanner = new Scanner(
                 program,
-                new Dictionary<Address, ProcedureSignature>(),
-                new ImportResolver(project),
-                listener);
-            scanner.EnqueueEntryPoint(new EntryPoint(addrBase, arch.CreateProcessorState()));
+                new ImportResolver(project, program, new FakeDecompilerEventListener()),
+                sc);
+            scanner.EnqueueImageSymbol(new ImageSymbol(addrBase), true);
             scanner.ScanImage();
         }
 
@@ -166,7 +166,6 @@ fn00100000_exit:
                 , 0x4E , 0x75);
             var sw = new StringWriter();
             program.Procedures.Values[0].Write(true, sw);
-            Console.WriteLine(sw);
             string sExp = @"// fn00001020
 // Return size: 4
 // Mem0:Global memory

@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,14 +18,16 @@
  */
 #endregion
 
+using NUnit.Framework;
 using Reko.Arch.X86;
 using Reko.Assemblers.x86;
 using Reko.Core;
-using Reko.Environments.Win32;
-using NUnit.Framework;
+using Reko.Core.Services;
+using Reko.Environments.Windows;
 using Rhino.Mocks;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.Design;
 using System.Linq;
 using System.Text;
 
@@ -37,43 +39,46 @@ namespace Reko.UnitTests.Arch.Intel
         private MockRepository mr;
         private IntelArchitecture arch;
         private X86Emulator emu;
-        private LoadedImage image;
+        private SegmentMap segmentMap;
         private Dictionary<Address, ImportReference> importReferences;
-        private Platform platform;
+        private IPlatform platform;
+        private ServiceContainer sc;
 
         [SetUp]
         public void Setup()
         {
             mr = new MockRepository();
-            arch = new IntelArchitecture(ProcessorMode.Protected32);
+            arch = new X86ArchitectureFlat32();
             importReferences = new Dictionary<Address, ImportReference>();
+            sc = new ServiceContainer();
+            sc.AddService<IFileSystemService>(new FileSystemServiceImpl());
         }
 
-        private void Given_RegValue(IntelRegister reg, uint value)
+        private void Given_RegValue(RegisterStorage reg, uint value)
         {
             emu.WriteRegister(reg, value);
         }
 
         private void Given_Code(Action<X86Assembler> coder)
         {
-            var asm = new X86Assembler(arch, Address.Ptr32(0x00100000), new List<EntryPoint>());
+            var asm = new X86Assembler(sc, new DefaultPlatform(sc, arch), Address.Ptr32(0x00100000), new List<ImageSymbol>());
             coder(asm);
             var program = asm.GetImage();
-            this.image = program.Image;
+            this.segmentMap = program.SegmentMap;
 
             Given_Platform();
 
-            var win32 = new Win32Emulator(image, platform, importReferences);
+            var win32 = new Win32Emulator(program.SegmentMap, platform, importReferences);
             
-            emu = new X86Emulator(arch, program.Image, win32);
-            emu.InstructionPointer = program.Image.BaseAddress;
-            emu.WriteRegister(Registers.esp, (uint)program.Image.BaseAddress.ToLinear() + 0x0FFC);
+            emu = new X86Emulator(arch, program.SegmentMap, win32);
+            emu.InstructionPointer = program.ImageMap.BaseAddress;
+            emu.WriteRegister(Registers.esp, (uint)program.ImageMap.BaseAddress.ToLinear() + 0x0FFC);
             emu.ExceptionRaised += delegate { throw new Exception(); };
         }
 
         private void Given_Platform()
         {
-            platform = mr.PartialMock<Platform>(null, arch);
+            platform = mr.Stub<IPlatform>();
             platform.Stub(p => p.LookupProcedureByName("", "")).IgnoreArguments().Return(new ExternalProcedure("", null));
             platform.Replay();
         }
@@ -201,7 +206,7 @@ namespace Reko.UnitTests.Arch.Intel
             emu.InstructionPointer += 4;
             emu.Start();
 
-            Assert.AreEqual(0x12345620u, image.ReadLeUInt32(0));
+            Assert.AreEqual(0x12345620u, segmentMap.Segments.Values.First().MemoryArea.ReadLeUInt32(0));
         }
 
         [Test]
@@ -214,7 +219,7 @@ namespace Reko.UnitTests.Arch.Intel
             Given_RegValue(Registers.eax, 0xFFFFFFFF);
             emu.Start();
 
-            Assert.AreEqual(0xFFFF1234u, emu.Registers[Registers.eax.Number]);
+            Assert.AreEqual(0xFFFF1234u, emu.Registers[(int)Registers.eax.Domain]);
         }
 
         [Test]
@@ -283,7 +288,7 @@ namespace Reko.UnitTests.Arch.Intel
                 m.Dd(0); m.Dd(0); m.Dd(0); m.Dd(0); 
                 m.Dd(0); m.Dd(0); m.Dd(0); m.Dd(0); 
             });
-            emu.WriteRegister(Registers.esp, (uint)image.BaseAddress.ToLinear() + 0x24u);
+            emu.WriteRegister(Registers.esp, (uint)segmentMap.BaseAddress.ToLinear() + 0x24u);
 
             emu.Start();
 

@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -35,9 +35,9 @@ namespace Reko.UnitTests.Core
 		{
 			using (FileUnitTester fut = new FileUnitTester("Core/PsigArguments.txt"))
 			{
-				IntelArchitecture arch = new IntelArchitecture(ProcessorMode.Real);
+				IntelArchitecture arch = new X86ArchitectureReal();
 				uint f = (uint)(FlagM.CF|FlagM.ZF);
-				Identifier argF = new Identifier(arch.GrfToString(f), PrimitiveType.Bool, new FlagGroupStorage(f, "CZ", PrimitiveType.Byte));
+				Identifier argF = new Identifier(arch.GrfToString(f), PrimitiveType.Bool, new FlagGroupStorage(Registers.eflags, f, "CZ", PrimitiveType.Byte));
 				Identifier argR = new Identifier(Registers.ax.Name, Registers.ax.DataType, Registers.ax);
 				
 				argF.Write(true, fut.TextWriter);
@@ -57,21 +57,19 @@ namespace Reko.UnitTests.Core
 			Assert.AreEqual(PrimitiveType.Word32, arg.DataType);
 			Assert.AreEqual("eax", arg.Name);
 			Assert.AreEqual(PrimitiveType.Word32, arg.DataType);
-
-			Identifier arg2 = new Identifier(Registers.eax.Name, Registers.eax.DataType, Registers.eax);
 		}
 
 		[Test]
 		public void PsigValidArguments()
 		{
 			Identifier arg = new Identifier(Registers.eax.Name, Registers.eax.DataType, Registers.eax);
-			ProcedureSignature sig = new ProcedureSignature(null, new Identifier[] { arg });
+			FunctionType sig = FunctionType.Action(new Identifier[] { arg });
 			Assert.IsTrue(sig.ParametersValid);
 
-			sig = new ProcedureSignature(arg, null);
+			sig = new FunctionType(arg, new Identifier[0]);
 			Assert.IsTrue(sig.ParametersValid);
 
-			sig = new ProcedureSignature();
+			sig = new FunctionType();
 			Assert.IsFalse(sig.ParametersValid);
 		}
 	}

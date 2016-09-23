@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -84,7 +84,7 @@ namespace Reko.Arch.Arm
         {
         }
 
-        public override void OnProcedureLeft(ProcedureSignature procedureSignature)
+        public override void OnProcedureLeft(FunctionType procedureSignature)
         {
         }
 
@@ -93,7 +93,7 @@ namespace Reko.Arch.Arm
             return new CallSite(0, 0);
         }
 
-        public override void OnAfterCall(Identifier stackReg, ProcedureSignature sigCallee, ExpressionVisitor<Expression> eval)
+        public override void OnAfterCall(FunctionType sigCallee)
         {
         }
     }

@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,7 +31,7 @@ namespace Reko.UnitTests.Arch.Mips
     [TestFixture]
     public class MipsDisassemblerTests : DisassemblerTestBase<MipsInstruction>
     {
-        private MipsProcessorArchitecture arch = new MipsProcessorArchitecture();
+        private MipsProcessorArchitecture arch = new MipsBe32Architecture();
 
         public override IProcessorArchitecture Architecture { get { return arch; } }
 
@@ -152,13 +152,13 @@ namespace Reko.UnitTests.Arch.Mips
         {
             var instr = DisassembleBits("000001 00011 00000 1111111111111110");
             Assert.AreEqual("bltz\tr3,000FFFFC", instr.ToString());
-        
+
             instr = DisassembleBits("000001 00011 10000 1111111111111110");
             Assert.AreEqual("bltzal\tr3,000FFFFC", instr.ToString());
-        
+
             instr = DisassembleBits("000001 00011 10010 1111111111111110");
             Assert.AreEqual("bltzall\tr3,000FFFFC", instr.ToString());
-        
+
             instr = DisassembleBits("000001 00011 00010 1111111111111110");
             Assert.AreEqual("bltzl\tr3,000FFFFC", instr.ToString());
         }
@@ -275,7 +275,7 @@ namespace Reko.UnitTests.Arch.Mips
         public void MipsDis_jr()
         {
             var instr = DisassembleBits("000000 01001 00000 11111 00000 001001");
-            Assert.AreEqual("jalr\tr31,r9", instr.ToString());
+            Assert.AreEqual("jalr\tra,r9", instr.ToString());
             instr = DisassembleBits("000000 01001 000000000000000 001000");
             Assert.AreEqual("jr\tr9", instr.ToString());
         }
@@ -321,13 +321,13 @@ namespace Reko.UnitTests.Arch.Mips
         [Test]
         public void MipsDis_mtofromhilo()
         {
-            var instr = DisassembleBits("000000 00000 01010 00000 00000 010000");
+            var instr = DisassembleBits("000000 00000 00000 01010 00000 010000");
             Assert.AreEqual("mfhi\tr10", instr.ToString());
-            instr = DisassembleBits("000000 00000 01010 00000 00000 010010");
+            instr = DisassembleBits("000000 00000 00000 01010 00000 010010");
             Assert.AreEqual("mflo\tr10", instr.ToString());
-            instr = DisassembleBits("000000 00000 01010 00000 00000 010001");
+            instr = DisassembleBits("000000 01010 00000 00000 00000 010001");
             Assert.AreEqual("mthi\tr10", instr.ToString());
-            instr = DisassembleBits("000000 00000 01010 00000 00000 010011");
+            instr = DisassembleBits("000000 01010 00000 00000 00000 010011");
             Assert.AreEqual("mtlo\tr10", instr.ToString());
         }
 
@@ -392,6 +392,74 @@ namespace Reko.UnitTests.Arch.Mips
             Assert.AreEqual("xor\tr7,r3,r5", instr.ToString());
             instr = DisassembleBits("001110 00011 00101 0011100000100111");
             Assert.AreEqual("xori\tr5,r3,00003827", instr.ToString());
+        }
+
+        [Test]
+        public void MipsDis_nop()
+        {
+            var instr = DisassembleWord(0); // nop
+            Assert.AreEqual("nop", instr.ToString());
+        }
+
+        [Test]
+        public void MipsDis_sltu()
+        {
+            var instr = DisassembleWord(0x0144402B);
+            Assert.AreEqual("sltu\tr8,r10,r4", instr.ToString());
+        }
+
+        [Test]
+        public void MipsDis_sllv()
+        {
+            var instr = DisassembleWord(0x01011004);
+            Assert.AreEqual("sllv\tr2,r1,r8", instr.ToString());
+        }
+
+        [Test]
+        public void MipsDis_mfc0()
+        {
+            var instr = DisassembleWord(0x40024800);
+            Assert.AreEqual("mfc0\tr2,r9", instr.ToString());
+        }
+
+        [Test]
+        public void MipsDis_mtc1()
+        {
+            var instr = DisassembleWord(0x448C0800);
+            Assert.AreEqual("mtc1\tr12,f1", instr.ToString());
+        }
+
+        [Test]
+        public void MipsDis_swc1()
+        {
+            var instr = DisassembleWord(0xE7AC0030);
+            Assert.AreEqual("swc1\tf12,0030(sp)", instr.ToString());
+        }
+
+        [Test]
+        public void MipsDis_cle_d()
+        {
+            var instr = DisassembleWord(0x462C003E);
+            Assert.AreEqual("c.le.d\tcc0,f0,f12", instr.ToString());
+        }
+
+        [Test]
+        public void MipsDis_cfc1()
+        {
+            var instr = DisassembleWord(0x4443F800);
+            Assert.AreEqual("cfc1\tr3,FCSR", instr.ToString());
+        }
+
+        [Test]
+        public void MipsDis_instrs1()
+        {
+            Assert.AreEqual("ctc1\tr1,FCSR", DisassembleWord(0x44C1F800).ToString());
+            Assert.AreEqual("cvt.w.d\tf0,f12", DisassembleWord(0x46206024).ToString());
+            Assert.AreEqual("ctc1\tr3,FCSR", DisassembleWord(0x44C3F800).ToString());
+            Assert.AreEqual("bc1f\tcc0,0010004C", DisassembleWord(0x45000012).ToString());
+            Assert.AreEqual("add.d\tf0,f12,f0", DisassembleWord(0x46206000).ToString());
+            Assert.AreEqual("cfc1\tr3,FCSR", DisassembleWord(0x4443F800).ToString());
+            Assert.AreEqual("cvt.w.d\tf2,f0", DisassembleWord(0x462000A4).ToString());
         }
     }
 }

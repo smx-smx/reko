@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,8 +31,10 @@ namespace Reko.Gui.Windows.Controls
 	/// Base class for obtaining menus for this application. 
 	/// </summary>
 	/// <remarks>
-	/// Menus are defined in an XML file called command-definitions. Menus are then generated from that file by generating 
-	/// C# code from the XML file via XSLT. This is done to avoid locking to a particular GUI platform.
+	/// Menus are defined in an XML file called command-definitions. Menus
+    /// are then generated from that file by generating C# code from the XML
+    /// file via XSLT. This is done to avoid locking to a particular GUI
+    /// platform.
 	/// </remarks>
 	public abstract class MenuSystem
 	{
@@ -97,7 +99,11 @@ namespace Reko.Gui.Windows.Controls
                     ToolStripButton btnNew = new ToolStripButton();
                     btnNew.Text = cmi.Text;
                     btnNew.Tag = cmi.MenuCommand;
-                    btnNew.ImageIndex = cmi.ImageIndex;
+                    if (cmi.ImageKey != null)
+                        btnNew.ImageKey = cmi.ImageKey;
+                    else 
+                        btnNew.ImageIndex = cmi.ImageIndex;
+                    btnNew.ToolTipText = cmi.ToolTipText;
                     items.Add(btnNew);
                 }
             }

@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -35,7 +35,7 @@ namespace Reko.UnitTests.Structure
     {
         private void RunTest(string sourceFilename, string outFilename)
         {
-            RunTest16(sourceFilename, outFilename, Address.SegPtr(0xC00, 0));
+            RunTestMsdos(sourceFilename, outFilename, Address.SegPtr(0xC00, 0));
         }
 
         private void RunTest(ProcedureBuilder mock, string outFilename)
@@ -48,7 +48,7 @@ namespace Reko.UnitTests.Structure
                 proc.Write(false, fut.TextWriter);
                 fut.TextWriter.WriteLine();
 
-                var sa = new Reko.Structure.Schwartz.ProcedureStructurer(proc);
+                var sa = new StructureAnalysis(new FakeDecompilerEventListener(), program, proc);
                 sa.Structure();
                 CodeFormatter fmt = new CodeFormatter(new TextFormatter(fut.TextWriter));
                 fmt.Write(proc);
@@ -58,7 +58,7 @@ namespace Reko.UnitTests.Structure
             }
         }
 
-        private void RunTest16(string sourceFilename, string outFilename, Address addrBase)
+        private void RunTestMsdos(string sourceFilename, string outFilename, Address addrBase)
         {
             using (FileUnitTester fut = new FileUnitTester(outFilename))
             {
@@ -70,7 +70,7 @@ namespace Reko.UnitTests.Structure
                     proc.Write(false, fut.TextWriter);
                     fut.TextWriter.WriteLine();
 
-                    var sa = new Reko.Structure.Schwartz.ProcedureStructurer(proc);
+                    var sa = new StructureAnalysis(new FakeDecompilerEventListener(), program, proc);
                     sa.Structure();
                     var fmt = new CodeFormatter(new TextFormatter(fut.TextWriter));
                     fmt.Write(proc);
@@ -97,7 +97,7 @@ namespace Reko.UnitTests.Structure
                     proc.Write(false, fut.TextWriter);
                     fut.TextWriter.WriteLine();
 
-                    var sa = new Reko.Structure.Schwartz.ProcedureStructurer(proc);
+                    var sa = new StructureAnalysis(new FakeDecompilerEventListener(), program, proc);
                     sa.Structure();
                     var fmt = new CodeFormatter(new TextFormatter(fut.TextWriter));
                     fmt.Write(proc);
@@ -117,7 +117,7 @@ namespace Reko.UnitTests.Structure
                 proc.Write(false, fut.TextWriter);
                 fut.TextWriter.WriteLine();
 
-                var sa = new Reko.Structure.Schwartz.ProcedureStructurer(proc);
+                var sa = new StructureAnalysis(new FakeDecompilerEventListener(), program, proc);
                 sa.Structure();
                 CodeFormatter fmt = new CodeFormatter(new TextFormatter(fut.TextWriter));
                 fmt.Write(proc);
@@ -134,14 +134,20 @@ namespace Reko.UnitTests.Structure
             {
                 var cfgc = new ControlFlowGraphCleaner(proc);
                 cfgc.Transform();
-                var sa = new Reko.Structure.Schwartz.ProcedureStructurer(proc);
+                var sa = new StructureAnalysis(new FakeDecompilerEventListener(), program, proc);
                 sa.Structure();
                 var fmt = new CodeFormatter(new TextFormatter(sw));
                 fmt.Write(proc);
                 sw.WriteLine("===");
             }
-            Console.WriteLine(sw);
-            Assert.AreEqual(expected, sw.ToString());
+            try
+            {
+                Assert.AreEqual(expected, sw.ToString());
+            } catch
+            {
+                Console.WriteLine(sw);
+                throw;
+            }
         }
 
         private void RunTest32(string expected, Program program)
@@ -151,14 +157,21 @@ namespace Reko.UnitTests.Structure
             {
                 var cfgc = new ControlFlowGraphCleaner(proc);
                 cfgc.Transform();
-                var sa = new Reko.Structure.Schwartz.ProcedureStructurer(proc);
+                var sa = new StructureAnalysis(new FakeDecompilerEventListener(), program, proc);
                 sa.Structure();
                 var fmt = new CodeFormatter(new TextFormatter(sw));
                 fmt.Write(proc);
                 sw.WriteLine("===");
             }
-            Console.WriteLine(sw);
-            Assert.AreEqual(expected, sw.ToString());
+            try
+            {
+                Assert.AreEqual(expected, sw.ToString());
+            }
+            catch
+            {
+                Console.WriteLine(sw);
+                throw;
+            }
         }
 
         [Test]
@@ -210,14 +223,13 @@ namespace Reko.UnitTests.Structure
         }
 
         [Test]
-        [Ignore("FIXME Spins forever")] //$TODO
+        [Ignore()]
         public void StrReg00006()
         {
             RunTest32("Fragments/regressions/r00006.asm", "Structure/StrReg00006.txt", Address.Ptr32(0x100048B0));
         }
 
         [Test]
-        [Ignore("Not quite ready yet")]
         public void StrNonreducible()
         {
             RunTest("Fragments/nonreducible.asm", "Structure/StrNonreducible.txt");
@@ -236,14 +248,12 @@ namespace Reko.UnitTests.Structure
         }
 
         [Test]
-        [Ignore("FIXME Spins forever")] //$TODO
         public void StrReg00011()
         {
             RunTest(new Reg00011Mock(), "Structure/StrReg00011.txt");
         }
 
         [Test]
-        [Ignore("FIXME Spins forever")] //$TODO
         public void StrReg00013()
         {
             RunTest("Fragments/regressions/r00013.asm", "Structure/StrReg00013.txt");
@@ -283,11 +293,11 @@ ret
         }
 
         [Test]
-        [Ignore("FIXME Spins forever")] //$TODO
         public void StrReg00001()
         {
-            var program = RewriteX86_32Fragment(Fragments.Regressions.Reg00001.Text,
-    Address.Ptr32(0x00100000));
+            var program = RewriteX86_32Fragment(
+                Fragments.Regressions.Reg00001.Text,
+                Address.Ptr32(0x00100000));
             var sExp =
 @"void fn00100000()
 {
@@ -302,26 +312,40 @@ word32 fn0010000C(word32 dwArg04, word32 dwArg08)
 	word32 edx_21 = 0x00000000;
 	word32 eax_24 = (word32) Mem0[ecx_12 + 0x00000014:word16] + 0x00000012 + ecx_12 + 0x0000000C;
 	if (true)
-		while (true)
+		do
 		{
 			word32 ecx_56 = Mem0[eax_24 + 0x00000000:word32];
-			if (dwArg08 <u ecx_56 || dwArg08 >=u Mem0[eax_24 + 0x00000008:word32] + ecx_56)
-				break;
+			if (dwArg08 >=u ecx_56 && dwArg08 <u Mem0[eax_24 + 0x00000008:word32] + ecx_56)
+				return eax_24;
 			edx_21 = edx_21 + 0x00000001;
 			eax_24 = eax_24 + 0x00000028;
-			if (edx_21 >=u esi_20)
-				goto l0010004B;
-		}
-	else
-	{
-l0010004B:
-		eax_24 = 0x00000000;
-	}
+		} while (edx_21 <u esi_20);
+	eax_24 = 0x00000000;
 	return eax_24;
 }
 ===
 ";
             RunTest(sExp, program);
+        }
+
+        [Test]
+        public void StrInfiniteLoop()
+        {
+            var pm = new ProgramBuilder();
+            pm.Add("haltForever", m =>
+            {
+                m.Label("lupe");
+                m.Goto("lupe");
+            });
+            var sExp =
+@"void haltForever()
+{
+	while (true)
+		;
+}
+===
+";
+            RunTest(sExp, pm.Program);
         }
     }
 }

@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John KÃ¤llÃ©n.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -32,53 +32,58 @@ using System.Windows.Forms;
 
 namespace Reko.Gui.Windows.Controls
 {
-	/// <summary>
-	/// Displays the contents of memory and allows selection of memory ranges. 
-	/// </summary>
-	/// <remarks>
-	/// Memory that has been identified is colored.
-	/// <para>
-	/// A memory cell is displayed with a one-pixel border on all sides to
-	/// help present it with selections.
-	/// </para>
-	/// </remarks>
-	public class MemoryControl : Control
-	{
-		public event EventHandler<SelectionChangedEventArgs> SelectionChanged;
+    /// <summary>
+    /// Displays the contents of memory and allows selection of memory ranges. 
+    /// </summary>
+    /// <remarks>
+    /// Memory that has been identified is colored.
+    /// <para>
+    /// A memory cell is displayed with a one-pixel border on all sides to
+    /// help present it with selections.
+    /// </para>
+    /// </remarks>
+    public class MemoryControl : Control
+    {
+        public event EventHandler<SelectionChangedEventArgs> SelectionChanged;
 
         private MemoryControlPainter mcp;
-		private Address addrTopVisible;		// address of topmost visible row.
-		private uint wordSize;
-		private uint cbRow;
+        private Address addrTopVisible;     // address of topmost visible row.
+        private uint wordSize;
+        private uint cbRow;
         private IProcessorArchitecture arch;
-		private LoadedImage image;
+        private MemoryArea mem;
+        private SegmentMap segmentMap;
         private ImageMap imageMap;
-		private Address addrSelected;
+        private Encoding encoding;
+        private Address addrSelected;
         private Address addrAnchor;
+        private Address addrMin;
+        private Address addrMax;
 
-		private int cRows;				// total number of rows.
-		private int yTopRow;			// index of topmost visible row
-		private int cyPage;				// number of rows / page.
-		private Size cellSize;			// size of cell in pixels.
-		private Point ptDown;			 // point at which mouse was clicked.
-		private VScrollBar vscroller;
+        private int cRows;              // total number of rows.
+        private int yTopRow;            // index of topmost visible row
+        private int cyPage;             // number of rows / page.
+        private Size cellSize;          // size of cell in pixels.
+        private Point ptDown;            // point at which mouse was clicked.
+        private VScrollBar vscroller;
 
         private bool isMouseClicked;
         private bool isDragging;
 
-		public MemoryControl()
-		{
+        public MemoryControl()
+        {
             mcp = new MemoryControlPainter(this);
-			SetStyle(ControlStyles.DoubleBuffer, true);
-			SetStyle(ControlStyles.AllPaintingInWmPaint, true);
-			SetStyle(ControlStyles.UserPaint, true);
-			vscroller = new VScrollBar();
-			vscroller.Dock = DockStyle.Right;
-			Controls.Add(vscroller);
-			vscroller.Scroll += vscroller_Scroll;
-			wordSize = 1;
-			cbRow = 16;
-		}
+            SetStyle(ControlStyles.DoubleBuffer, true);
+            SetStyle(ControlStyles.AllPaintingInWmPaint, true);
+            SetStyle(ControlStyles.UserPaint, true);
+            vscroller = new VScrollBar();
+            vscroller.Dock = DockStyle.Right;
+            Controls.Add(vscroller);
+            vscroller.Scroll += vscroller_Scroll;
+            wordSize = 1;
+            cbRow = 16;
+            encoding = Encoding.ASCII;
+        }
 
         public IServiceProvider Services { get; set; }
 
@@ -88,8 +93,6 @@ namespace Reko.Gui.Windows.Controls
         /// </summary>
         public AddressRange GetAddressRange()
         {
-            Debug.Print("GetAddressRange: sel: {0}, anchor {1}", addrSelected, addrAnchor);
-
             if (addrSelected == null || addrAnchor == null)
             {
                 return AddressRange.Empty;
@@ -115,45 +118,45 @@ namespace Reko.Gui.Windows.Controls
             OnSelectionChanged();
         }
 
-		public uint BytesPerRow
-		{
-			get { return cbRow; }
-			set 
-			{
+        public uint BytesPerRow
+        {
+            get { return cbRow; }
+            set
+            {
                 if (value <= 0)
                     throw new ArgumentOutOfRangeException("BytesPerRow must be positive.");
-				UpdateScroll();
-				cbRow = value;
-			}
-		}
+                UpdateScroll();
+                cbRow = value;
+            }
+        }
 
-		private void CacheCellSize()
-		{
-			using (Graphics g = this.CreateGraphics())
-			{
-				SizeF cellF = g.MeasureString("M", Font, Width, StringFormat.GenericTypographic);
-				cellSize = new Size((int) (cellF.Width + 0.5F), (int) (cellF.Height + 0.5F));
-			}
-		}
+        private void CacheCellSize()
+        {
+            using (Graphics g = this.CreateGraphics())
+            {
+                SizeF cellF = g.MeasureString("M", Font, Width, StringFormat.GenericTypographic);
+                cellSize = new Size((int)(cellF.Width + 0.5F), (int)(cellF.Height + 0.5F));
+            }
+        }
 
-		private Size CellSize
-		{
-			get { return cellSize; }
-		}
+        private Size CellSize
+        {
+            get { return cellSize; }
+        }
 
-		protected override bool IsInputKey(Keys keyData)
-		{
-			switch (keyData & ~Keys.Modifiers)
-			{
-			case Keys.Down:
-			case Keys.Up:
-			case Keys.Left:
-			case Keys.Right:
-				return true;
-			default:
-				return base.IsInputKey (keyData);
-			}
-		}
+        protected override bool IsInputKey(Keys keyData)
+        {
+            switch (keyData & ~Keys.Modifiers)
+            {
+            case Keys.Down:
+            case Keys.Up:
+            case Keys.Left:
+            case Keys.Right:
+                return true;
+            default:
+                return base.IsInputKey(keyData);
+            }
+        }
 
         public Point AddressToPoint(Address addr)
         {
@@ -169,31 +172,31 @@ namespace Reko.Gui.Windows.Controls
                 return Point.Empty;
         }
 
-		private bool IsVisible(Address addr)
-		{
-			if (addr == null || TopAddress == null)
-				return false;
-			int cbOffset = (int)(addr - TopAddress);
-			int yRow = cbOffset / (int)cbRow;
-			return (yTopRow <= yRow && yRow < yTopRow + cyPage);
-		}
+        private bool IsVisible(Address addr)
+        {
+            if (addr == null || TopAddress == null)
+                return false;
+            int cbOffset = (int)(addr - TopAddress);
+            int yRow = cbOffset / (int)cbRow;
+            return (yTopRow <= yRow && yRow < yTopRow + cyPage);
+        }
 
-		private void MoveSelection(int offset, Keys modifiers)
-		{
+        private void MoveSelection(int offset, Keys modifiers)
+        {
             if (SelectedAddress == null)
                 return;
             ulong linAddr = (ulong)((long)SelectedAddress.ToLinear() + offset);
-            if (!image.IsValidLinearAddress(linAddr))
+            if (!mem.IsValidLinearAddress(linAddr))
                 return;
-            Address addr = imageMap.MapLinearAddressToAddress(linAddr);
-			if (!IsVisible(SelectedAddress))
-			{
+            Address addr = segmentMap.MapLinearAddressToAddress(linAddr);
+            if (!IsVisible(SelectedAddress))
+            {
                 Address newTopAddress = TopAddress + offset;
-                if (image.IsValidAddress(newTopAddress))
+                if (mem.IsValidAddress(newTopAddress))
                 {
                     TopAddress = newTopAddress;
                 }
-			}
+            }
             if ((modifiers & Keys.Shift) != Keys.Shift)
             {
                 addrAnchor = addr;
@@ -201,26 +204,26 @@ namespace Reko.Gui.Windows.Controls
             addrSelected = addr;
             Invalidate();
             OnSelectionChanged();
-		}
+        }
 
 
-		protected override void OnKeyDown(KeyEventArgs e)
-		{
-//            Debug.WriteLine(string.Format("K: {0}, D: {1}, M: {2}", e.KeyCode, e.KeyData, e.Modifiers));
-			switch (e.KeyCode)
-			{
-			case Keys.Down:
-				MoveSelection((int)cbRow, e.Modifiers);
-				break;
-			case Keys.Up:
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            //            Debug.WriteLine(string.Format("K: {0}, D: {1}, M: {2}", e.KeyCode, e.KeyData, e.Modifiers));
+            switch (e.KeyCode)
+            {
+            case Keys.Down:
+                MoveSelection((int)cbRow, e.Modifiers);
+                break;
+            case Keys.Up:
                 MoveSelection(-(int)cbRow, e.Modifiers);
-				break;
-			case Keys.Left:
+                break;
+            case Keys.Left:
                 MoveSelection(-(int)wordSize, e.Modifiers);
-				break;
-			case Keys.Right:
+                break;
+            case Keys.Right:
                 MoveSelection((int)wordSize, e.Modifiers);
-				break;
+                break;
             default:
                 switch (e.KeyData)
                 {
@@ -238,7 +241,7 @@ namespace Reko.Gui.Windows.Controls
                 break;
             }
             e.Handled = true;
-		}
+        }
 
         protected override void OnHandleCreated(EventArgs e)
         {
@@ -246,9 +249,9 @@ namespace Reko.Gui.Windows.Controls
             base.OnHandleCreated(e);
         }
 
-		protected override void OnMouseDown(MouseEventArgs e)
-		{
-            if (image == null)
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            if (mem == null)
                 return;
             this.isMouseClicked = true;
             ptDown = new Point(e.X, e.Y);
@@ -257,7 +260,7 @@ namespace Reko.Gui.Windows.Controls
 
             AffectSelection(e);
             base.OnMouseDown(e);
-		}
+        }
 
         protected override void OnMouseMove(MouseEventArgs e)
         {
@@ -279,7 +282,7 @@ namespace Reko.Gui.Windows.Controls
                 Capture = false;
             }
             isMouseClicked = false;
-            if (image != null)
+            if (mem != null)
             {
                 AffectSelection(e);
             }
@@ -290,7 +293,7 @@ namespace Reko.Gui.Windows.Controls
         protected override void OnMouseWheel(MouseEventArgs e)
         {
             var newTopAddress = TopAddress + (int)(e.Delta > 0 ? -cbRow : cbRow);
-            if (image.IsValidAddress(newTopAddress))
+            if (mem.IsValidAddress(newTopAddress))
             {
                 TopAddress = newTopAddress;
             }
@@ -338,67 +341,81 @@ namespace Reko.Gui.Windows.Controls
             {
                 return linAnch <= linAddr && linAddr <= linSel;
             }
-            else 
+            else
             {
                 return linSel <= linAddr && linAddr <= linAnch;
             }
         }
 
-		protected override void OnPaint(PaintEventArgs pea)
-		{
-			if (image == null || imageMap == null || arch == null)
-			{
-				pea.Graphics.FillRectangle(SystemBrushes.Window, ClientRectangle);
-			}
-			else
-			{
+        protected override void OnPaint(PaintEventArgs pea)
+        {
+            if (mem == null || segmentMap == null || imageMap == null || arch == null)
+            {
+                pea.Graphics.FillRectangle(SystemBrushes.Window, ClientRectangle);
+            }
+            else
+            {
                 CacheCellSize();
                 mcp.PaintWindow(pea.Graphics, cellSize, ptDown, true);
-			}
-		}
+            }
+        }
 
-		protected virtual void OnSelectionChanged()
-		{
+        protected virtual void OnSelectionChanged()
+        {
             var eh = SelectionChanged;
             if (eh != null)
                 eh(this, new SelectionChangedEventArgs(GetAddressRange()));
-		}
+        }
 
-		protected override void OnSizeChanged(EventArgs e)
-		{
-			base.OnSizeChanged(e);
-			UpdateScroll();
-		}
+        protected override void OnSizeChanged(EventArgs e)
+        {
+            base.OnSizeChanged(e);
+            UpdateScroll();
+        }
 
-		[Browsable(false)]
-		public LoadedImage ProgramImage
-		{
-			get { return image; }
-			set { 
-				image = value;
-				if (image != null)
-				{
-					TopAddress = image.BaseAddress;
-					UpdateScroll();
-				}
-				else
-				{
-					UpdateScroll();
-					Invalidate();
-				}
-			}
-		}
+        private void ChangeMemoryArea(ImageSegment seg)
+        {
+            mem = seg.MemoryArea;
+            if (mem != null)
+            {
+                this.addrMin = Address.Max(mem.BaseAddress, seg.Address);
+                this.addrMax = Address.Min(mem.EndAddress, seg.Address + seg.Size);
+                TopAddress = addrMin;
+                UpdateScroll();
+            }
+            else
+            {
+                UpdateScroll();
+                Invalidate();
+            }
+        }
 
         [Browsable(false)]
         public ImageMap ImageMap
         {
             get { return imageMap; }
-            set { 
-                if (imageMap != null) 
+            set
+            {
+                if (imageMap != null)
                     imageMap.MapChanged -= imageMap_MapChanged;
                 imageMap = value;
                 if (imageMap != null)
                     imageMap.MapChanged += imageMap_MapChanged;
+                Invalidate();
+            }
+        }
+
+        [Browsable(false)]
+        public SegmentMap SegmentMap
+        {
+            get { return segmentMap; }
+            set
+            {
+                if (segmentMap != null)
+                    segmentMap.MapChanged -= imageMap_MapChanged;
+                segmentMap = value;
+                if (segmentMap != null)
+                    segmentMap.MapChanged += imageMap_MapChanged;
                 Invalidate();
             }
         }
@@ -410,106 +427,115 @@ namespace Reko.Gui.Windows.Controls
             set { arch = value; Invalidate(); }
         }
 
-		private Address RoundToNearestRow(Address addr)
-		{
-			ulong rows = addr.ToLinear() / cbRow;
-			return imageMap.MapLinearAddressToAddress(rows * cbRow);
-		}
+        [Browsable(false)]
+        public Encoding Encoding
+        {
+            get { return encoding; }
+            set {
+                encoding = (Encoding)value.Clone();
+                encoding.DecoderFallback = new DecoderReplacementFallback(".");
+                Invalidate();
+            }
+        }
 
-		[Browsable(false)]
-		public Address SelectedAddress
-		{
-			get { return addrSelected; }
-			set 
-			{
-				addrSelected = value;
+        private Address RoundToNearestRow(Address addr)
+        {
+            ulong rows = addr.ToLinear() / cbRow;
+            return segmentMap.MapLinearAddressToAddress(rows * cbRow);
+        }
+
+        [Browsable(false)]
+        public Address SelectedAddress
+        {
+            get { return addrSelected; }
+            set
+            {
+                addrSelected = value;
                 addrAnchor = value;
-				if (IsVisible(value) || IsVisible(addrSelected))
-					Invalidate();
-				OnSelectionChanged();
-			}
-		}
+                var seg = GetSegmentFromAddress(value);
+                if (seg != null)
+                {
+                    ChangeMemoryArea(seg);
+                }
+                if (IsVisible(value) || IsVisible(addrSelected))
+                    Invalidate();
+                OnSelectionChanged();
+            }
+        }
 
-		[Browsable(false)]
-		public Address TopAddress
-		{
-			get { return addrTopVisible; }
-			set
-			{
+        [Browsable(false)]
+        public Address TopAddress
+        {
+            get { return addrTopVisible; }
+            set
+            {
                 addrTopVisible = value;
                 if (value != null)
                     addrTopVisible -= (int)(value.ToLinear() % cbRow);
-				UpdateScroll();
-				Invalidate();
-			}
-		}
+                UpdateScroll();
+                Invalidate();
+            }
+        }
 
-		public void ShowAddress(Address addr)
-		{
-            if (image == null || addr < image.BaseAddress)
+        private ImageSegment GetSegmentFromAddress(Address addr)
+        {
+            ImageSegment seg;
+            if (ImageMap == null)
+                return null;
+            if (!SegmentMap.TryFindSegment(addr, out seg))
+                return null;
+            return seg;
+        }
+
+        private void UpdateScroll()
+        {
+            if (addrTopVisible == null || mem == null || CellSize.Height <= 0)
+            {
+                vscroller.Enabled = false;
                 return;
+            }
 
-            uint cbOffset = (uint)(addr - image.BaseAddress);
-			if (cbOffset < 0)
-				return;
+            vscroller.Enabled = true;
+            cRows = (int) (((addrMax - addrMin) + cbRow - 1) / (int)cbRow);
+            int nChunks = (int)(cbRow / wordSize);      // number of chunks per line.
 
-			if (!IsVisible(addr))
-			{
-				TopAddress = RoundToNearestRow(addr);
-                yTopRow = (int)(cbOffset / cbRow);
-				vscroller.Value = yTopRow;
-				Invalidate();
-			}
-		}
-
-		private void UpdateScroll()
-		{
-			if (addrTopVisible == null || image == null || CellSize.Height <= 0)
-			{
-				vscroller.Enabled = false;
-				return;
-			}
-
-			vscroller.Enabled = true;
-			cRows = (image.Bytes.Length + (int)cbRow - 1) / (int) cbRow;
-			int nChunks = (int)(cbRow / wordSize);		// number of chunks per line.
-
-			vscroller.Minimum = 0;
-			int h = Font.Height;
-			cyPage = Math.Max((Height / CellSize.Height) - 1, 1);
-			vscroller.LargeChange = cyPage;
+            vscroller.Minimum = 0;
+            int h = Font.Height;
+            cyPage = Math.Max((Height / CellSize.Height) - 1, 1);
+            vscroller.LargeChange = cyPage;
             vscroller.Maximum = cRows;
-            int newValue = (int)((addrTopVisible.ToLinear() - image.BaseAddress.ToLinear()) / cbRow);
-            vscroller.Value = Math.Max(Math.Min(newValue, vscroller.Maximum), vscroller.Minimum); 
-		}
+            int newValue = (int)((addrTopVisible.ToLinear() - this.addrMin.ToLinear()) / cbRow);
+            vscroller.Value = Math.Max(Math.Min(newValue, vscroller.Maximum), vscroller.Minimum);
+        }
 
-		public uint WordSize
-		{
-			get { return wordSize; }
-			set 
-			{	
-				wordSize = value;
-				UpdateScroll();
-				Invalidate();
-			}
-		}
+        public uint WordSize
+        {
+            get { return wordSize; }
+            set
+            {
+                wordSize = value;
+                UpdateScroll();
+                Invalidate();
+            }
+        }
 
         public void imageMap_MapChanged(object sender, EventArgs e)
         {
-            Invalidate();
+            if (InvokeRequired)
+                Invoke(new Action(Invalidate));
+            else
+                Invalidate();
         }
 
-		private void vscroller_Scroll(object sender, ScrollEventArgs e)
-		{
-			if (e.Type == ScrollEventType.ThumbTrack)
-				return;
-            Address newTopAddress = imageMap.MapLinearAddressToAddress(
-                image.BaseAddress.ToLinear() + (uint)e.NewValue * cbRow);
-            if (image.IsValidAddress(newTopAddress))
+        private void vscroller_Scroll(object sender, ScrollEventArgs e)
+        {
+            Address newTopAddress = segmentMap.MapLinearAddressToAddress(
+                addrMin.ToLinear() + (uint)e.NewValue * cbRow);
+            if (mem.IsValidAddress(newTopAddress))
             {
                 TopAddress = newTopAddress;
             }
-		}
+        }
 
         public class MemoryControlPainter
         {
@@ -539,10 +565,10 @@ namespace Reko.Gui.Windows.Controls
                     return null;
                 // Enumerate all segments visible on screen.
 
-                ulong laEnd = ctrl.ProgramImage.BaseAddress.ToLinear() + (uint) ctrl.image.Bytes.Length;
-                if (ctrl.addrTopVisible.ToLinear() >= laEnd || !ctrl.image.IsValidAddress(ctrl.addrTopVisible))
+                ulong laEnd = ctrl.addrMax.ToLinear();
+                if (ctrl.addrTopVisible.ToLinear() >= laEnd)
                     return null;
-                ImageReader rdr = ctrl.arch.CreateImageReader(ctrl.ProgramImage, ctrl.addrTopVisible);
+                ImageReader rdr = ctrl.arch.CreateImageReader(ctrl.mem, ctrl.addrTopVisible);
                 Rectangle rc = ctrl.ClientRectangle;
                 Size cell = ctrl.CellSize;
                 rc.Height = cell.Height;
@@ -550,13 +576,14 @@ namespace Reko.Gui.Windows.Controls
                 ulong laSegEnd = 0;
                 while (rc.Top < ctrl.Height && rdr.Address.ToLinear() < laEnd)
                 {
-                    ImageMapSegment seg;
-                    if (!ctrl.ImageMap.TryFindSegment(ctrl.addrTopVisible, out seg))
-                        return null;
-                    if (rdr.Address.ToLinear() >= laSegEnd)
+                    ImageSegment seg;
+                    if (ctrl.SegmentMap.TryFindSegment(ctrl.addrTopVisible, out seg))
                     {
-                        laSegEnd = seg.Address.ToLinear() + seg.Size;
-                        rdr = ctrl.arch.CreateImageReader(ctrl.ProgramImage, seg.Address + (rdr.Address - seg.Address));
+                        if (rdr.Address.ToLinear() >= laSegEnd)
+                        {
+                            laSegEnd = seg.Address.ToLinear() + seg.Size;
+                            rdr = ctrl.arch.CreateImageReader(ctrl.mem, seg.Address + (rdr.Address - seg.Address));
+                        }
                     }
                     Address addr = PaintLine(g, rc, rdr, ptAddr, render);
                     if (addr != null)
@@ -591,13 +618,14 @@ namespace Reko.Gui.Windows.Controls
             /// <param name="rdr"></param>
             private Address PaintLine(Graphics g, Rectangle rc, ImageReader rdr, Point ptAddr, bool render)
             {
-                StringBuilder sbCode = new StringBuilder(" ");
+                StringBuilder sxbCode = new StringBuilder(" ");
+                var abCode = new List<byte>();
 
                 // Draw the address part.
 
                 rc.X = 0;
                 string s = string.Format("{0}", rdr.Address);
-                int cx = (int) g.MeasureString(s + "X", ctrl.Font, rc.Width, StringFormat.GenericTypographic).Width;
+                int cx = (int)g.MeasureString(s + "X", ctrl.Font, rc.Width, StringFormat.GenericTypographic).Width;
                 if (!render && new Rectangle(rc.X, rc.Y, cx, rc.Height).Contains(ctrl.ptDown))
                 {
                     return rdr.Address;
@@ -622,9 +650,11 @@ namespace Reko.Gui.Windows.Controls
                     ulong linear = addr.ToLinear();
 
                     ImageMapItem item;
-                    if (!ctrl.ImageMap.TryFindItem(addr, out item))
-                        break;
-                    ulong cbIn = (linear - item.Address.ToLinear());			// # of bytes 'inside' the block we are.
+                    ulong cbIn = 0;
+                    if (ctrl.ImageMap.TryFindItem(addr, out item))
+                    {
+                        cbIn = (linear - item.Address.ToLinear());            // # of bytes 'inside' the block we are.
+                    }
                     uint cbToDraw = 16; // item.Size - cbIn;
 
                     // See if the chunk goes off the edge of the line. If so, clip it.
@@ -643,13 +673,13 @@ namespace Reko.Gui.Windows.Controls
                         {
                             byte b = rdr.ReadByte();
                             s = string.Format("{0:X2}", b);
-                            char ch = (char) b;
-                            sbCode.Append(Char.IsControl(ch) ? '.' : ch);
+                            abCode.Add(b);
                         }
                         else
                         {
-                            s = "??";
-                            sbCode.Append(' ');
+                            s = "  ";
+                            abCode.Add(0x20);   //$BUG: encoding? What about Ebcdic?
+                            rdr.Offset += 1;
                         }
 
                         cx = cellSize.Width * 3;
@@ -664,9 +694,12 @@ namespace Reko.Gui.Windows.Controls
 
                         var theme = GetBrushTheme(item, isSelected);
                         g.FillRectangle(theme.Background, rc.Left, rc.Top, cx, rc.Height);
-                        if (!isSelected && theme.StartMarker != null && addrByte.ToLinear() == item.Address.ToLinear())
+                        if (!isSelected &&
+                            theme.StartMarker != null && 
+                            item != null &&
+                            addrByte.ToLinear() == item.Address.ToLinear())
                         {
-                            var pts = new Point[] 
+                            var pts = new Point[]
                             {
                                 rc.Location,
                                 rc.Location,
@@ -689,13 +722,28 @@ namespace Reko.Gui.Windows.Controls
                 if (render)
                 {
                     g.FillRectangle(this.defaultTheme.Background, rc);
-                    g.DrawString(sbCode.ToString(), ctrl.Font, this.defaultTheme.Foreground, rc.X + cellSize.Width, rc.Top, StringFormat.GenericTypographic);
+                    sxbCode.Append(RenderCode(abCode.ToArray()));
+                    g.DrawString(sxbCode.ToString(), ctrl.Font, this.defaultTheme.Foreground, rc.X + cellSize.Width, rc.Top, StringFormat.GenericTypographic);
                 }
                 return null;
             }
 
+            private string RenderCode(byte[] bytes)
+            {
+                var chars = this.ctrl.encoding.GetChars(bytes);
+                for (int i = 0; i < chars.Length; ++i)
+                {
+                    char ch = chars[i];
+                    if (char.IsControl(ch))
+                        chars[i] = '.';
+                }
+                return new string(chars);
+            }
+
             private BrushTheme GetBrushTheme(ImageMapItem item, bool selected)
             {
+                if (item == null)
+                    return defaultTheme;
                 if (selected)
                     return selectTheme;
                 if (item is ImageMapBlock)

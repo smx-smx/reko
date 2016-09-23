@@ -30,7 +30,9 @@
     <UseApplicationTrust>false</UseApplicationTrust>
     <BootstrapperEnabled>true</BootstrapperEnabled>
     <TargetFrameworkProfile />
-    <UseMSBuildEngine>False</UseMSBuildEngine>
+    <UseMSBuildEngine>True</UseMSBuildEngine>
+    <ProductVersion>12.0.0</ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -52,7 +54,20 @@
     <WarningLevel>4</WarningLevel>
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'TravisRelease|AnyCPU'">
+    <OutputPath>bin\TravisRelease\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <Optimize>true</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Office, Version=15.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
+      <EmbedInteropTypes>True</EmbedInteropTypes>
+    </Reference>
     <Reference Include="Rhino.Mocks">
       <HintPath>..\..\external\Rhino.Mocks-3.6\Rhino.Mocks.dll</HintPath>
     </Reference>
@@ -69,6 +84,16 @@
     <Reference Include="System.Xml.Linq" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Core\Analysis\PyArgFormatParserTests.cs" />
+    <Compile Include="Core\Analysis\ScanfFormatParserTests.cs" />
+    <Compile Include="Core\DumperTests.cs" />
+    <Compile Include="Environments\SysV\GccMangledNameParserTests.cs" />
+    <Compile Include="Environments\Windows\MsPrintfFormatParserTests.cs" />
+    <Compile Include="Environments\Windows\X86_64ProcedureSerializerTests.cs" />
+    <Compile Include="Mocks\FakeTypeDeserializer.cs" />
+    <Compile Include="Core\Analysis\PyBuildValueFormatParserTests.cs" />
+    <Compile Include="OsPath.cs" />
+    <Compile Include="Analysis\AliasStateTests.cs" />
     <Compile Include="Analysis\AliasTests.cs" />
     <Compile Include="Analysis\AnalysisTestBase.cs" />
     <Compile Include="Analysis\AnalysisTests.cs" />
@@ -83,8 +108,49 @@
     <Compile Include="Analysis\BlockDominatorGraphTests.cs" />
     <Compile Include="Analysis\DominatorGraphTests.cs" />
     <Compile Include="Analysis\ExpressionPropagatorTests.cs" />
+    <Compile Include="Analysis\IndirectCallRewriterTests.cs" />
+    <Compile Include="Analysis\RegisterPreservationTests.cs" />
+    <Compile Include="Analysis\UserSignatureBuilderTests.cs" />
     <Compile Include="Arch\Intel\X86InstructionComparer.Tests.cs" />
+    <Compile Include="Arch\Mips\MipsPointerScannerTests.cs" />
+    <Compile Include="Arch\Vax\VaxDisassemblerTests.cs" />
+    <Compile Include="Arch\Vax\VaxRewriterTests.cs" />
+    <Compile Include="Categories.cs" />
+    <Compile Include="Core\CLanguage\CConstantEvaluatorTests.cs" />
+    <Compile Include="Core\CLanguage\CDirectiveLexerTests.cs" />
+    <Compile Include="Core\CLanguage\CLexerTests.cs" />
+    <Compile Include="Core\CLanguage\CParserTests.cs" />
+    <Compile Include="Core\CLanguage\EnumEvaluatorTests.cs" />
+    <Compile Include="Core\CLanguage\LookAheadLexerTests.cs" />
+    <Compile Include="Core\CLanguage\NamedDataTypeExtractorTests.cs" />
+    <Compile Include="Core\CLanguage\TypedefTests.cs" />
+    <Compile Include="Core\Configuration\OperatingEnvironmentElementTests.cs" />
+    <Compile Include="Core\Configuration\RekoConfigurationServiceTests.cs" />
+    <Compile Include="Core\Configuration\RekoConfigurationTests.cs" />
+    <Compile Include="Core\Lib\SuffixArrayTests.cs" />
+    <Compile Include="Core\Lib\UbjsonWriterTests.cs" />
+    <Compile Include="Core\Lib\WildPatternMatcher.Tests.cs" />
+    <Compile Include="Core\Output\CTypeReferenceFormatterTests.cs" />
+    <Compile Include="Core\Output\TypeReferenceFormatterTests.cs" />
+    <Compile Include="Core\SegmentMapTests.cs" />
+    <Compile Include="Core\Serialization\ArgumentDeserializerTests.cs" />
+    <Compile Include="Core\Serialization\ArgumentSerializerTests.cs" />
+    <Compile Include="Core\Serialization\ProjectLoaderTests.cs" />
+    <Compile Include="Core\Serialization\ProjectPersisterTests.cs" />
+    <Compile Include="Core\Services\FileSystemServiceTests.cs" />
+    <Compile Include="Environments\AmigaOS\AmigaHeaderLoaderTests.cs" />
+    <Compile Include="Environments\SegaGenesis\RomLoaderTests.cs" />
+    <Compile Include="Environments\SysV\MipsProcedureSerializerTests.cs" />
+    <Compile Include="Environments\SysV\SparcProcedureSerializerTests.cs" />
     <Compile Include="Environments\SysV\X86_64ProcedureSerializerTests.cs" />
+    <Compile Include="Environments\SysV\X86ProcedureSerializerTests.cs" />
+    <Compile Include="Environments\Windows\MipsProcedureSerializerTests.cs" />
+    <Compile Include="Environments\Windows\ModuleDefinitionLoaderTests.cs" />
+    <Compile Include="Environments\Windows\MsMangledNameParserTests.cs" />
+    <Compile Include="Environments\Windows\Win32MipsPlatformTests.cs" />
+    <Compile Include="Environments\Windows\Win32PlatformTests.cs" />
+    <Compile Include="Environments\Windows\WineSpecFileLoaderTests.cs" />
+    <Compile Include="Evaluation\ConstDivisionImplementedByMultiplicationTests.cs" />
     <Compile Include="Fragments\EvenOdd.cs" />
     <Compile Include="Analysis\GlobalCallRewriterTests.cs" />
     <Compile Include="Analysis\GrfDefinitionFinderTests.cs" />
@@ -163,6 +229,7 @@
     <Compile Include="Core\Serialization\UnpackerSignatureFileTests.cs" />
     <Compile Include="Core\StructureReaderTests.cs" />
     <Compile Include="Core\TestConditionTests.cs" />
+    <Compile Include="Core\TypeLibraryDeserializerTests.cs" />
     <Compile Include="Core\TypeLibraryLoaderTests.cs" />
     <Compile Include="DchexLoader.cs" />
     <Compile Include="Environments\AmigaOS\AmigaOSPlatformTests.cs" />
@@ -171,8 +238,6 @@
     <Compile Include="Environments\C64\D64LoaderTests.cs" />
     <Compile Include="Environments\Ps3\Ps3PlatformTests.cs" />
     <Compile Include="Environments\SysV\SysVPlatformTests.cs" />
-    <Compile Include="Environments\Win32\ModuleDefinitionLoaderTests.cs" />
-    <Compile Include="Environments\Win32\Win32PlatformTests.cs" />
     <Compile Include="Evaluation\InstructionMatcherTests.cs" />
     <Compile Include="Evaluation\SubstitutorTests.cs" />
     <Compile Include="Fragments\ArrayExpressionFragment.cs" />
@@ -182,44 +247,63 @@
     <Compile Include="Fragments\PointerChainFragment.cs" />
     <Compile Include="Fragments\Regressions\Reg00001.cs" />
     <Compile Include="Fragments\RepeatedLoadsFragment.cs" />
+    <Compile Include="Fragments\SegMem3Fragment.cs" />
     <Compile Include="Fragments\SegmentedCallFragment.cs" />
+    <Compile Include="Fragments\SegmentedMemoryPointerFragment.cs" />
     <Compile Include="Fragments\StaggeredArrayFragment.cs" />
     <Compile Include="Gui\AddressSearchResultTests.cs" />
+    <Compile Include="Gui\Commands\Cmd_MarkProcedureTests.cs" />
+    <Compile Include="Gui\Commands\Cmd_WhatPointsHereTests.cs" />
     <Compile Include="Gui\Design\ImageMapSegmentDesignerTests.cs" />
     <Compile Include="Gui\Design\ProcedureDesignerTests.cs" />
+    <Compile Include="Gui\Windows\CombinedCodeViewInteractorTests.cs" />
+    <Compile Include="Gui\Windows\Controls\ImageMapViewTests.cs" />
+    <Compile Include="Gui\Windows\Controls\MixedCodeDataModelTests.cs" />
+    <Compile Include="Gui\Windows\Controls\NestedTextModelTests.cs" />
+    <Compile Include="Gui\Windows\Controls\StyleStackTests.cs" />
     <Compile Include="Gui\Windows\DisassemblyFormatterTests.cs" />
     <Compile Include="Gui\HungarianParserTests.cs" />
     <Compile Include="Gui\TabControlHostTests.cs" />
     <Compile Include="Gui\Windows\Controls\DisassemblyTextModelTests.cs" />
+    <Compile Include="Gui\Windows\Forms\JumpTableInteractorTests.cs" />
     <Compile Include="Gui\Windows\NavigationInteractorTests.cs" />
     <Compile Include="Gui\Windows\TextSpanFormatterTests.cs" />
     <Compile Include="Gui\Windows\Forms\OpenAsInteractorTests.cs" />
     <Compile Include="Gui\Windows\Forms\SearchDialogInteractorTests.cs" />
+    <Compile Include="Gui\Windows\Forms\DeclarationFormInteractorTests.cs" />
     <Compile Include="Gui\Windows\ProjectBrowserServiceTests.cs" />
     <Compile Include="Gui\Windows\WindowsFormsSettingsServiceTests.cs" />
     <Compile Include="ImageLoaders\Elf\ElfImageLoaderTests.cs" />
+    <Compile Include="ImageLoaders\Elf\ElfLoader64Tests.cs" />
+    <Compile Include="ImageLoaders\Elf\ElfLoader32Tests.cs" />
+    <Compile Include="ImageLoaders\Elf\ElfObjectLinkerTests.cs" />
+    <Compile Include="ImageLoaders\Elf\ElfTests.cs" />
+    <Compile Include="ImageLoaders\Elf\SparcRelocatorTests.cs" />
     <Compile Include="ImageLoaders\Hunk\HunkFileParserTests.cs" />
     <Compile Include="ImageLoaders\Hunk\HunkLoaderTests.cs" />
     <Compile Include="ImageLoaders\Hunk\HunkMaker.cs" />
     <Compile Include="ImageLoaders\MachO\MachOLoaderTests.cs" />
+    <Compile Include="ImageLoaders\MzExe\NeImageLoaderTests.cs" />
     <Compile Include="ImageLoaders\MzExe\PeImageLoaderTests.cs" />
-    <Compile Include="Environments\Win32\MsMangledNameParserTests.cs" />
+    <Compile Include="Loading\DccSignatureLoaderTests.cs" />
+    <Compile Include="Loading\FlirtoidSignatureLoaderTests.cs" />
+    <Compile Include="Core\Lib\UbjsonReaderTests.cs" />
     <Compile Include="Loading\UnpackerSignatureLoaderTests.cs" />
     <Compile Include="Loading\UnpackingServiceTests.cs" />
     <Compile Include="Mocks\FakeDiagnosticsService.cs" />
     <Compile Include="Mocks\SegmentedPointerProc.cs" />
     <Compile Include="Mocks\RtlTraceBuilder.cs" />
     <Compile Include="Scanning\BackwalkerTests.cs" />
-    <Compile Include="Arch\Intel\CodeEmitterTests.cs" />
+    <Compile Include="Scanning\Backwalker_x86_Tests.cs" />
     <Compile Include="Arch\Intel\DeadConditionFlagsFinderTests.cs" />
     <Compile Include="Arch\Intel\X86DisassemblerTests.cs" />
     <Compile Include="Arch\Intel\Fragments\Factorial.cs" />
     <Compile Include="Arch\Intel\ImportResolution.cs" />
-    <Compile Include="Arch\Intel\IntelArchitectureTests.cs" />
+    <Compile Include="Arch\Intel\X86ArchitectureTests.cs" />
     <Compile Include="Arch\Intel\IntelAssemblerTests.cs" />
     <Compile Include="Arch\Intel\IntelInstructionTrieTests.cs" />
     <Compile Include="Arch\Intel\IntelRegisterTests.cs" />
-    <Compile Include="Arch\Intel\MsDosPlatformTests.cs" />
+    <Compile Include="Environments\Msdos\MsdosPlatformTests.cs" />
     <Compile Include="Arch\Intel\OperandRewriterRealModeTests.cs" />
     <Compile Include="Arch\Intel\OperandRewriterTests.cs" />
     <Compile Include="Arch\Intel\Rewrite32.cs" />
@@ -240,7 +324,6 @@
     <Compile Include="Core\AddressTests.cs" />
     <Compile Include="Core\ApplicationBuilderTests.cs" />
     <Compile Include="Core\Assemblers\SymbolTableTests.cs" />
-    <Compile Include="Core\BitSetTests.cs" />
     <Compile Include="Core\BlockTests.cs" />
     <Compile Include="Core\CallGraphTests.cs" />
     <Compile Include="Core\CastTests.cs" />
@@ -260,7 +343,7 @@
     <Compile Include="Core\Lib\DominatorGraphTests.cs" />
     <Compile Include="Core\Lib\PriorityQueueTests.cs" />
     <Compile Include="Core\Lib\LookaheadEnumeratorTests.cs" />
-    <Compile Include="Core\MapTests.cs" />
+    <Compile Include="Core\SortedListExTests.cs" />
     <Compile Include="Core\OperatorTests.cs" />
     <Compile Include="Core\Output\MockGeneratorTests.cs" />
     <Compile Include="Core\Output\PrettyPrinterTests.cs" />
@@ -271,7 +354,6 @@
     <Compile Include="Core\ProgramTests.cs" />
     <Compile Include="Core\RegisterTests.cs" />
     <Compile Include="Core\RelocationDictionaryTests.cs" />
-    <Compile Include="Core\Serialization\ArgumentSerializerTests.cs" />
     <Compile Include="Core\Serialization\ProcedureCharacteristicsTests.cs" />
     <Compile Include="Core\Serialization\ArgumentTests.cs" />
     <Compile Include="Core\Serialization\SerializedCallTests.cs" />
@@ -312,7 +394,6 @@
     <Compile Include="Gui\SignatureParserTests.cs">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Gui\Windows\CodeViewerPaneTests.cs" />
     <Compile Include="Gui\Windows\CodeViewerServiceTests.cs">
       <SubType>Code</SubType>
     </Compile>
@@ -368,9 +449,6 @@
     <Compile Include="Gui\Windows\SearchResultServiceTests.cs">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Gui\Windows\WindowsApplication.cs">
-      <SubType>Code</SubType>
-    </Compile>
     <Compile Include="ImageLoaders\BinHex\BinHexDecoderTests.cs" />
     <Compile Include="ImageLoaders\BinHex\BinHexImageLoaderTests.cs" />
     <Compile Include="Loading\LoaderTests.cs" />
@@ -406,6 +484,7 @@
     <Compile Include="Mocks\TreeFindMock.cs" />
     <Compile Include="Mocks\UnstructuredIfsMock.cs" />
     <Compile Include="Mocks\WhileLoopFragment.cs" />
+    <Compile Include="Mocks\MockFactory.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Scanning\BlockClonerTests.cs" />
     <Compile Include="Scanning\BlockWorkitemTests.cs" />
@@ -413,6 +492,7 @@
     <Compile Include="Scanning\Dfa\AutomatonTests.cs" />
     <Compile Include="Scanning\EscapedAccessRewriterTests.cs" />
     <Compile Include="Scanning\Fragments\RtlEvenOdd.cs" />
+    <Compile Include="Scanning\GlobalDataWorkItemTests.cs" />
     <Compile Include="Scanning\HeuristicProcedureScannerTests.cs" />
     <Compile Include="Scanning\HeuristicScannerTests.cs" />
     <Compile Include="Scanning\HeuristicTestBase.cs" />
@@ -421,24 +501,19 @@
     <Compile Include="Scanning\Scanner.M68kTests.cs" />
     <Compile Include="Scanning\ScannerTestPrograms.cs" />
     <Compile Include="Scanning\ScannerTests.cs" />
+    <Compile Include="Scanning\ShingledScannerTests.cs" />
+    <Compile Include="Scanning\StringFinderTests.cs" />
+    <Compile Include="Scanning\VarargsFormatScannerTests.cs" />
+    <Compile Include="Scanning\VectorBuilderTests.cs" />
     <Compile Include="Structure\AbsynCodeGeneratorTests.cs" />
     <Compile Include="Structure\AbsynStatementEmitterTests.cs" />
-    <Compile Include="Structure\DerivedSequenceBuilderTests.cs" />
-    <Compile Include="Structure\IntervalBuilderTests.cs" />
-    <Compile Include="Structure\IntervalTests.cs" />
-    <Compile Include="Structure\LoopFinderTests.cs" />
     <Compile Include="Structure\MockCaseJumpsBack.cs" />
     <Compile Include="Structure\MockCaseStatement.cs" />
     <Compile Include="Structure\MockInfiniteLoop.cs" />
     <Compile Include="Structure\MockWhileGoto.cs" />
     <Compile Include="Structure\MockWhileWithDeclarations.cs" />
-    <Compile Include="Structure\ProcHeaderTests.cs" />
-    <Compile Include="Structure\SccLoopFinderTests.cs" />
     <Compile Include="Structure\MockNestedWhileLoops.cs" />
-    <Compile Include="Structure\PostDominatorGraphTests.cs" />
-    <Compile Include="Structure\Schwartz\ProcedureStructurerTests.cs" />
-    <Compile Include="Structure\StructureNodeTests.cs" />
-    <Compile Include="Structure\TestBase.cs" />
+    <Compile Include="Structure\ProcedureStructurerTests.cs" />
     <Compile Include="Structure\CfgCleanerTests.cs" />
     <Compile Include="Structure\CompoundConditionCoalescerTests.cs" />
     <Compile Include="Structure\MockIfElseIf.cs" />
@@ -446,8 +521,8 @@
     <Compile Include="Structure\MockSwitch.cs" />
     <Compile Include="Structure\MockWhileBreak.cs" />
     <Compile Include="Structure\SimpleStructureTests.cs" />
-    <Compile Include="Structure\StructureConditionalsTests.cs" />
     <Compile Include="Structure\StructureTestBase.cs" />
+    <Compile Include="TestCode\Factorial.cs" />
     <Compile Include="TestCode\ManyIncrements.cs" />
     <Compile Include="Typing\AddressTraitCollectorTests.cs" />
     <Compile Include="Typing\ArrayExpressionMatcherTests.cs" />
@@ -456,11 +531,12 @@
     <Compile Include="Typing\ConstantPointerTraversalTests.cs" />
     <Compile Include="Typing\ConstantUnionMock.cs" />
     <Compile Include="Typing\DataTypeBuilderTests.cs" />
-    <Compile Include="Typing\DerivedPointerAnalysisTests.cs" />
+    <Compile Include="Typing\ConstantPointerAnalysisTests.cs" />
     <Compile Include="Typing\EquivalenceClassBuilderTests.cs" />
     <Compile Include="Typing\ExpressionTypeAscenderTests.cs" />
     <Compile Include="Typing\ExpressionNormalizerTests.cs" />
     <Compile Include="Typing\ExpressionTypeDescenderTests.cs" />
+    <Compile Include="Typing\Fragments.cs" />
     <Compile Include="Typing\GlobalVariablesMock.cs" />
     <Compile Include="Typing\NestedComplexTypeExtractorTests.cs" />
     <Compile Include="Typing\PtrPrimitiveReplacerTests.cs" />
@@ -472,6 +548,7 @@
     <Compile Include="Typing\TraitMapping.cs">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Typing\TypeCollectorTests.cs" />
     <Compile Include="Typing\TypedConstantRewriterTests.cs" />
     <Compile Include="Typing\TypedExpressionRewriterTests.cs" />
     <Compile Include="Typing\TypedMemoryExpressionRewriterTests.cs" />
@@ -485,6 +562,7 @@
     <Compile Include="Typing\UnionIntRealMock.cs" />
     <Compile Include="Typing\UnionPointersStructuresMatcherTests.cs" />
     <Compile Include="Fragments\VectorFragment.cs" />
+    <Compile Include="Core\Analysis\PrintfFormatParserTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <Service Include="{82A7F48D-3B50-4B1E-B82E-3ADA8210C358}" />
@@ -522,6 +600,10 @@
     <ProjectReference Include="..\Arch\Sparc\Sparc.csproj">
       <Project>{454D9734-EDF3-4646-8C7F-8449C68EB826}</Project>
       <Name>Sparc</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Arch\Vax\Vax.csproj">
+      <Project>{82777964-b370-431a-ac97-733c594c02b5}</Project>
+      <Name>Vax</Name>
     </ProjectReference>
     <ProjectReference Include="..\Arch\X86\X86.csproj">
       <Project>{0942ACB2-EBA0-4E2B-B363-205DF72A77B2}</Project>
@@ -567,16 +649,20 @@
       <Project>{A943CF9B-7FCD-413A-B6D9-A199A69AF217}</Project>
       <Name>Msdos</Name>
     </ProjectReference>
+    <ProjectReference Include="..\Environments\SegaGenesis\SegaGenesis.csproj">
+      <Project>{46d47ac5-dec2-44e6-942a-f1d9b77bb514}</Project>
+      <Name>SegaGenesis</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Environments\SysV\SysV.csproj">
       <Project>{5307665E-072F-4398-872D-6550BE6FC1EB}</Project>
       <Name>SysV</Name>
     </ProjectReference>
-    <ProjectReference Include="..\Environments\Win32\Win32.csproj">
+    <ProjectReference Include="..\Environments\Windows\Windows.csproj">
       <Project>{4A298321-9855-43DE-AA9C-79E4EFA0AE56}</Project>
-      <Name>Win32</Name>
+      <Name>Windows</Name>
     </ProjectReference>
     <ProjectReference Include="..\Gui\Gui.csproj">
-      <Project>{1ca14c64-92e8-452e-a380-637f3dbb4d28}</Project>
+      <Project>{1CA14C64-92E8-452E-A380-637F3DBB4D28}</Project>
       <Name>Gui</Name>
     </ProjectReference>
     <ProjectReference Include="..\ImageLoaders\BinHex\BinHex.csproj">
@@ -599,6 +685,14 @@
       <Project>{0A1B3397-06E3-4C23-A667-FCCC19DC7D12}</Project>
       <Name>MzExe</Name>
     </ProjectReference>
+    <ProjectReference Include="..\Libraries\Libc\Libc.csproj">
+      <Project>{fdaf4ca9-085c-473e-bcb5-0d2a4354a949}</Project>
+      <Name>Libc</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Libraries\Python\Python.csproj">
+      <Project>{c278ca2f-7d7c-47c3-b560-7bc63e1fad96}</Project>
+      <Name>Python</Name>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Arch\Intel\X86StateTests.cs" />
@@ -619,7 +713,6 @@
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Core\Machine\" />
-    <Folder Include="Environments\Msdos\" />
   </ItemGroup>
   <ItemGroup>
     <BootstrapperPackage Include="Microsoft.Net.Client.3.5">
@@ -641,7 +734,7 @@
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <ItemGroup>
     <DecompilerMetadata Include="$(SolutionDir)Environments\MsDos\*.xml" />
-    <DecompilerMetadata Include="$(SolutionDir)Environments\Win32\*.xml" />
+    <DecompilerMetadata Include="$(SolutionDir)Environments\Windows\*.xml" />
   </ItemGroup>
   <ItemGroup>
     <ExternalComponents Include="$(SolutionDir)..\external\Capstone.NET\*.dll" />
@@ -650,6 +743,10 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Core\Lib\Bits.Tests.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ExternalAssemblies Include="$(SolutionDir)..\external\Capstone.NET\*.dll" />
+    <ExternalAssemblies Include="$(SolutionDir)..\external\Capstone.NET\*.pdb" />
   </ItemGroup>
   <Target Name="BeforeBuild">
     <Message Importance="normal" Text="Copying Decompiler metadata files to $(TargetDir)" />

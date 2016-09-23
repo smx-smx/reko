@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,7 +21,7 @@
 using Reko.Arch.X86;
 using Reko.Core;
 using Reko.Core.Services;
-using Reko.Environments.Win32;
+using Reko.Environments.Windows;
 using System;
 using System.IO;
 using System.Linq;
@@ -29,6 +29,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
 using Reko.Core.Configuration;
+using Reko.Core.Types;
+using Reko.Core.Serialization;
+using Reko.ImageLoaders.MzExe.Pe;
 
 namespace Reko.ImageLoaders.MzExe
 {
@@ -37,30 +40,41 @@ namespace Reko.ImageLoaders.MzExe
     /// </summary>
 	public class PeImageLoader : ImageLoader
 	{
+        private const ushort MACHINE_i386 = (ushort)0x014C;
+        private const ushort MACHINE_x86_64 = (ushort) 0x8664u;
+        private const ushort MACHINE_ARMNT = (ushort)0x01C4;
+        private const ushort MACHINE_R4000 = (ushort)0x0166;
+        private const short ImageFileRelocationsStripped = 0x0001;
+        private const short ImageFileExecutable = 0x0002;
+        private const short ImageFileDll = 0x2000;
+
         private IProcessorArchitecture arch;
-        private Win32Platform platform;
+        private IPlatform platform;
         private SizeSpecificLoader innerLoader;
         private Program program;
 
+        private ushort machine;
 		private short optionalHeaderSize;
+        private ushort fileFlags;
 		private int sections;
-		private uint rvaSectionTable;
-		private LoadedImage imgLoaded;
-        private ImageMap imageMap;
+        private uint rvaSectionTable;
+		private MemoryArea imgLoaded;
 		private Address preferredBaseOfImage;
-		private SortedDictionary<string, Section> sectionMap;
+        private List<Section> sectionList;
         private Dictionary<uint, PseudoProcedure> importThunks;
 		private uint rvaStartAddress;		// unrelocated start address of the image.
 		private uint rvaExportTable;
 		private uint sizeExportTable;
 		private uint rvaImportTable;
         private uint rvaDelayImportDescriptor;
+        private uint rvaExceptionTable;
+        private uint sizeExceptionTable;
+        private uint rvaBaseRelocationTable;
+        private uint sizeBaseRelocationTable;
+
+        private uint rvaResources;
         private Dictionary<Address, ImportReference> importReferences;
-		private const ushort MACHINE_i386 = (ushort) 0x014C;
-        private const ushort MACHINE_x86_64 = unchecked((ushort)0x8664);
-        private const ushort MACHINE_ARMNT = (ushort)0x1C4;
-		private const short ImageFileRelocationsStripped = 0x0001;
-		private const short ImageFileExecutable = 0x0002;
+        private Relocator relocator;
 
 		public PeImageLoader(IServiceProvider services, string filename, byte [] img, uint peOffset) : base(services, filename, img)
 		{
@@ -74,11 +88,15 @@ namespace Reko.ImageLoaders.MzExe
 			}
             importThunks = new Dictionary<uint, PseudoProcedure>();
             importReferences = new Dictionary<Address, ImportReference>();
+            ImageSymbols = new SortedList<Address, ImageSymbol>();
 			short expectedMagic = ReadCoffHeader(rdr);
 			ReadOptionalHeader(rdr, expectedMagic);
 		}
 
-		private void AddExportedEntryPoints(Address addrLoad, ImageMap imageMap, List<EntryPoint> entryPoints)
+        public SortedList<Address, ImageSymbol> ImageSymbols { get; private set; }
+        public SegmentMap SegmentMap { get; private set; }
+
+		private void AddExportedEntryPoints(Address addrLoad, SegmentMap imageMap, List<ImageSymbol> entryPoints)
 		{
 			ImageReader rdr = imgLoaded.CreateLeReader(rvaExportTable);
 			rdr.ReadLeUInt32();	// Characteristics
@@ -97,23 +115,29 @@ namespace Reko.ImageLoaders.MzExe
 			ImageReader rdrNames = imgLoaded.CreateLeReader(rvaNames);
 			for (int i = 0; i < nNames; ++i)
 			{
-                EntryPoint ep = LoadEntryPoint(addrLoad, rdrAddrs, rdrNames);
+                ImageSymbol ep = LoadEntryPoint(addrLoad, rdrAddrs, rdrNames);
 				if (imageMap.IsExecutableAddress(ep.Address))
 				{
+                    ImageSymbols[ep.Address] = ep;
 					entryPoints.Add(ep);
 				}
 			}
 		}
 
-        private EntryPoint LoadEntryPoint(Address addrLoad, ImageReader rdrAddrs, ImageReader rdrNames)
+        private ImageSymbol LoadEntryPoint(Address addrLoad, ImageReader rdrAddrs, ImageReader rdrNames)
         {
-            uint addr = rdrAddrs.ReadLeUInt32();
+            uint rvaAddr = rdrAddrs.ReadLeUInt32();
             int iNameMin = rdrNames.ReadLeInt32();
             int j;
             for (j = iNameMin; imgLoaded.Bytes[j] != 0; ++j)
                 ;
             char[] chars = Encoding.ASCII.GetChars(imgLoaded.Bytes, iNameMin, j - iNameMin);
-            return new EntryPoint(addrLoad + addr, new string(chars), arch.CreateProcessorState());
+            return new ImageSymbol(addrLoad + rvaAddr)
+            {
+                Name = new string(chars),
+                ProcessorState = arch.CreateProcessorState(),
+                Type = SymbolType.Procedure,
+            };
         }
 
 		public IProcessorArchitecture CreateArchitecture(ushort peMachineType)
@@ -125,12 +149,13 @@ namespace Reko.ImageLoaders.MzExe
             case MACHINE_ARMNT: arch = "arm-thumb"; break;
             case MACHINE_i386: arch = "x86-protected-32"; break;
             case MACHINE_x86_64: arch = "x86-protected-64"; break;
+            case MACHINE_R4000: arch = "mips-le-32"; break;
 			default: throw new ArgumentException(string.Format("Unsupported machine type 0x{0:X4} in PE header.", peMachineType));
 			}
             return cfgSvc.GetArchitecture(arch);
 		}
 
-        public Win32Platform CreatePlatform(ushort peMachineType, IServiceProvider sp, IProcessorArchitecture arch)
+        public IPlatform CreatePlatform(ushort peMachineType, IServiceProvider sp, IProcessorArchitecture arch)
         {
             string env;
             switch (peMachineType)
@@ -138,9 +163,10 @@ namespace Reko.ImageLoaders.MzExe
             case MACHINE_ARMNT: env= "winArm"; break;
             case MACHINE_i386: env = "win32"; break;
             case MACHINE_x86_64: env = "win64"; break;
+            case MACHINE_R4000: env = "winMips"; break;
             default: throw new ArgumentException(string.Format("Unsupported machine type 0x:{0:X4} in PE hader.", peMachineType));
             }
-            return (Win32Platform) Services.RequireService<IConfigurationService>()
+            return Services.RequireService<IConfigurationService>()
                 .GetEnvironment(env)
                 .Load(Services, this.arch);
         }
@@ -151,8 +177,22 @@ namespace Reko.ImageLoaders.MzExe
             {
             case MACHINE_ARMNT:
             case MACHINE_i386: 
+            case MACHINE_R4000:
                 return new Pe32Loader(this);
-            case MACHINE_x86_64: return new Pe64Loader(this);
+            case MACHINE_x86_64:
+                return new Pe64Loader(this);
+            default: throw new ArgumentException(string.Format("Unsupported machine type 0x:{0:X4} in PE hader.", peMachineType));
+            }
+        }
+
+        private Relocator CreateRelocator(ushort peMachineType, Program program)
+        {
+            switch (peMachineType)
+            {
+            case MACHINE_ARMNT: return new ArmRelocator(program);
+            case MACHINE_i386: return new i386Relocator(Services, program);
+            case MACHINE_R4000: return new MipsRelocator(Services, program);
+            case MACHINE_x86_64: return new x86_64Relocator(Services, program);
             default: throw new ArgumentException(string.Format("Unsupported machine type 0x:{0:X4} in PE hader.", peMachineType));
             }
         }
@@ -162,9 +202,11 @@ namespace Reko.ImageLoaders.MzExe
             switch (peMachineType)
             {
             case MACHINE_ARMNT:
-            case MACHINE_i386: 
+            case MACHINE_i386:
+            case MACHINE_R4000: 
                 return 0x010B;
-            case MACHINE_x86_64: return 0x020B;
+            case MACHINE_x86_64:
+                return 0x020B;
 			default: throw new ArgumentException(string.Format("Unsupported machine type 0x{0:X4} in PE header.", peMachineType));
 			}
         }
@@ -173,13 +215,19 @@ namespace Reko.ImageLoaders.MzExe
         {
             if (sections > 0)
             {
-                sectionMap = LoadSections(addrLoad, rvaSectionTable, sections);
-                imgLoaded = LoadSectionBytes(addrLoad, sectionMap);
-                imageMap = imgLoaded.CreateImageMap();
+                SegmentMap = new SegmentMap(addrLoad);
+                sectionList = LoadSections(addrLoad, rvaSectionTable, sections);
+                imgLoaded = LoadSectionBytes(addrLoad, sectionList);
+                AddSectionsToImageMap(addrLoad, SegmentMap);
             }
-            imgLoaded.BaseAddress = addrLoad;
-            this.program = new Program(imgLoaded, imageMap, arch, platform);
+            this.program = new Program(SegmentMap, arch, platform);
             this.importReferences = program.ImportReferences;
+
+            var rsrcLoader = new ResourceLoader(this.imgLoaded, rvaResources);
+            List<ProgramResource> items = rsrcLoader.Load();
+            program.Resources.Resources.AddRange(items);
+            program.Resources.Name = "PE resources";
+
             return program;
         }
 
@@ -202,31 +250,30 @@ namespace Reko.ImageLoaders.MzExe
 		/// </summary>
 		/// <param name="rvaSectionTable"></param>
 		/// <returns></returns>
-		private SortedDictionary<string, Section> LoadSections(Address addrLoad, uint rvaSectionTable, int sections)
+		private List<Section> LoadSections(Address addrLoad, uint rvaSectionTable, int sections)
         {
-            var sectionMap = new SortedDictionary<string, Section>();
+            var sectionMap = new List<Section>();
 			ImageReader rdr = new LeImageReader(RawImage, rvaSectionTable);
-			var section = ReadSection(rdr);
-			var sectionMax = section;
-			sectionMap[section.Name] = section;
-			
-			for (int i = 1; i != sections; ++i)
+
+            // Why are we keeping track of this? Any particular reason?
+			Section maxSection = null;
+			for (int i = 0; i != sections; ++i)
 			{
-				section = ReadSection(rdr);
-				sectionMap[section.Name] = section;
-				if (section.VirtualAddress > sectionMax.VirtualAddress)
-					sectionMax = section;
+				Section section = ReadSection(rdr);
+				sectionMap.Add(section);
+				if (maxSection == null || section.VirtualAddress > maxSection.VirtualAddress)
+					maxSection = section;
                 Debug.Print("  Section: {0,10} {1:X8} {2:X8} {3:X8} {4:X8}", section.Name, section.OffsetRawData, section.SizeRawData, section.VirtualAddress, section.VirtualSize);
 			}
             return sectionMap;
 		}
 
-        public LoadedImage LoadSectionBytes(Address addrLoad, SortedDictionary<string, Section> sections)
+        public MemoryArea LoadSectionBytes(Address addrLoad, List<Section> sections)
         {
-            var vaMax = sections.Values.Max(s => s.VirtualAddress);
-            var sectionMax = sections.Values.Where(s => s.VirtualAddress == vaMax).First();
-            var imgLoaded = new LoadedImage(addrLoad, new byte[sectionMax.VirtualAddress + Math.Max(sectionMax.VirtualSize, sectionMax.SizeRawData)]);
-            foreach (Section s in sectionMap.Values)
+            var vaMax = sections.Max(s => s.VirtualAddress);
+            var sectionMax = sections.Where(s => s.VirtualAddress == vaMax).First();
+            var imgLoaded = new MemoryArea(addrLoad, new byte[sectionMax.VirtualAddress + Math.Max(sectionMax.VirtualSize, sectionMax.SizeRawData)]);
+            foreach (Section s in sectionList)
             {
                 Array.Copy(RawImage, s.OffsetRawData, imgLoaded.Bytes, s.VirtualAddress, s.SizeRawData);
             }
@@ -241,7 +288,7 @@ namespace Reko.ImageLoaders.MzExe
 
 		public short ReadCoffHeader(ImageReader rdr)
 		{
-			ushort machine = rdr.ReadLeUInt16();
+			this.machine = rdr.ReadLeUInt16();
             short expectedMagic = GetExpectedMagic(machine);
             arch = CreateArchitecture(machine);
 			platform = CreatePlatform(machine, Services, arch);
@@ -252,7 +299,7 @@ namespace Reko.ImageLoaders.MzExe
 			rdr.ReadLeUInt32();		// COFF symbol table.
 			rdr.ReadLeUInt32();		// #of symbols.
 			optionalHeaderSize = rdr.ReadLeInt16();
-			short fileFlags = rdr.ReadLeInt16();
+			this.fileFlags = rdr.ReadLeUInt16();
 			rvaSectionTable = (uint) ((int)rdr.Offset + optionalHeaderSize);
             return expectedMagic;
 		}
@@ -295,28 +342,28 @@ namespace Reko.ImageLoaders.MzExe
 			uint dictionaryCount = rdr.ReadLeUInt32();
 
             if (dictionaryCount == 0) return;
-			rvaExportTable = rdr.ReadLeUInt32();
-			sizeExportTable = rdr.ReadLeUInt32();
+            this.rvaExportTable = rdr.ReadLeUInt32();
+            this.sizeExportTable = rdr.ReadLeUInt32();
 
             if (--dictionaryCount == 0) return;
-            rvaImportTable = rdr.ReadLeUInt32();
+            this.rvaImportTable = rdr.ReadLeUInt32();
 			uint importTableSize = rdr.ReadLeUInt32();
 
             if (--dictionaryCount == 0) return;
-			rdr.ReadLeUInt32();			// resource address
+            this.rvaResources = rdr.ReadLeUInt32();			// resource address
 			rdr.ReadLeUInt32();			// resource size
 
             if (--dictionaryCount == 0) return;
-			rdr.ReadLeUInt32();			// exception address
-			rdr.ReadLeUInt32();			// exception size
+			this.rvaExceptionTable = rdr.ReadLeUInt32();            // exception address
+            this.sizeExceptionTable = rdr.ReadLeUInt32();			// exception size
 
             if (--dictionaryCount == 0) return;
 			rdr.ReadLeUInt32();			// certificate address
 			rdr.ReadLeUInt32();			// certificate size
 
             if (--dictionaryCount == 0) return;
-            uint rvaBaseRelocAddress = rdr.ReadLeUInt32();
-			uint baseRelocSize = rdr.ReadLeUInt32();
+            this.rvaBaseRelocationTable = rdr.ReadLeUInt32();
+            this.sizeBaseRelocationTable = rdr.ReadLeUInt32();
 
             if (--dictionaryCount == 0) return;
             uint rvaDebug = rdr.ReadLeUInt32();
@@ -351,31 +398,114 @@ namespace Reko.ImageLoaders.MzExe
             uint cbDelayImportDescriptor = rdr.ReadLeUInt32();
 		}
 
-		private const ushort RelocationAbsolute = 0;
-		private const ushort RelocationHigh = 1;
-		private const ushort RelocationLow = 2;
-		private const ushort RelocationHighLow = 3;
+
+
+        // MIPS relocation types.
+        // http://www.docjar.com/docs/api/sun/jvm/hotspot/debugger/win32/coff/TypeIndicators.html
+        private const ushort IMAGE_REL_MIPS_ABSOLUTE       = 0x0000;  // Reference is absolute, no relocation is necessary
+        private const ushort IMAGE_REL_MIPS_REFHALF        = 0x0001;
+        private const ushort IMAGE_REL_MIPS_REFWORD        = 0x0002;
+        private const ushort IMAGE_REL_MIPS_JMPADDR        = 0x0003;
+        private const ushort IMAGE_REL_MIPS_REFHI          = 0x0004;
+        private const ushort IMAGE_REL_MIPS_REFLO          = 0x0005;
+        private const ushort IMAGE_REL_MIPS_GPREL          = 0x0006;
+        private const ushort IMAGE_REL_MIPS_LITERAL        = 0x0007;
+        private const ushort IMAGE_REL_MIPS_SECTION        = 0x000A;
+        private const ushort IMAGE_REL_MIPS_SECREL         = 0x000B;
+        private const ushort IMAGE_REL_MIPS_SECRELLO       = 0x000C;  // Low 16-bit section relative referemce (used for >32k TLS)
+        private const ushort IMAGE_REL_MIPS_SECRELHI       = 0x000D;  // High 16-bit section relative reference (used for >32k TLS)
+        private const ushort IMAGE_REL_MIPS_TOKEN          = 0x000E;  // clr token
+        private const ushort IMAGE_REL_MIPS_JMPADDR16      = 0x0010;
+        private const ushort IMAGE_REL_MIPS_REFWORDNB      = 0x0022;
+        private const ushort IMAGE_REL_MIPS_PAIR = 0x0025;
+
+        // ARM relocation types
+        private const ushort IMAGE_REL_ARM_ABSOLUTE        = 0x0000; // No relocation required
+        private const ushort IMAGE_REL_ARM_ADDR32          = 0x0001; // 32 bit address
+        private const ushort IMAGE_REL_ARM_ADDR32NB        = 0x0002; // 32 bit address w/o image base
+        private const ushort IMAGE_REL_ARM_BRANCH24        = 0x0003; // 24 bit offset << 2 & sign ext.
+        private const ushort IMAGE_REL_ARM_BRANCH11        = 0x0004; // Thumb: 2 11 bit offsets
+        private const ushort IMAGE_REL_ARM_TOKEN           = 0x0005; // clr token
+        private const ushort IMAGE_REL_ARM_GPREL12         = 0x0006; // GP-relative addressing (ARM)
+        private const ushort IMAGE_REL_ARM_GPREL7          = 0x0007; // GP-relative addressing (Thumb)
+        private const ushort IMAGE_REL_ARM_BLX24           = 0x0008;
+        private const ushort IMAGE_REL_ARM_BLX11           = 0x0009;
+        private const ushort IMAGE_REL_ARM_SECTION         = 0x000E; // Section table index
+        private const ushort IMAGE_REL_ARM_SECREL = 0x000F; // Offset within section
 
         public override RelocationResults Relocate(Program program, Address addrLoad)
 		{
-            AddSectionsToImageMap(addrLoad, imageMap);
+            relocator = CreateRelocator(machine, program);
             var relocations = imgLoaded.Relocations;
 			Section relocSection;
-            if (sectionMap.TryGetValue(".reloc", out relocSection))
+            if ((relocSection = sectionList.Find(section => this.rvaBaseRelocationTable >= section.VirtualAddress && this.rvaBaseRelocationTable < section.VirtualAddress + section.VirtualSize)) != null)
 			{
-				ApplyRelocations(relocSection.OffsetRawData, relocSection.SizeRawData, (uint) addrLoad.ToLinear(), relocations);
-			}
+                ApplyRelocations(relocSection.OffsetRawData, relocSection.SizeRawData, addrLoad, relocations);
+			} 
             var addrEp = platform.AdjustProcedureAddress(addrLoad + rvaStartAddress);
-            var entryPoints = new List<EntryPoint> { new EntryPoint(addrEp, arch.CreateProcessorState()) };
-			AddExportedEntryPoints(addrLoad, imageMap, entryPoints);
+            var entrySym = CreateMainEntryPoint(
+                    (this.fileFlags & ImageFileDll) != 0,
+                    addrEp,
+                    platform);
+            ImageSymbols[entrySym.Address] = entrySym;
+            var entryPoints = new List<ImageSymbol> { entrySym };
+            ReadExceptionRecords(addrLoad, rvaExceptionTable, sizeExceptionTable, ImageSymbols);
+            AddExportedEntryPoints(addrLoad, SegmentMap, entryPoints);
 			ReadImportDescriptors(addrLoad);
             ReadDeferredLoadDescriptors(addrLoad);
-            return new RelocationResults(entryPoints, relocations);
+            return new RelocationResults(entryPoints, ImageSymbols);
 		}
 
-        private void AddSectionsToImageMap(Address addrLoad, ImageMap imageMap)
+        public ImageSymbol CreateMainEntryPoint(bool isDll, Address addrEp, IPlatform platform)
         {
-            foreach (Section s in sectionMap.Values)
+            var s = platform.FindMainProcedure(this.program, addrEp);
+            if (s != null)
+                return s;
+
+            string name = null;
+            SerializedSignature ssig = null;
+            Func<string, string, Argument_v1> Arg =
+                (n, t) => new Argument_v1
+                {
+                    Name = n,
+                    Type = new TypeReference_v1 { TypeName = t }
+                };
+            if (isDll)
+            {
+                name = "DllMain";   //$TODO: ensure users can override this name
+                ssig = new SerializedSignature
+                {
+                    Convention = "stdapi",
+                    Arguments = new Argument_v1[]
+                    {
+                        Arg("hModule", "HANDLE"),
+                        Arg("dwReason", "DWORD"),
+                        Arg("lpReserved", "LPVOID")
+                    },
+                    ReturnValue = Arg(null, "BOOL")
+                };
+            }
+            else
+            {
+                name = "Win32CrtStartup";
+                ssig = new SerializedSignature
+                {
+                    Convention = "__cdecl",
+                    ReturnValue = Arg(null, "DWORD")
+                };
+            }
+            return new ImageSymbol(addrEp)
+            {
+                Name = name,
+                ProcessorState = arch.CreateProcessorState(),
+                Signature = ssig,
+                Type = SymbolType.Procedure
+            };
+        }
+
+        public void AddSectionsToImageMap(Address addrLoad, SegmentMap imageMap)
+        {
+            foreach (Section s in sectionList)
             {
                 AccessMode acc = AccessMode.Read;
                 if ((s.Flags & SectionFlagsWriteable) != 0)
@@ -386,41 +516,137 @@ namespace Reko.ImageLoaders.MzExe
                 {
                     acc |= AccessMode.Execute;
                 }
-                var seg = imageMap.AddSegment(addrLoad + s.VirtualAddress, s.Name, acc);
+                var seg = SegmentMap.AddSegment(new ImageSegment(
+                    s.Name,
+                    addrLoad + s.VirtualAddress, 
+                    imgLoaded, 
+                    acc)
+                {
+                    Size = s.VirtualSize
+                });
                 seg.IsDiscardable = s.IsDiscardable;
             }
         }
 
-		public void ApplyRelocation(uint baseOfImage, uint page, ImageReader rdr, RelocationDictionary relocations)
-		{
-			ushort fixup = rdr.ReadLeUInt16();
-			uint offset = page + (fixup & 0x0FFFu);
-			switch (fixup >> 12)
-			{
-			case RelocationAbsolute:
-				// Used for padding to 4-byte boundary, ignore.
-				break;
-			case RelocationHighLow:
-			{
-				uint n = (uint) (imgLoaded.ReadLeUInt32(offset) + (baseOfImage - preferredBaseOfImage.ToLinear()));
-				imgLoaded.WriteLeUInt32(offset, n);
-				relocations.AddPointerReference(offset, n);
-				break;
-			}
-            case 0xA:
-            break;
-			default:
-                var dcSvc = Services.RequireService<DecompilerEventListener>();
-                dcSvc.Warn(
-                    dcSvc.CreateAddressNavigator(program, Address.Ptr32(offset)),
-                    string.Format(
-                        "Unsupported PE fixup type: {0:X}",
-                        fixup >> 12));
-                break;
-			}
-		}
 
-		public void ApplyRelocations(uint rvaReloc, uint size, uint baseOfImage, RelocationDictionary relocations)
+#if I386
+            //
+// I386 relocation types.
+//
+const static final ushort IMAGE_REL_I386_ABSOLUTE        = 0x0000;  // Reference is absolute, no relocation is necessary
+const static final ushort IMAGE_REL_I386_DIR16           = 0x0001;  // Direct 16-bit reference to the symbols virtual address
+const static final ushort IMAGE_REL_I386_REL16           = 0x0002;  // PC-relative 16-bit reference to the symbols virtual address
+const static final ushort IMAGE_REL_I386_DIR32           = 0x0006;  // Direct 32-bit reference to the symbols virtual address
+const static final ushort IMAGE_REL_I386_DIR32NB         = 0x0007;  // Direct 32-bit reference to the symbols virtual address, base not included
+const static final ushort IMAGE_REL_I386_SEG12           = 0x0009;  // Direct 16-bit reference to the segment-selector bits of a 32-bit virtual address
+const static final ushort IMAGE_REL_I386_SECTION         = 0x000A;
+const static final ushort IMAGE_REL_I386_SECREL          = 0x000B;
+const static final ushort IMAGE_REL_I386_TOKEN           = 0x000C;  // clr token
+const static final ushort IMAGE_REL_I386_SECREL7         = 0x000D;  // 7 bit offset from base of section containing target
+const static final ushort IMAGE_REL_I386_REL32           = 0x0014;  // PC-relative 32-bit reference to the symbols virtual address
+#endif
+
+#if ARM
+public static final  short 	IMAGE_REL_ARM_ABSOLUTE    	This relocation is ignored. 
+public static final  short 	IMAGE_REL_ARM_ADDR32    	The target's 32-bit virtual address. 
+public static final  short 	IMAGE_REL_ARM_ADDR32NB    	The target's 32-bit relative virtual address. 
+public static final  short 	IMAGE_REL_ARM_BRANCH24    	The 24-bit relative displacement to the target. 
+public static final  short 	IMAGE_REL_ARM_BRANCH11    	Reference to a subroutine call, consisting of two 16-bit instructions with 11-bit offsets. 
+public static final  short 	IMAGE_REL_ARM_SECTION    	The 16-bit section index of the section containing the target. This is used to support debugging information. 
+public static final  short 	IMAGE_REL_ARM_SECREL    	The 32-bit offset of the target from the beginning of its section. This is used to support debugging information as well as static thread local storage. 
+#endif
+
+#if NYI
+        static void add16(uint8_t* P, int16_t V) { write16le(P, read16le(P) + V); }
+        static void add32(uint8_t* P, int32_t V) { write32le(P, read32le(P) + V); }
+        static void add64(uint8_t* P, int64_t V) { write64le(P, read64le(P) + V); }
+        static void or16(uint8_t* P, uint16_t V) { write16le(P, read16le(P) | V); }
+
+        void SectionChunk::applyRelX64(uint8_t* Off, uint16_t Type, Defined* Sym,
+                               uint64_t P)  {
+  uint64_t S = Sym->getRVA();
+  switch (Type) {
+  case IMAGE_REL_AMD64_ADDR32:   add32(Off, S + Config->ImageBase); break;
+  case IMAGE_REL_AMD64_ADDR64:   add64(Off, S + Config->ImageBase); break;
+  case IMAGE_REL_AMD64_ADDR32NB: add32(Off, S); break;
+  case IMAGE_REL_AMD64_REL32:    add32(Off, S - P - 4); break;
+  case IMAGE_REL_AMD64_REL32_1:  add32(Off, S - P - 5); break;
+  case IMAGE_REL_AMD64_REL32_2:  add32(Off, S - P - 6); break;
+  case IMAGE_REL_AMD64_REL32_3:  add32(Off, S - P - 7); break;
+  case IMAGE_REL_AMD64_REL32_4:  add32(Off, S - P - 8); break;
+  case IMAGE_REL_AMD64_REL32_5:  add32(Off, S - P - 9); break;
+  case IMAGE_REL_AMD64_SECTION:  add16(Off, Sym->getSectionIndex()); break;
+  case IMAGE_REL_AMD64_SECREL:   add32(Off, Sym->getSecrel()); break;
+  default:
+    error("Unsupported relocation type");
+    }
+}
+
+void applyRelX86(uint8_t* Off, uint16_t Type, Defined* Sym,
+                               uint64_t P)  {
+  uint64_t S = Sym->getRVA();
+  switch (Type) {
+  case IMAGE_REL_I386_ABSOLUTE: break;
+  case IMAGE_REL_I386_DIR32:    add32(Off, S + Config->ImageBase); break;
+  case IMAGE_REL_I386_DIR32NB:  add32(Off, S); break;
+  case IMAGE_REL_I386_REL32:    add32(Off, S - P - 4); break;
+  case IMAGE_REL_I386_SECTION:  add16(Off, Sym->getSectionIndex()); break;
+  case IMAGE_REL_I386_SECREL:   add32(Off, Sym->getSecrel()); break;
+  default:
+    error("Unsupported relocation type");
+  }
+}
+
+
+        static void applyMOV(uint8_t* Off, uint16_t V)
+        {
+            or16(Off, ((V & 0x800) >> 1) | ((V >> 12) & 0xf));
+            or16(Off + 2, ((V & 0x700) << 4) | (V & 0xff));
+        }
+
+        static void applyMOV32T(uint8_t* Off, uint32_t V)
+        {
+            applyMOV(Off, V);           // set MOVW operand
+            applyMOV(Off + 4, V >> 16); // set MOVT operand
+        }
+
+        static void applyBranch20T(uint8_t* Off, int32_t V)
+        {
+            uint32_t S = V < 0 ? 1 : 0;
+            uint32_t J1 = (V >> 19) & 1;
+            uint32_t J2 = (V >> 18) & 1;
+            or16(Off, (S << 10) | ((V >> 12) & 0x3f));
+            or16(Off + 2, (J1 << 13) | (J2 << 11) | ((V >> 1) & 0x7ff));
+        }
+
+        static void applyBranch24T(uint8_t* Off, int32_t V)
+        {
+            uint32_t S = V < 0 ? 1 : 0;
+            uint32_t J1 = ((~V >> 23) & 1) ^ S;
+            uint32_t J2 = ((~V >> 22) & 1) ^ S;
+            or16(Off, (S << 10) | ((V >> 12) & 0x3ff));
+            or16(Off + 2, (J1 << 13) | (J2 << 11) | ((V >> 1) & 0x7ff));
+        }
+        void ApplyArmRelocation(uint8_t* Off, uint16_t Type, Defined* Sym,
+                               uint64_t P)  {
+  uint64_t S = Sym->getRVA();
+  // Pointer to thumb code must have the LSB set.
+  if (Sym->isExecutable())
+    S |= 1;
+  switch (Type) {
+  case IMAGE_REL_ARM_ADDR32:    add32(Off, S + Config->ImageBase); break;
+  case IMAGE_REL_ARM_ADDR32NB:  add32(Off, S); break;
+  case IMAGE_REL_ARM_MOV32T:    applyMOV32T(Off, S + Config->ImageBase); break;
+  case IMAGE_REL_ARM_BRANCH20T: applyBranch20T(Off, S - P - 4); break;
+  case IMAGE_REL_ARM_BRANCH24T: applyBranch24T(Off, S - P - 4); break;
+  case IMAGE_REL_ARM_BLX23T:    applyBranch24T(Off, S - P - 4); break;
+  default:
+    error("Unsupported relocation type");
+    }
+}
+
+#endif
+        public void ApplyRelocations(uint rvaReloc, uint size, Address baseOfImage, RelocationDictionary relocations)
 		{
 			ImageReader rdr = new LeImageReader(RawImage, rvaReloc);
 			uint rvaStop = rvaReloc + size;
@@ -435,7 +661,7 @@ namespace Reko.ImageLoaders.MzExe
 				uint offBlockEnd = (uint)((int)rdr.Offset + cbBlock - 8);
 				while (rdr.Offset < offBlockEnd)
 				{
-					ApplyRelocation(baseOfImage, page, rdr, relocations);
+					relocator.ApplyRelocation(baseOfImage, page, rdr, relocations);
 				}
 			}
 		}
@@ -479,10 +705,29 @@ namespace Reko.ImageLoaders.MzExe
             if (rvaILT == 0 && dllName == null)
                 return false;
 
+            var ptrSize = platform.PointerType.Size;
             ImageReader rdrIlt = imgLoaded.CreateLeReader(rvaILT!=0 ? rvaILT:rvaIAT);
             ImageReader rdrIat = imgLoaded.CreateLeReader(rvaIAT);
-            while (innerLoader.ResolveImportDescriptorEntry(dllName, rdrIlt, rdrIat))
-                ;
+            while (true)
+            {
+                var addrIat = rdrIat.Address;
+                var addrIlt = rdrIlt.Address;
+                if (!innerLoader.ResolveImportDescriptorEntry(dllName, rdrIlt, rdrIat))
+                    break;
+                ImageSymbols[addrIat] = new ImageSymbol(addrIat)
+                {
+                    Type = SymbolType.Data,
+                    DataType = new Pointer(new CodeType(), ptrSize),
+                    Size = (uint) ptrSize
+                };
+
+                ImageSymbols[addrIlt] = new ImageSymbol(addrIlt)
+                {
+                    Type = SymbolType.Data,
+                    DataType = PrimitiveType.CreateWord(ptrSize),
+                    Size = (uint)ptrSize
+                };
+            } 
             return true;
         }
 
@@ -663,7 +908,7 @@ namespace Reko.ImageLoaders.MzExe
 		private const uint SectionFlagsWriteable =   0x80000000;
 		private const uint SectionFlagsExecutable =  0x00000020;
 
-		public class Section
+        public class Section
 		{
 			public string Name;
 			public uint VirtualSize;
@@ -690,6 +935,61 @@ namespace Reko.ImageLoaders.MzExe
                 }
             }
             return 0;
+        }
+
+        public void ReadExceptionRecords(
+            Address addrLoad,
+            uint rvaExceptionTable, 
+            uint sizeExceptionTable,
+            SortedList<Address, ImageSymbol> symbols)
+        {
+            var rvaTableEnd = rvaExceptionTable + sizeExceptionTable; 
+            var functionStarts = new List<Address>();
+            if (rvaExceptionTable == 0 || sizeExceptionTable == 0)
+                return;
+            var rdr = new LeImageReader(this.imgLoaded.Bytes, rvaExceptionTable);
+            switch (machine)
+            {
+            default: 
+                Services.RequireService<IDiagnosticsService>()
+                    .Warn(new NullCodeLocation(Filename), "Exception table reading not supported for machine #{0}.", machine);
+                break;
+            case MACHINE_x86_64:
+                while (rdr.Offset < rvaTableEnd)
+                {
+                    var addr = addrLoad + rdr.ReadLeUInt32();
+                    rdr.Seek(8);
+                    AddFunctionSymbol(addr, symbols);
+                }
+                break;
+            case MACHINE_R4000:
+                while (rdr.Offset < rvaTableEnd)
+                {
+                    var addr = Address.Ptr32(rdr.ReadLeUInt32());
+                    rdr.Seek(16);
+                    AddFunctionSymbol(addr, symbols);
+                }
+                break;
+            }
+        }
+
+        private void AddFunctionSymbol(Address addr, SortedList<Address, ImageSymbol> symbols)
+        {
+            ImageSymbol symOld;
+            ImageSymbol symNew = new ImageSymbol(addr, null, new CodeType())
+            {
+                Type = SymbolType.Procedure,
+                ProcessorState = arch.CreateProcessorState()
+            };
+            if (!symbols.TryGetValue(addr, out symOld))
+            {
+                symbols.Add(addr, symNew);
+            }
+            else
+            {
+                if (symOld.Name == null && symNew.Name != null)
+                    symbols[addr] = symNew;
+            }
         }
     }
 }

@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,9 +25,9 @@ using System.Text;
 namespace Reko.Core.Lib
 {
     /// <summary>
-    /// Maintains the dominator graph of the blocks in a procedure, along with an extra
-    /// method for determine the dominance relation between two statements, which must always live in 
-    /// blocks.
+    /// Maintains the dominator graph of the blocks in a procedure, along with
+    /// an extramethod for determining the dominance relation between two 
+    /// statements, which must always live in blocks.
     /// </summary>
    public class BlockDominatorGraph : DominatorGraph<Block>
    {

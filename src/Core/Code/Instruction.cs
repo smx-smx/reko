@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -152,7 +152,7 @@ namespace Reko.Core.Code
 			this.OutArgument = argument;
 		}
 
-        public Expression Expression  {get ;set; }
+        public Expression Expression { get;  set; }
         public override bool IsControlFlow { get { return false; } }
         public Identifier OutArgument { get; set; }
 

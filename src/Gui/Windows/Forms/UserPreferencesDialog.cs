@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -46,6 +46,7 @@ namespace Reko.Gui.Windows.Forms
         public Button WindowFontButton { get { return btnWindowFont; } }
         public Button WindowFgButton   { get { return btnWindowFgColor; } }
         public Button WindowBgButton   { get { return btnWindowBgColor; } }
+        public Button ResetButton      { get { return btnReset; } }
 
         public ListBox ImagebarList    { get { return lbxUiElements; } }
         public Button ImagebarFgButton { get { return btnElementFgColor; } }
@@ -54,9 +55,10 @@ namespace Reko.Gui.Windows.Forms
         public TextView CodeControl { get { return codeCtl; } }
         public MemoryControl MemoryControl { get { return memCtl; } }
         public DisassemblyControl DisassemblyControl { get { return dasmCtl; } }
+        public TreeView Browser {  get { return treeBrowser; } }
+        public ListView List { get { return listView; } }
 
         public ColorDialog ColorPicker { get { return colorPicker; } }
         public FontDialog FontPicker { get { return fontPicker; } }
-
     }
 }

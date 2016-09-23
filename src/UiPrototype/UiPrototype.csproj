@@ -11,6 +11,8 @@
     <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
+    <ProductVersion>12.0.0</ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
     <PlatformTarget>x86</PlatformTarget>
@@ -29,6 +31,16 @@
     <OutputPath>bin\Release\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'TravisRelease|x86'">
+    <OutputPath>bin\x86\TravisRelease\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <Optimize>true</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>x86</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
@@ -50,12 +62,6 @@
   <ItemGroup>
     <Compile Include="Ui\MainFormInteractor.cs" />
     <Compile Include="WinForms\DataType.cs" />
-    <Compile Include="WinForms\ProcedureView.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="WinForms\ProcedureView.Designer.cs">
-      <DependentUpon>ProcedureView.cs</DependentUpon>
-    </Compile>
     <Compile Include="WinForms\Project.cs" />
     <Compile Include="WinForms\StringSearcher.cs" />
     <Compile Include="WinForms\SearchHit.cs" />
@@ -91,15 +97,6 @@
     <Compile Include="WinForms\TypeDialog.Designer.cs">
       <DependentUpon>TypeDialog.cs</DependentUpon>
     </Compile>
-    <Compile Include="Wpf\MainForm.xaml.cs">
-      <DependentUpon>MainForm.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Wpf\MainFormHost.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="Wpf\MainFormHost.Designer.cs">
-      <DependentUpon>MainFormHost.cs</DependentUpon>
-    </Compile>
     <EmbeddedResource Include="WinForms\PatternSearchDialog.resx">
       <DependentUpon>PatternSearchDialog.cs</DependentUpon>
     </EmbeddedResource>
@@ -122,14 +119,8 @@
     <EmbeddedResource Include="WinForms\MemoryTyperControl.resx">
       <DependentUpon>MemoryTyperControl.cs</DependentUpon>
     </EmbeddedResource>
-    <EmbeddedResource Include="WinForms\ProcedureView.resx">
-      <DependentUpon>ProcedureView.cs</DependentUpon>
-    </EmbeddedResource>
     <EmbeddedResource Include="WinForms\TypeDialog.resx">
       <DependentUpon>TypeDialog.cs</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Wpf\MainFormHost.resx">
-      <DependentUpon>MainFormHost.cs</DependentUpon>
     </EmbeddedResource>
     <None Include="app.config" />
     <None Include="Properties\Settings.settings">
@@ -153,12 +144,6 @@
     <Content Include="Resources\Code.ico" />
   </ItemGroup>
   <ItemGroup>
-    <Page Include="Wpf\MainForm.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-  </ItemGroup>
-  <ItemGroup>
     <ProjectReference Include="..\Core\Core.csproj">
       <Project>{5C315C78-1F97-4B16-81AA-917284969DFE}</Project>
       <Name>Core</Name>
@@ -168,7 +153,7 @@
       <Name>Decompiler</Name>
     </ProjectReference>
     <ProjectReference Include="..\Gui\Gui.csproj">
-      <Project>{1ca14c64-92e8-452e-a380-637f3dbb4d28}</Project>
+      <Project>{1CA14C64-92E8-452E-A380-637F3DBB4D28}</Project>
       <Name>Gui</Name>
     </ProjectReference>
   </ItemGroup>

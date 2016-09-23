@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,7 +34,7 @@ namespace Reko.ImageLoaders.OdbgScript
 {
     public interface IHost
     {
-        LoadedImage Image { get; }
+        SegmentMap SegmentMap { get; }
         object TS_LOG_COMMAND { get; set; }
 
         ulong TE_AllocMemory(ulong size);
@@ -77,8 +77,6 @@ namespace Reko.ImageLoaders.OdbgScript
 
     public class Host : IHost
     {
-        public object TS_LOG_COMMAND { get; set; }
-
         private OdbgScriptLoader loader;
 
         public Host(OdbgScriptLoader loader)
@@ -86,7 +84,8 @@ namespace Reko.ImageLoaders.OdbgScript
             this.loader = loader;
         }
 
-        public LoadedImage Image { get { return loader.Image; } }
+        public SegmentMap SegmentMap { get; set; }
+        public object TS_LOG_COMMAND { get; set; }
 
         public virtual ulong TE_AllocMemory(ulong size)
         {
@@ -142,8 +141,8 @@ namespace Reko.ImageLoaders.OdbgScript
 
         public virtual bool TE_GetMemoryInfo(ulong addr, out MEMORY_BASIC_INFORMATION MemInfo)
         {
-            ImageMap map = loader.ImageMap;
-            ImageMapSegment segment;
+            SegmentMap map = loader.ImageMap;
+            ImageSegment segment;
             if (map.TryFindSegment(Address.Ptr32((uint)addr), out segment))
             {
                 MemInfo = new MEMORY_BASIC_INFORMATION
@@ -163,7 +162,11 @@ namespace Reko.ImageLoaders.OdbgScript
 
         public virtual bool TryReadBytes(ulong addr, ulong memlen, byte[] membuf)
         {
-            return Image.TryReadBytes(addr - Image.BaseAddress.ToLinear(), (int)memlen, membuf);
+            ImageSegment seg;
+            var ea= Address.Ptr32((uint)addr);
+            if (!SegmentMap.TryFindSegment(ea, out seg))
+                return false;
+            return seg.MemoryArea.TryReadBytes(ea, (int)memlen, membuf);
         }
 
         public virtual object TE_GetProcessHandle()
@@ -243,8 +246,11 @@ namespace Reko.ImageLoaders.OdbgScript
 
         public virtual MachineInstruction DisassembleEx(Address addr)
         {
-            var rdr = loader.Architecture.CreateImageReader(loader.Image,  addr);
-            var dasm = new X86Disassembler(rdr, PrimitiveType.Word32, PrimitiveType.Word32, false);
+            ImageSegment segment;
+            if (!SegmentMap.TryFindSegment(addr, out segment))
+                throw new AccessViolationException();
+            var rdr = loader.Architecture.CreateImageReader(segment.MemoryArea, addr);
+            var dasm = (X86Disassembler)loader.Architecture.CreateDisassembler(rdr);
             return dasm.DisassembleInstruction();
         }
 

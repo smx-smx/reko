@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -100,7 +100,6 @@ namespace Reko.UnitTests
 					return;
 				Assert.IsNotNull(expLine, string.Format("File should have ended before line {0}", line));
 				Assert.IsNotNull(tstLine, string.Format("File ended unexpectedly at line {0}", line));
-
 				Assert.AreEqual(expLine, tstLine, string.Format("File differs on line {0}", line));
 				++line;
 			}

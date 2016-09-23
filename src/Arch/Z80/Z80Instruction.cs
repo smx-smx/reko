@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,11 +28,42 @@ namespace Reko.Arch.Z80
 {
     public class Z80Instruction : MachineInstruction
     {
+        private static Dictionary<Opcode, InstructionClass> classOf;
+
         public Opcode Code;
         public MachineOperand Op1;
         public MachineOperand Op2;
 
+        public override bool IsValid { get { return Code != Opcode.illegal; } }
+
         public override int OpcodeAsInteger { get { return (int)Code; } }
+
+        public override InstructionClass InstructionClass
+        {
+            get
+            {
+                InstructionClass ct;
+                if (!classOf.TryGetValue(Code, out ct))
+                {
+                    ct = InstructionClass.Linear;
+                }
+                else if (( Op1 as ConditionOperand) != null)
+                {
+                    ct |= InstructionClass.Conditional;
+                }
+                return ct;
+            }
+        }
+
+        public override MachineOperand GetOperand(int i)
+        {
+            if (i == 0)
+                return Op1;
+            else if (i == 1)
+                return Op2;
+            else
+                return null;
+        }
 
         public override void Render(MachineInstructionWriter writer)
         {
@@ -54,6 +85,33 @@ namespace Reko.Arch.Z80
                     Op2.Write(true, writer);
                 }
             }
+        }
+
+        static Z80Instruction()
+        {
+            classOf = new Dictionary<Opcode, InstructionClass>
+            {
+                { Opcode.illegal, InstructionClass.Transfer },
+
+                { Opcode.jc,      InstructionClass.Transfer | InstructionClass.Conditional },
+                { Opcode.jm,      InstructionClass.Transfer | InstructionClass.Conditional },
+                { Opcode.jmp,     InstructionClass.Transfer },
+                { Opcode.jnc,     InstructionClass.Transfer | InstructionClass.Conditional },
+                { Opcode.jnz,     InstructionClass.Transfer | InstructionClass.Conditional },
+                { Opcode.jpe,     InstructionClass.Transfer | InstructionClass.Conditional },
+                { Opcode.jpo,     InstructionClass.Transfer | InstructionClass.Conditional },
+                { Opcode.jz,      InstructionClass.Transfer | InstructionClass.Conditional },
+
+                { Opcode.call,    InstructionClass.Transfer | InstructionClass.Call},
+                { Opcode.djnz,    InstructionClass.Transfer | InstructionClass.Conditional},
+                { Opcode.jr,      InstructionClass.Transfer },
+                { Opcode.ret,     InstructionClass.Transfer },
+                { Opcode.reti,    InstructionClass.Transfer },
+                { Opcode.retn,    InstructionClass.Transfer },
+
+                { Opcode.hlt,     InstructionClass.Transfer },
+                { Opcode.jp,      InstructionClass.Transfer }
+            };
         }
     }
 }

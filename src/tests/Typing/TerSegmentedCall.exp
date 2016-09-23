@@ -1,5 +1,6 @@
 // Before ///////
 // SegmentedCallFragment
+// Return size: 0
 void SegmentedCallFragment()
 SegmentedCallFragment_entry:
 	// succ:  l1
@@ -12,18 +13,19 @@ SegmentedCallFragment_exit:
 
 // After ///////
 // SegmentedCallFragment
+// Return size: 0
 void SegmentedCallFragment()
 SegmentedCallFragment_entry:
 	// succ:  l1
 l1:
-	bx = ds->ptr2040;
+	bx = ds->ptr2040
 	(0x2700->*bx)()
 	return
 	// succ:  SegmentedCallFragment_exit
 SegmentedCallFragment_exit:
 
 // Equivalence classes ////////////
-Eq_1: (struct "Eq_1" (27000 (ptr Eq_6) ptr27000))
+Eq_1: (struct "Globals" (27000 (ptr Eq_6) ptr27000))
 	globals_t (in globals : (ptr (struct "Globals")))
 Eq_2: (segment "Eq_2" (2040 (memptr (ptr Eq_6) code) ptr2040))
 	T_2 (in ds : selector)
@@ -33,7 +35,7 @@ Eq_6: (segment "Eq_6")
 globals_t: (in globals : (ptr (struct "Globals")))
   Class: Eq_1
   DataType: (ptr Eq_1)
-  OrigDataType: (ptr (struct (27000 T_6 t27000)))
+  OrigDataType: (ptr (struct "Globals"))
 T_2: (in ds : selector)
   Class: Eq_2
   DataType: (ptr Eq_2)

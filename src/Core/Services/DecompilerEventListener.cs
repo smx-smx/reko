@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,14 +29,20 @@ namespace Reko.Core.Services
     public interface DecompilerEventListener
     {
         ICodeLocation CreateAddressNavigator(Program program, Address address);
-        ICodeLocation CreateProcedureNavigator(Procedure proc);
-        ICodeLocation CreateBlockNavigator(Block block);
+        ICodeLocation CreateProcedureNavigator(Program program, Procedure proc);
+        ICodeLocation CreateBlockNavigator(Program program, Block block);
+        ICodeLocation CreateStatementNavigator(Program program, Statement stm);
+        ICodeLocation CreateJumpTableNavigator(Program program, Address addrIndirectJump, Address addrVector, int stride);
         void Warn(ICodeLocation location, string message);
+        void Warn(ICodeLocation location, string message, params object[] args);
         void Error(ICodeLocation location, string message);
+        void Error(ICodeLocation location, string message, params object[] args);
         void Error(ICodeLocation location, Exception ex, string message);
+        void Error(ICodeLocation location, Exception ex, string message, params object[] args);
 
         void ShowStatus(string caption);
         void ShowProgress(string caption, int numerator, int denominator);
+        bool IsCanceled();
     }
 
     public class NullDecompilerEventListener : DecompilerEventListener
@@ -52,14 +58,34 @@ namespace Reko.Core.Services
             Debug.Print("Warning: {0}: {1}", location, message);
         }
 
+        public void Warn(ICodeLocation location, string message, params object[] args)
+        {
+            Debug.Print("Warning: {0}: {1}", location,
+                string.Format(message, args));
+        }
+
         public void Error(ICodeLocation location, string message)
         {
             Debug.Print("Error: {0}: {1}", location, message);
         }
 
+        public void Error(ICodeLocation location, string message, params object [] args)
+        {
+            Debug.Print("Error: {0}: {1}", location,
+                string.Format(message, args));
+        }
+
         public void Error(ICodeLocation location, Exception ex, string message)
         {
             Debug.Print("Error: {0}: {1} {2}", location, message, ex.Message);
+        }
+
+        public void Error(ICodeLocation location, Exception ex, string message, params object[] args)
+        { 
+            Debug.Print("Error: {0}: {1} {2}", 
+                location, 
+                string.Format(message, args),
+                ex.Message);
         }
 
         public void AddDiagnostic(Diagnostic d)
@@ -82,19 +108,34 @@ namespace Reko.Core.Services
             return new NullCodeLocation(address.ToString());
         }
 
-        public ICodeLocation CreateProcedureNavigator(Procedure proc)
+        public ICodeLocation CreateProcedureNavigator(Program program, Procedure proc)
         {
             return new NullCodeLocation(proc.Name);
         }
 
-        public ICodeLocation CreateBlockNavigator(Block block)
+        public ICodeLocation CreateBlockNavigator(Program program, Block block)
         {
             return new NullCodeLocation(block.Name);
+        }
+
+        public ICodeLocation CreateStatementNavigator(Program program, Statement stm)
+        {
+            return new NullCodeLocation(program.SegmentMap.MapLinearAddressToAddress(stm.LinearAddress).ToString());
+        }
+
+        public ICodeLocation CreateJumpTableNavigator(Program program, Address addrIndirectJump, Address addrVector, int stride)
+        {
+            return new NullCodeLocation(addrIndirectJump.ToString());
         }
 
         public void AddDiagnostic(ICodeLocation location, Diagnostic d)
         {
             throw new NotImplementedException();
+        }
+
+        public bool IsCanceled()
+        {
+            return false;
         }
 
         #endregion

@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,11 +27,12 @@ using System.Text;
 namespace Reko.Core
 {
     /// <summary>
-    /// PointerScanners are used by the user to guess at pointers based on bit patterns.
+    /// PointerScanners are used by the user to guess at pointers based on bit
+    /// patterns.
     /// </summary>
     /// <remarks>
-    /// Each architecture should create its own class derived from this class and implement
-    /// the abstract method.s
+    /// Each architecture should create its own class derived from this class
+    /// and implement the abstract methods.
     /// </remarks>
     public abstract class PointerScanner<T> : IEnumerable<T>
     {

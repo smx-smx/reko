@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,6 +21,7 @@
 using Reko.Core;
 using Reko.Core.Code;
 using Reko.Core.Expressions;
+using Reko.Core.Services;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -47,10 +48,12 @@ namespace Reko.Analysis
         private HashSet<RegisterStorage> deadRegs;
         private uint deadFlags;
 
-        public static void Apply(Program program)
+        public static void Apply(Program program, DecompilerEventListener eventListener)
         {
             foreach (var block in program.Procedures.Values.SelectMany(p => p.ControlGraph.Blocks))
             {
+                if (eventListener.IsCanceled())
+                    break;
                 var ibdr = new IntraBlockDeadRegisters();
                 ibdr.Apply(block);
             }
@@ -247,9 +250,12 @@ namespace Reko.Analysis
                 //Debug.Print("deadFlags: {0}, F:{1}", deadFlags, flags.FlagGroupBits);
                 return (flags.FlagGroupBits & deadFlags) == flags.FlagGroupBits;
             }
-            if (id.Storage is FpuStackStorage || id.Storage is StackLocalStorage || id.Storage is SequenceStorage)
+            if (id.Storage is FpuStackStorage || id.Storage is StackLocalStorage ||
+                id.Storage is StackArgumentStorage || id.Storage is SequenceStorage)
                 return false;
             if (id.Storage is MemoryStorage)
+                return false;
+            if (id.Storage is TemporaryStorage)
                 return false;
             throw new NotImplementedException(id.Storage.GetType().Name);
         }
@@ -341,6 +347,11 @@ namespace Reko.Analysis
             return true;
         }
 
+        public bool VisitFlagRegister(FlagRegister freg, bool defining)
+        {
+            return false;
+        }
+
         public bool VisitFpuStackStorage(FpuStackStorage fpu, bool defining)
         {
             return true;
@@ -348,7 +359,7 @@ namespace Reko.Analysis
 
         public bool VisitMemoryStorage(MemoryStorage global, bool defining)
         {
-            throw new NotImplementedException();
+            return false;
         }
 
         public bool VisitStackLocalStorage(StackLocalStorage local, bool defining)
@@ -369,26 +380,26 @@ namespace Reko.Analysis
             }
             else
             {
-                deadRegs.Remove(reg);
+                deadRegs.RemoveWhere(r => r.OverlapsWith(reg));
             }
             return true;
         }
 
         public bool VisitSequenceStorage(SequenceStorage seq, bool defining)
         {
-            seq.Head.Storage.Accept(this, defining);
-            seq.Tail.Storage.Accept(this, defining);
+            seq.Head.Accept(this, defining);
+            seq.Tail.Accept(this, defining);
             return true;
         }
 
         public bool VisitStackArgumentStorage(StackArgumentStorage stack, bool defining)
         {
-            throw new NotImplementedException();
+            return true;
         }
 
         public bool VisitTemporaryStorage(TemporaryStorage temp, bool defining)
         {
-            throw new NotImplementedException();
+            return true;
         }
     }
 }

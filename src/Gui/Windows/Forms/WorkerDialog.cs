@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,6 +18,8 @@
  */
 #endregion
 
+using Reko.Gui.Controls;
+using Reko.Gui.Forms;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -28,32 +30,33 @@ using System.Windows.Forms;
 
 namespace Reko.Gui.Windows.Forms
 {
-    public partial class WorkerDialog : Form, IDialog
+    public partial class WorkerDialog : Form, IWorkerDialog
     {
         public WorkerDialog()
         {
             InitializeComponent();
+            CancellationButton = new ButtonWrapper(btnCancel);
+            Caption = new LabelWrapper(lblCaption);
+            Detail = new LabelWrapper(lblDetailText);
+            ProgressBar = new ProgressbarWrapper(progressBar);
         }
+
+        public IButton CancellationButton { get; private set; }
 
         public BackgroundWorker Worker
         {
             get { return backgroundWorker; }
         }
 
-        public ProgressBar ProgressBar
-        {
-            get { return progressBar; }
-        }
+        public IProgressBar ProgressBar { get; private set; }
 
-        public Label Caption
-        {
-            get { return lblCaption; }
-        }
+        public ILabel Caption { get; private set; }
 
-        public Label Detail
-        {
-            get { return lblDetailText; }
-        }
+        public ILabel Detail { get; private set; }
 
+        public void Invoke(Action action)
+        {
+            base.Invoke(action);
+        }
     }
 }

@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -57,18 +57,6 @@ namespace Reko.Core
             return Assign(dst, f ? Constant.True() : Constant.False());
         }
 
-        public Branch Branch(Expression condition, Block target)
-        {
-            Branch b = new Branch(condition, target);
-            Emit(b);
-            return b;
-        }
-
-        public Identifier Flags(uint grf, string name)
-        {
-            return Frame.EnsureFlagGroup(grf, name, PrimitiveType.Byte);
-        }
-
         public GotoInstruction Goto(Expression dest)
         {
             var gi = new GotoInstruction(dest);
@@ -119,6 +107,12 @@ namespace Reko.Core
             return Emit(s);
         }
 
+
+        public Statement Store(DataType size, Expression ea, Expression src)
+        {
+            Store s = new Store(new MemoryAccess(MemoryIdentifier.GlobalMemory, ea, size), src);
+            return Emit(s);
+        }
         public Statement SegStore(Expression basePtr, Expression ea, Expression src)
         {
             Store s = new Store(new SegmentedAccess(MemoryIdentifier.GlobalMemory, basePtr, ea, src.DataType), src);

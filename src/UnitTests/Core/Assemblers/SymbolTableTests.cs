@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -32,7 +32,7 @@ namespace Reko.UnitTests.Core.Assemblers
 		public void SymCreateSymbol()
 		{
 			SymbolTable symtab = new SymbolTable();
-			Symbol sym = symtab.CreateSymbol("foo");
+			symtab.CreateSymbol("foo");
 			StringWriter writer = new StringWriter();
 			symtab.Write(writer);
 			Assert.AreEqual(
@@ -44,8 +44,8 @@ namespace Reko.UnitTests.Core.Assemblers
 		public void SymResolveReference()
 		{
 			SymbolTable symtab = new SymbolTable();
-			Symbol sym = symtab.CreateSymbol("foo");
-			Symbol sym2 = symtab.DefineSymbol("foo", 3);
+			symtab.CreateSymbol("foo");
+			symtab.DefineSymbol("foo", 3);
 			StringWriter writer = new StringWriter();
 			symtab.Write(writer);
 			Assert.AreEqual(
@@ -60,7 +60,7 @@ namespace Reko.UnitTests.Core.Assemblers
 			SymbolTable symtab = new SymbolTable();
 			Symbol foo = symtab.CreateSymbol("foo");
 			Symbol bar = symtab.CreateSymbol("bar");
-			Symbol fred = symtab.DefineSymbol("fred", 0x10);
+			symtab.DefineSymbol("fred", 0x10);
 			Symbol [] undef = symtab.GetUndefinedSymbols();
 			Assert.AreEqual(2, undef.Length);
 			Assert.AreSame(bar, undef[0]);

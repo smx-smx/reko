@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -69,12 +69,7 @@ namespace Reko.Core.Code
 			Src = src;
 		}
 
-        public Expression Dst
-        {
-            get { return dst; }
-            set { dst = value; }
-        }
-        private Expression dst;
+        public Expression Dst { get; set; }
 
         public Expression Src { get; set; }
 
@@ -94,6 +89,5 @@ namespace Reko.Core.Code
 		{
 			v.VisitStore(this);
 		}
-
 	}
 }

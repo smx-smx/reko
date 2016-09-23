@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,6 +26,9 @@ namespace Reko.Core.Types
 	/// <summary>
 	/// Represents a member pointer type, as in C++: int foo::*bar makes bar a pointer to a member of foo.
 	/// </summary>
+    /// <remarks>
+    /// x86 "near pointers" are modelled by this data type.
+    /// </remarks>
 	public class MemberPointer : DataType
 	{
 		private DataType pointee;
@@ -38,6 +41,11 @@ namespace Reko.Core.Types
 			this.BasePointer = basePtr;
 			this.byteSize = byteSize;
 		}
+
+        public override void Accept(IDataTypeVisitor v)
+        {
+            v.VisitMemberPointer(this);
+        }
 
         public override T Accept<T>(IDataTypeVisitor<T> v)
         {

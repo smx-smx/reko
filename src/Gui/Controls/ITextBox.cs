@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,12 +26,12 @@ using System.Windows.Forms;
 
 namespace Reko.Gui.Controls
 {
-    public interface ITextBox
+    public interface ITextBox : IControl
     {
         event EventHandler TextChanged;
         event KeyEventHandler KeyDown;
+        event EventHandler LostFocus;
 
-        bool Enabled { get; set; }
         string Text { get; set; }
 
         void SelectAll();

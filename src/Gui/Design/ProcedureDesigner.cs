@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,18 +37,27 @@ namespace Reko.Gui.Design
         private Procedure procedure;
         private string name;
         private Procedure_v1 userProc;
+        private bool isEntryPoint;
 
-        public ProcedureDesigner(Program program, Procedure procedure, Procedure_v1 userProc, Address address)
+        public ProcedureDesigner(
+            Program program,
+            Procedure procedure,
+            Procedure_v1 userProc,
+            Address address,
+            bool isEntryPoint)
         {
             base.Component = procedure;
             this.program = program;
             this.procedure = procedure;
             this.userProc = userProc;
             this.Address = address;
+            this.isEntryPoint = isEntryPoint;
             if (userProc != null && !string.IsNullOrEmpty(userProc.Name))
                 this.name = userProc.Name;
-            else
+            else if (procedure != null)
                 this.name = procedure.Name;
+            if (procedure != null)
+                procedure.NameChanged += procedure_NameChanged;
         }
 
         public Address Address { get; set; }
@@ -62,14 +71,18 @@ namespace Reko.Gui.Design
 
         private void SetTreeNodeText()
         {
+            if (TreeNode == null)
+                return;
             TreeNode.Text = name;
             TreeNode.ToolTipText = Address.ToString();
-            TreeNode.ImageName = userProc != null ? "Userproc.ico" : "Procedure.ico";
+            TreeNode.ImageName = userProc != null
+                ? (isEntryPoint ? "UserEntryProcedure.ico" : "Userproc.ico")
+                : (isEntryPoint ? "EntryProcedure.ico" : "Procedure.ico");
         }
 
         public override void DoDefaultAction()
         {
-            Services.RequireService<ICodeViewerService>().DisplayProcedure(procedure);
+            Services.RequireService<ICodeViewerService>().DisplayProcedure(program, procedure);
         }
 
         public override bool QueryStatus(CommandID cmdId, CommandStatus status, CommandText text)
@@ -87,7 +100,6 @@ namespace Reko.Gui.Design
                 case CmdIds.ActionAssumeRegisterValues:
                     status.Status = MenuStatus.Visible | MenuStatus.Enabled;
                     return true;
-
                 }
             }
             return false;
@@ -103,6 +115,7 @@ namespace Reko.Gui.Design
                     Services.RequireService<ILowLevelViewService>().ShowMemoryAtAddress(program, Address);
                     return true;
                 case CmdIds.ActionEditSignature:
+                    EditSignature();
                     return true;
                 case CmdIds.ActionAssumeRegisterValues:
                     AssumeRegisterValues();
@@ -118,22 +131,28 @@ namespace Reko.Gui.Design
             return false;
         }
 
+        private void EditSignature()
+        {
+            Services.RequireService<ICommandFactory>().EditSignature(program, procedure, Address).Do();
+        }
+
         private void ViewWhatPointsHere()
         {
             var resultSvc = Services.GetService<ISearchResultService>();
             if (resultSvc == null)
                 return;
             var arch = program.Architecture;
-            var image = program.Image;
-            var rdr = program.Architecture.CreateImageReader(program.Image, 0);
+            var rdr = program.CreateImageReader(program.ImageMap.BaseAddress);
             var addrControl = arch.CreatePointerScanner(
-                program.ImageMap,
+                program.SegmentMap,
                 rdr,
-                new Address[]  { 
+                new Address[]  {
                     this.Address,
                 },
                 PointerScannerFlags.All);
-            resultSvc.ShowSearchResults(new AddressSearchResult(Services, addrControl.Select(a => new AddressSearchHit(program, a))));
+            resultSvc.ShowAddressSearchResults(
+                addrControl.Select(a => new ProgramAddress(program, a)),
+                AddressSearchDetails.Code);
         }
 
         private void Rename()
@@ -157,8 +176,11 @@ namespace Reko.Gui.Design
         private Dictionary<RegisterStorage, string> GetAssumedRegisterValues(Address Address)
         {
             Procedure_v1 up;
-            if (!program.UserProcedures.TryGetValue(this.Address, out up))
+            if (!program.User.Procedures.TryGetValue(this.Address, out up) ||
+                up.Assume == null)
+            {
                 return new Dictionary<RegisterStorage, string>();
+            }
             return up.Assume
                 .Select(ass => new
                 {
@@ -187,7 +209,7 @@ namespace Reko.Gui.Design
                 .ToArray();
         }
 
-        void tv_BeforeLabelEdit(object sender, System.Windows.Forms.NodeLabelEditEventArgs e)
+        void tv_BeforeLabelEdit(object sender, NodeLabelEditEventArgs e)
         {
             throw new NotImplementedException();
         }
@@ -200,6 +222,26 @@ namespace Reko.Gui.Design
         public bool Equals(ProcedureDesigner other)
         {
             return Address.ToLinear() == other.Address.ToLinear();
+        }
+
+        void procedure_NameChanged(object sender, EventArgs e)
+        {
+            if (TreeNode != null)
+            {
+                TreeNode.Invoke(OnNameChanged);
+            }
+            else
+            {
+                OnNameChanged();
+            }
+        }
+
+        private void OnNameChanged()
+        {
+            userProc = program.EnsureUserProcedure(Address, procedure.Name);
+            userProc.Name = procedure.Name;
+            this.name = procedure.Name;
+            SetTreeNodeText();
         }
     }
 }

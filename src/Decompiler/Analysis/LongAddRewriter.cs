@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,12 +34,15 @@ using System.Linq;
 namespace Reko.Analysis
 {
     /// <summary>
-    /// Locates instances of add aLo, bLow followed later adc aHi, bHi and merges them into (add a, b)
+    /// Locates instances of add aLo, bLow followed later adc aHi, bHi and
+    /// merges them into (add a, b).
     /// </summary>
-    /// <remarks>Limitations: only does this on pairs within the same basic block, as dominator analysis
-    /// and SSA analysis haven't been done this early. 
-    /// //$TODO: consider doing this _after_ SSA, so that we reap the benefit of performing this across 
-    /// basic block boundaries. The challenge is to introduce new variables xx_yy that interfere with existing xx 
+    /// <remarks>
+    /// Limitations: only does this on pairs within the same basic block,
+    /// as dominator analysis and SSA analysis haven't been done this early. 
+    /// //$TODO: consider doing this _after_ SSA, so that we reap the benefit
+    /// of performing this across basic block boundaries. The challenge is
+    /// to introduce new variables xx_yy that interfere with existing xx 
     /// and yy references.
     /// </remarks>
     public class LongAddRewriter
@@ -141,7 +144,6 @@ namespace Reko.Analysis
             {
                 ReplaceLongAdditions(block);
             }
-            proc.Dump(true);
         }
 
         public void ReplaceLongAdditions(Block block)
@@ -189,7 +191,7 @@ namespace Reko.Analysis
                 var asc = MatchAdcSbc(stms[i].Instruction);
                 if (asc != null)
                 {
-                    Debug.Print("Left sides: [{0}] [{1}]", asc.Left, loInstr.Left);
+                    //Debug.Print("Left sides: [{0}] [{1}]", asc.Left, loInstr.Left);
                     if (asc.Left.GetType() != loInstr.Left.GetType())
                         return null;
                     asc.StatementIndex = i;
@@ -197,9 +199,6 @@ namespace Reko.Analysis
                 }
                 var ass = stms[i].Instruction as Assignment;
                 if (ass == null)
-                    continue;
-                var bin = ass.Src as BinaryExpression;
-                if (bin == null)
                     continue;
                 if (IsCarryFlag(ass.Dst))
                     return null;
@@ -265,7 +264,7 @@ namespace Reko.Analysis
             var idHi = expHi as Identifier;
             if (idLo != null && idHi != null)
             {
-                return proc.Frame.EnsureSequence(idHi, idLo, totalSize);
+                return proc.Frame.EnsureSequence(idHi.Storage, idLo.Storage, totalSize);
             }
             var memDstLo = expLo as MemoryAccess;
             var memDstHi = expHi as MemoryAccess;

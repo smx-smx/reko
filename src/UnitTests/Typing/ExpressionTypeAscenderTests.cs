@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,12 +31,13 @@ using System.Diagnostics;
 namespace Reko.UnitTests.Typing
 {
     [TestFixture]
-    public class ExpressionTypeAscenderTests 
+    public class ExpressionTypeAscenderTests
     {
         private ExpressionEmitter m;
         private TypeStore store;
         private TypeFactory factory;
         private ExpressionTypeAscender exa;
+        private Program program;
 
         [SetUp]
         public void Setup()
@@ -46,12 +47,23 @@ namespace Reko.UnitTests.Typing
             this.factory = new TypeFactory();
             var arch = new FakeArchitecture();
             var platform = new DefaultPlatform(null, arch);
-            this.exa = new ExpressionTypeAscender(platform, store, factory);
+            program = new Program { Architecture = arch, Platform = platform };
+            this.exa = new ExpressionTypeAscender(program, store, factory);
+        }
+
+        private void Given_GlobalVariable(Address addr, DataType dt)
+        {
+            program.GlobalFields.Fields.Add((int)addr.ToUInt32(), dt);
+        }
+
+        private Pointer PointerTo(DataType dt)
+        {
+            return new Pointer(dt, 4);
         }
 
         private static Identifier Id(string name, DataType dt)
         {
-            return new Identifier(name, dt, TemporaryStorage.None);
+            return new Identifier(name, dt, RegisterStorage.None);
         }
 
         private void Verify(string outputFileName)
@@ -65,7 +77,7 @@ namespace Reko.UnitTests.Typing
 
         private void RunTest(Expression e)
         {
-            var globals = new Identifier("globals", PrimitiveType.Pointer32, TemporaryStorage.None);
+            var globals = new Identifier("globals", PrimitiveType.Pointer32, RegisterStorage.None);
             store.EnsureExpressionTypeVariable(factory, globals, "globals_t");
             var eq = new EquivalenceClassBuilder(factory, store);
             e.Accept(eq);
@@ -87,7 +99,7 @@ namespace Reko.UnitTests.Typing
         {
             RunTest(Id("x", PrimitiveType.Byte));
         }
-        
+
         [Test]
         public void ExaAnd()
         {
@@ -131,6 +143,56 @@ namespace Reko.UnitTests.Typing
                     PrimitiveType.Byte,
                     Id("ds", PrimitiveType.SegmentSelector),
                     Constant.Word16(0x123)));
+        }
+
+        [Test(Description = "Duplicate occurrences of same TypeReference should resolve to same TypeVariable")]
+        public void ExaTypeReference()
+        {
+            var a = Id("a", new TypeReference("INT", PrimitiveType.Int32));
+            var b = Id("b", new TypeReference("INT", PrimitiveType.Int32));
+            RunTest(
+                m.IAdd(a, b));
+        }
+
+        [Test(Description = "Resilve LPSTRs and the like to their underlying rep")]
+        public void ExaTypeReferenceToPointer()
+        {
+            var psz = Id("psz", new TypeReference("LPSTR", new Pointer(PrimitiveType.Char, 4)));
+            RunTest(
+                m.LoadB(m.IAdd(psz, Constant.Word32(0))));
+        }
+
+        [Test(Description = "Resilve LPSTRs and the like to their underlying rep")]
+        public void ExaMkSequence()
+        {
+            var lpsz = Id("psz", PrimitiveType.Word32);
+            RunTest(
+                m.Seq(
+                    m.LoadW(m.IAdd(lpsz, 4)),
+                    Constant.Word16(0x1200)));
+        }
+
+        [Test(Description = "Pointers should be processed as globals")]
+        public void ExaUsrGlobals_Ptr32()
+        {
+            Given_GlobalVariable(
+                Address.Ptr32(0x10001200), PrimitiveType.Real32);
+            RunTest(Constant.Create(PrimitiveType.Pointer32, 0x10001200));
+        }
+
+        [Test(Description = "Reals should not be processed as globals")]
+        public void ExaUsrGlobals_Real32()
+        {
+            Given_GlobalVariable(
+                Address.Ptr32(0x10001200), PrimitiveType.Real32);
+            RunTest(Constant.Create(PrimitiveType.Real32, 0x10001200));
+        }
+
+        [Test]
+        public void ExaSubtraction()
+        {
+            var p = Id("p", PointerTo(PrimitiveType.Real64));
+            RunTest(m.ISub(p, m.Word32(4)));
         }
     }
 }

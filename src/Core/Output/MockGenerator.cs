@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,6 +30,13 @@ using System.Text;
 
 namespace Reko.Core.Output
 {
+    /// <summary>
+    /// Generates source code from Reko.Code that can be fed back into
+    /// ProcedureBuilder.
+    /// </summary>
+    /// <remarks>
+    /// Useful for generating unit tests.
+    /// </remarks>
     public class MockGenerator : InstructionVisitor, IExpressionVisitor, IDataTypeVisitor<int>
     {
         private IndentingTextWriter writer;
@@ -115,7 +122,6 @@ namespace Reko.Core.Output
         {
             BlockGraph graph = proc.ControlGraph;
 
-            DfsIterator<Block> iterator = new DfsIterator<Block>(graph);
             foreach (Block block in new DfsIterator<Block>(graph).PreOrder(proc.EntryBlock))
             {
                 if (ShouldIgnoreBlock(proc, block))
@@ -257,9 +263,8 @@ namespace Reko.Core.Output
             var addr16 = addr as Address16;
             if (addr16!= null)
                 writer.Write("Address.Ptr16(0x{0:X}", addr16.ToUInt32());       //$REVIEW: need a ToUInt16
-            var segAddr = addr as SegAddress32;
-            if (segAddr != null)
-                writer.Write("Address.SegPtr(0x{0:X}, 0x{1:X}", segAddr.Selector, segAddr.Offset);
+            if (addr.Selector.HasValue)
+                writer.Write("Address.SegPtr(0x{0:X}, 0x{1:X}", addr.Selector, addr.Offset);
             var addr32 = addr as Address32;
             if (addr32 != null)
                 writer.Write("Address.Ptr32(0x{0:X}", addr32.ToUInt32());
@@ -338,7 +343,7 @@ namespace Reko.Core.Output
             d.Source.Accept(this);
             writer.Write(", ");
             d.InsertedBits.Accept(this);
-            writer.Write(", {0}, {1})", d.BitPosition, d.BitCount);
+            writer.Write(", {0})", d.BitPosition);
         }
 
         void IExpressionVisitor.VisitDereference(Dereference deref)
@@ -444,6 +449,11 @@ namespace Reko.Core.Output
             throw new NotImplementedException();
         }
 
+        public int VisitClass(ClassType ct)
+        {
+            throw new NotImplementedException();
+        }
+
         public int VisitCode(CodeType c)
         {
             writer.Write("new CodeType()", c.Size);
@@ -491,6 +501,11 @@ namespace Reko.Core.Output
         }
 
         public int VisitPointer(Pointer ptr)
+        {
+            throw new NotImplementedException();
+        }
+
+        public int VisitReference(ReferenceTo ptr)
         {
             throw new NotImplementedException();
         }

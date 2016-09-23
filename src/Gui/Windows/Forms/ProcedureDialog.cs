@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,6 +18,7 @@
  */
 #endregion
 
+using Reko.Gui.Forms;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -28,11 +29,14 @@ using System.Windows.Forms;
 
 namespace Reko.Gui.Windows.Forms
 {
-    public partial class ProcedureDialog : Form, IDialog
+    public partial class ProcedureDialog : Form, IProcedureDialog
     {
-        public ProcedureDialog()
+        private ProcedureDialogInteractor interactor;
+
+        public ProcedureDialog(ProcedureDialogInteractor i)
         {
             InitializeComponent();
+            this.interactor = i;
         }
 
         public TextBox ProcedureName
@@ -45,35 +49,26 @@ namespace Reko.Gui.Windows.Forms
             get { return txtSignature; }
         }
 
-
-        public ListView ArgumentList
+        public CheckBox Decompile
         {
-            get { return listArguments; }
+            get { return chkDecompile; }
         }
 
-        public PropertyGrid ArgumentProperties
+        public CheckBox Allocator
         {
-            get { return propArgument; }
+            get { return chkMalloc; }
         }
 
-        public TabControl TabControl
+        public CheckBox Terminates
         {
-            get { return tabControl1; }
+            get { return chkTerminates; }
         }
 
         public Button OkButton { get { return btnOK; } }
 
-
-        private void txtComment_TextChanged(object sender, EventArgs e)
+        public void ApplyChanges()
         {
-
+            this.interactor.ApplyChanges();
         }
-
-        private void label3_Click(object sender, EventArgs e)
-        {
-
-        }
-
-
     }
 }

@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,9 +19,11 @@
 #endregion
 
 using Reko.Core;
+using Reko.Core.Types;
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Linq;
 
 namespace Reko.Gui.Windows
 {
@@ -30,19 +32,41 @@ namespace Reko.Gui.Windows
     /// </summary>
     public class CodeViewerServiceImpl : ViewService, ICodeViewerService
     {
-        private CodeViewerPane pane;
-
         public CodeViewerServiceImpl(IServiceProvider sp) : base (sp)
         {
-            pane = new CodeViewerPane();
         }
 
-        public void DisplayProcedure(Procedure proc)
+        public void DisplayProcedure(Program program, Procedure proc)
         {
             if (proc == null)
                 return;
-            ShowWindow("codeViewerWindow", "Code Viewer", pane);
-            pane.DisplayProcedure(proc);
+            var pane = new CombinedCodeViewInteractor();
+            var windowType = typeof(CombinedCodeViewInteractor).Name;
+            var frame = ShowWindow(windowType, proc.Name, proc, pane);
+            ((CombinedCodeViewInteractor)frame.Pane).DisplayProcedure(program, proc);
+        }
+
+        public void DisplayStatement(Program program, Statement stm)
+        {
+            var pane = new CombinedCodeViewInteractor();
+            var windowType = typeof(CombinedCodeViewInteractor).Name;
+            var proc = stm.Block.Procedure;
+            var frame = ShowWindow(windowType, proc.Name, proc, pane);
+            ((CombinedCodeViewInteractor)frame.Pane).DisplayStatement(program, stm);
+        }
+
+        public void DisplayGlobals(Program program, ImageSegment segment)
+        {
+            var pane = new CombinedCodeViewInteractor();
+            var windowType = typeof(CombinedCodeViewInteractor).Name;
+            var label = string.Format(Resources.SegmentGlobalsFmt, segment.Name);
+            var frame = ShowWindow(windowType, label, segment, pane);
+            ((CombinedCodeViewInteractor)frame.Pane).DisplayGlobals(program, segment);
+        }
+
+        public void DisplayDataType(Program program, DataType dt)
+        {
+            throw new NotImplementedException();
         }
     }
 }

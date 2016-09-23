@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -35,39 +35,84 @@ namespace Reko.UnitTests.Gui.Windows
     public class CodeViewerServiceTests
     {
         private ServiceContainer sc;
+        private Program program;
+        private MockRepository mr;
 
         [SetUp]
         public void Setup()
         {
+            mr = new MockRepository();
             sc = new ServiceContainer();
+            var mem = new MemoryArea(Address.Ptr32(0x0040000),  new byte[0x400]);
+            this.program = new Program
+            {
+                SegmentMap = new SegmentMap(mem.BaseAddress,
+                    new ImageSegment("code", mem, AccessMode.ReadWriteExecute))
+            };
         }
 
         [Test]
-        public void Cvp_CreateViewerIfNotVisible()
+        public void Cvp_CreateProcedureViewerIfNotVisible()
         {
+            var m = new ProcedureBuilder();
+            m.Return();
+
             var uiSvc = AddMockService<IDecompilerShellUiService>();
-            uiSvc.Expect(s => s.FindWindow(
-                    "codeViewerWindow"))
+            uiSvc.Expect(s => s.FindDocumentWindow(
+                    "CombinedCodeViewInteractor", m.Procedure))
                 .Return(null);
-            var windowFrame = MockRepository.GenerateStub<IWindowFrame>();
-            uiSvc.Expect(s => s.CreateWindow(
-                    Arg<string>.Is.Equal("codeViewerWindow"),
-                    Arg<string>.Is.Equal("Code Viewer"),
-                    Arg<IWindowPane>.Is.Anything))
+            var windowPane = mr.Stub<CombinedCodeViewInteractor>();
+            var windowFrame = mr.StrictMock<IWindowFrame>();
+            windowFrame.Stub(f => f.Pane).Return(windowPane);
+            uiSvc.Expect(s => s.CreateDocumentWindow(
+                    Arg<string>.Is.Equal("CombinedCodeViewInteractor"),
+                Arg<string>.Is.Equal(m.Procedure),
+                Arg<string>.Is.Equal(m.Procedure.Name),
+                Arg<IWindowPane>.Is.Anything))
                 .Return(windowFrame);
             windowFrame.Expect(s => s.Show());
 
-            var m = new ProcedureBuilder();
-            m.Return();
+            mr.ReplayAll();
+
             var codeViewerSvc = new CodeViewerServiceImpl(sc);
-            codeViewerSvc.DisplayProcedure(m.Procedure);
+            codeViewerSvc.DisplayProcedure(program, m.Procedure);
+
+            uiSvc.VerifyAllExpectations();
+        }
+
+        [Test]
+        public void Cvp_CreateGlobalsViewerIfNotVisible()
+        {
+            var segment = new ImageSegment(
+                ".seg", Address32.Ptr32(0x17), 0, AccessMode.ReadWrite);
+            var label = ".seg global variables";
+
+            var uiSvc = AddMockService<IDecompilerShellUiService>();
+            uiSvc.Expect(s => s.FindDocumentWindow(
+                    "CombinedCodeViewInteractor", segment))
+                .Return(null);
+            var windowPane = mr.Stub<CombinedCodeViewInteractor>();
+            var windowFrame = mr.StrictMock<IWindowFrame>();
+            windowFrame.Stub(f => f.Pane).Return(windowPane);
+            uiSvc.Expect(s => s.CreateDocumentWindow(
+                    Arg<string>.Is.Equal("CombinedCodeViewInteractor"),
+                Arg<string>.Is.Equal(segment),
+                Arg<string>.Is.Equal(label),
+                Arg<IWindowPane>.Is.Anything))
+                .Return(windowFrame);
+            windowFrame.Expect(s => s.Show());
+
+            mr.ReplayAll();
+
+            var codeViewerSvc = new CodeViewerServiceImpl(sc);
+            codeViewerSvc.DisplayGlobals(program, segment);
 
             uiSvc.VerifyAllExpectations();
         }
 
         private T AddMockService<T>() where T : class
         {
-            var svc = MockRepository.GenerateMock<T>();
+            var svc = mr.StrictMock<T>();
             sc.AddService(typeof (T), svc);
             return svc;
         }

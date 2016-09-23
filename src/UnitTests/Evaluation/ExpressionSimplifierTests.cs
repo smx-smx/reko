@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,41 +29,65 @@ using Reko.Core.Types;
 using NUnit.Framework;
 using System;
 using System.Collections.Generic;
+using Reko.UnitTests.Mocks;
 
 namespace Reko.UnitTests.Evaluation
 {
-	[TestFixture]
-	public class ExpressionSimplifierTests
-	{
-		private Dictionary<Expression, Expression> table;
-		private ExpressionSimplifier simplifier;
-		private Identifier foo;
-		private Identifier bar;
+    [TestFixture]
+    public class ExpressionSimplifierTests
+    {
+        private ExpressionSimplifier simplifier;
+        private Identifier foo;
+        private ProcedureBuilder m;
 
-		[Test]
-		public void ExsConstants()
-		{
-			BuildExpressionSimplifier();
-			Expression expr = new BinaryExpression(Operator.IAdd, PrimitiveType.Word32, 
-				Constant.Word32(1), Constant.Word32(2));
-			Constant c = (Constant) expr.Accept(simplifier);
+        [SetUp]
+        public void Setup()
+        {
+            m = new ProcedureBuilder();
+        }
 
-			Assert.AreEqual(3, c.ToInt32());
-		}
+        private void Given_ExpressionSimplifier()
+        {
+            SsaIdentifierCollection ssaIds = BuildSsaIdentifiers();
+            simplifier = new ExpressionSimplifier(new SsaEvaluationContext(null, ssaIds));
+        }
+
+        private SsaIdentifierCollection BuildSsaIdentifiers()
+        {
+            var mrFoo = new RegisterStorage("foo", 1, 0, PrimitiveType.Word32);
+            var mrBar = new RegisterStorage("bar", 2, 1, PrimitiveType.Word32);
+            foo = new Identifier(mrFoo.Name, mrFoo.DataType, mrFoo);
+
+            var coll = new SsaIdentifierCollection();
+            var src = Constant.Word32(1);
+            foo = coll.Add(foo, new Statement(0, new Assignment(foo, src), null), src, false).Identifier;
+            return coll;
+        }
+
+        [Test]
+        public void Exs_Constants()
+        {
+            Given_ExpressionSimplifier();
+            Expression expr = new BinaryExpression(Operator.IAdd, PrimitiveType.Word32,
+                Constant.Word32(1), Constant.Word32(2));
+            Constant c = (Constant)expr.Accept(simplifier);
+
+            Assert.AreEqual(3, c.ToInt32());
+        }
 
         [Test]
         public void Exs_OrWithSelf()
         {
-            BuildExpressionSimplifier();
+            Given_ExpressionSimplifier();
             var expr = new BinaryExpression(Operator.Or, foo.DataType, foo, foo);
             var result = expr.Accept(simplifier);
             Assert.AreSame(foo, result);
         }
 
         [Test]
-        public void ExsAddPositiveConstantToNegative()
+        public void Exs_AddPositiveConstantToNegative()
         {
-            BuildExpressionSimplifier();
+            Given_ExpressionSimplifier();
             var expr = new BinaryExpression(
                 Operator.IAdd,
                 foo.DataType,
@@ -77,24 +101,41 @@ namespace Reko.UnitTests.Evaluation
             Assert.AreEqual("foo_0 - 0x00000003", result.ToString());
         }
 
-		private void BuildExpressionSimplifier()
-		{
-			SsaIdentifierCollection ssaIds = BuildSsaIdentifiers();
-			table = new Dictionary<Expression,Expression>();
-            simplifier = new ExpressionSimplifier(new SsaEvaluationContext(ssaIds));
-		}
+        [Test]
+        public void Exs_FloatIeeeConstant_Cmp()
+        {
+            Given_ExpressionSimplifier();
+            var expr = m.FLt(foo, Constant.Word32(0xC0B00000));
+            var result = expr.Accept(simplifier);
+            Assert.AreEqual("foo_0 < -5.5F", result.ToString());
+        }
 
-		private SsaIdentifierCollection BuildSsaIdentifiers()
-		{
-			var mrFoo = new RegisterStorage("foo", 1, PrimitiveType.Word32);
-			var mrBar = new RegisterStorage("bar", 2, PrimitiveType.Word32);
-			foo = new Identifier(mrFoo.Name, mrFoo.DataType, mrFoo);
-			bar = new Identifier(mrBar.Name, mrBar.DataType, mrBar);
+        [Test]
+        public void Exs_Cast_real()
+        {
+            Given_ExpressionSimplifier();
+            var expr = m.Cast(PrimitiveType.Real32, Constant.Real64(1.5));
+            Assert.AreEqual("1.5F", expr.Accept(simplifier).ToString());
+        }
 
-			var coll = new SsaIdentifierCollection();
-            var src = Constant.Word32(1);
-            foo = coll.Add(foo, new Statement(0, new Assignment(foo, src), null), src, false).Identifier;
-			return coll;
-		}
-	}
+        [Test]
+        public void Exs_Cast_byte_typeref()
+        {
+            Given_ExpressionSimplifier();
+            var expr = m.Cast(new TypeReference("BYTE", PrimitiveType.Byte), Constant.Word32(0x11));
+            Assert.AreEqual("0x11", expr.Accept(simplifier).ToString());
+        }
+
+        [Test]
+        public void Exs_CastCast()
+        {
+            Given_ExpressionSimplifier();
+            var expr = m.Cast(
+                PrimitiveType.Real32,
+                m.Cast(
+                    PrimitiveType.Real64,
+                    m.Load(PrimitiveType.Real32, m.Word32(0x123400))));
+            Assert.AreEqual("Mem0[0x00123400:real32]", expr.Accept(simplifier).ToString());
+        }
+    }
 }

@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -41,14 +41,15 @@ namespace Reko.Gui.Windows
             get { return shellUiSvc; }
         }
 
-        protected void ShowWindow(string windowType, string windowTitle, IWindowPane innerPane)
+        protected IWindowFrame ShowWindow(string windowType, string windowTitle, object docItem, IWindowPane innerPane)
         {
-            var windowFrame = shellUiSvc.FindWindow(windowType);
+            var windowFrame = shellUiSvc.FindDocumentWindow(windowType, docItem);
             if (windowFrame == null)
             {
-                windowFrame = shellUiSvc.CreateWindow(windowType, windowTitle, innerPane);
+                windowFrame = shellUiSvc.CreateDocumentWindow(windowType, docItem, windowTitle, innerPane);
             }
             windowFrame.Show();
+            return windowFrame;
         }
     }
 }

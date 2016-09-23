@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@ using Reko.UnitTests.Mocks;
 using NUnit.Framework;
 using System;
 using System.IO;
+using Reko.Core.Types;
 
 namespace Reko.UnitTests.Analysis
 {
@@ -144,14 +145,15 @@ namespace Reko.UnitTests.Analysis
 			RunFileTest32("Fragments/multiple/fibonacci.asm", "Analysis/CrwFibonacci.txt");
 		}
 
-		protected override void RunTest(Program prog, TextWriter writer)
+
+        protected override void RunTest(Program prog, TextWriter writer)
 		{
-			dfa = new DataFlowAnalysis(prog, new FakeDecompilerEventListener());
+			dfa = new DataFlowAnalysis(prog, null, new FakeDecompilerEventListener());
 			dfa.UntangleProcedures();
 			foreach (Procedure proc in prog.Procedures.Values)
 			{
 				ProcedureFlow flow = dfa.ProgramDataFlow[proc];
-				proc.Signature.Emit(proc.Name, ProcedureSignature.EmitFlags.ArgumentKind, new TextFormatter(writer));
+				proc.Signature.Emit(proc.Name, FunctionType.EmitFlags.ArgumentKind, new TextFormatter(writer));
 				writer.WriteLine();
 				flow.Emit(prog.Architecture, writer);
 				proc.Write(true, writer);

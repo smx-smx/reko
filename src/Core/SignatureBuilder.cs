@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,9 +28,10 @@ using System.Collections.Generic;
 namespace Reko.Core
 {
 	/// <summary>
-	/// Builds a procedure signature argument by argument. In particular, keeps track of how many
-	/// output registers/FPU stack registers have been seen, and makes them either the return 
-	/// value of the ProcedureSignature or an "out" parameter.
+	/// Builds a procedure signature argument by argument. In particular, keeps
+    /// track of how many output registers/FPU stack registers have been seen,
+    /// and makes them either the return value of the ProcedureSignature or an
+    /// "out" parameter.
 	/// </summary>
 	public class SignatureBuilder
 	{
@@ -46,49 +47,52 @@ namespace Reko.Core
 			args = new List<Identifier>();
 		}
 
-		public void AddFlagGroupReturnValue(uint grf, Frame frame)
+		public void AddFlagGroupReturnValue(uint bitMask, Frame frame)
 		{
-			PrimitiveType dt = Bits.IsSingleBitSet(grf) ? PrimitiveType.Bool : PrimitiveType.Byte;
-			ret = frame.EnsureFlagGroup(grf, arch.GrfToString(grf), dt);
+			PrimitiveType dt = Bits.IsSingleBitSet(bitMask) ? PrimitiveType.Bool : PrimitiveType.Byte;
+            var grf = arch.GetFlagGroup(bitMask);
+			ret = frame.EnsureFlagGroup(grf.FlagRegister, bitMask, grf.Name, dt);
 		}
 
 		public void AddFpuStackArgument(int x, Identifier id)
 		{
-			AddArgument(proc.Frame.EnsureFpuStackVariable(x, id.DataType), false);
+			AddInParam(proc.Frame.EnsureFpuStackVariable(x, id.DataType));
 		}
 
-		public void AddRegisterArgument(int r)
+		public void AddRegisterArgument(RegisterStorage reg)
 		{
-			AddArgument(proc.Frame.EnsureRegister(arch.GetRegister(r)), false);
+			AddInParam(proc.Frame.EnsureRegister(reg));
 		}
 
-		public void AddArgument(Identifier idOrig, bool isOut)
-		{
-			Identifier arg;
-			if (isOut)
-			{
-				if (ret == null)
-				{
-					ret = idOrig;
-					return;
-				}
-				arg = proc.Frame.EnsureOutArgument(idOrig, arch.FramePointerType);
-			}
-			else
-			{
-				arg = idOrig;
-			}
-			args.Add(arg);
-		}
+        public void AddOutParam(Identifier idOrig)
+        {
+            if (ret == null)
+            {
+                ret = idOrig;
+            }
+            else
+            {
+                //$REVIEW: out arguments are weird, as they are synthetic. It's possible that 
+                // future versions of reko will opt to model multiple values return from functions
+                // explicitly instead of using destructive updates of this kind.
+                var arg = proc.Frame.EnsureOutArgument(idOrig, PrimitiveType.Create(Domain.Pointer, arch.FramePointerType.Size));
+                args.Add(arg);
+            }
+        }
+
+        public void AddInParam(Identifier arg)
+        {
+            args.Add(arg);
+        }
 
 		public void AddStackArgument(int stackOffset, Identifier id)
 		{
 			args.Add(new Identifier(id.Name, id.DataType, new StackArgumentStorage(stackOffset, id.DataType)));
 		}
 
-		public ProcedureSignature BuildSignature()
+		public FunctionType BuildSignature()
 		{
-			return new ProcedureSignature(ret, args.ToArray());
+			return new FunctionType(ret, args.ToArray());
 		}
 
 		public Identifier CreateOutIdentifier(Procedure proc, Identifier id)

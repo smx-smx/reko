@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -49,14 +49,14 @@ namespace Reko.UnitTests.Analysis
             });
 
             var proc = p.BuildProgram().Procedures.Values.First();
-            var ctx = new SymbolicEvaluationContext(new IntelArchitecture(ProcessorMode.Protected32), proc.Frame);
+            var arch = new X86ArchitectureFlat32();
+            var ctx = new SymbolicEvaluationContext(arch, proc.Frame);
             var simplifier = new ExpressionSimplifier(ctx);
             var ep = new ExpressionPropagator(null, simplifier, ctx, new ProgramDataFlow());
 
             var newInstr = proc.EntryBlock.Succ[0].Statements[0].Instruction.Accept(ep);
             Assert.AreEqual("branch Test(EQ,Z) foo", newInstr.ToString());
         }
-    
 
         [Test]
         public void EP_ConditionOf()
@@ -64,8 +64,8 @@ namespace Reko.UnitTests.Analysis
             var p = new ProgramBuilder();
             var proc = p.Add("main", (m) =>
             {
-                var szo = m.Frame.EnsureFlagGroup(0x7, "SZO", PrimitiveType.Byte);
-                var ebx = m.Frame.EnsureRegister(new RegisterStorage("ebx", 0, PrimitiveType.Word32));
+                var szo = m.Frame.EnsureFlagGroup(Registers.eflags, 0x7, "SZO", PrimitiveType.Byte);
+                var ebx = m.Frame.EnsureRegister(new RegisterStorage("ebx", 3, 0, PrimitiveType.Word32));
                 var v4 = m.Frame.CreateTemporary(PrimitiveType.Word16);
 
                 m.Assign(v4, m.IAdd(m.LoadW(ebx), 1));
@@ -74,9 +74,10 @@ namespace Reko.UnitTests.Analysis
                 m.Return();
             });
 
-            var ctx = new SymbolicEvaluationContext(new IntelArchitecture(ProcessorMode.Protected32), proc.Frame);
+            var arch = new X86ArchitectureFlat32();
+            var ctx = new SymbolicEvaluationContext(arch, proc.Frame);
             var simplifier = new ExpressionSimplifier(ctx);
-            var ep = new ExpressionPropagator(null, simplifier, ctx, new ProgramDataFlow());
+            var ep = new ExpressionPropagator(arch, simplifier, ctx, new ProgramDataFlow());
 
             var newInstr = proc.EntryBlock.Succ[0].Statements[2].Instruction.Accept(ep);
             Assert.AreEqual("SZO = cond(v4)", newInstr.ToString());
@@ -88,14 +89,15 @@ namespace Reko.UnitTests.Analysis
             var p = new ProgramBuilder();
             var proc = p.Add("main", (m) =>
             {
-                var r1 = m.Frame.EnsureRegister(new RegisterStorage("r1", 1, PrimitiveType.Word32));
+                var r1 = m.Frame.EnsureRegister(new RegisterStorage("r1", 1, 0, PrimitiveType.Word32));
 
                 m.Assign(r1, m.Word32(0x42));
                 m.SideEffect(m.Fn("foo", r1));
                 m.Return();
             });
 
-            var ctx = new SymbolicEvaluationContext(new FakeArchitecture(), proc.Frame);
+            var arch = new FakeArchitecture();
+            var ctx = new SymbolicEvaluationContext(arch, proc.Frame);
             var simplifier = new ExpressionSimplifier(ctx);
             var ep = new ExpressionPropagator(null, simplifier, ctx, new ProgramDataFlow());
 
@@ -179,7 +181,7 @@ namespace Reko.UnitTests.Analysis
             ctx.RegisterState[arch.StackRegister] = proc.Frame.FramePointer;
 
             var stms = proc.EntryBlock.Succ[0].Statements;
-            var instr1 = stms[0].Instruction.Accept(ep);
+            stms[0].Instruction.Accept(ep);
             Assert.AreEqual("0x00001234", ctx.GetValue(r2).ToString());
             var instr2 = stms[1].Instruction.Accept(ep);
             Assert.AreEqual("Foo(out r2)", instr2.ToString());

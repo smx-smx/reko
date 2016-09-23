@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -45,13 +45,18 @@ namespace Reko.UnitTests.Analysis
 
 		private void PerformTest(FileUnitTester fut)
 		{
-			DataFlowAnalysis dfa = new DataFlowAnalysis(program, new FakeDecompilerEventListener());
+			DataFlowAnalysis dfa = new DataFlowAnalysis(program, null, new FakeDecompilerEventListener());
 			dfa.UntangleProcedures();
 			foreach (Procedure proc in program.Procedures.Values)
 			{
 				Aliases alias = new Aliases(proc, program.Architecture);
 				alias.Transform();
-				SsaTransform sst = new SsaTransform(dfa.ProgramDataFlow, proc, proc.CreateBlockDominatorGraph());
+				SsaTransform sst = new SsaTransform(
+                    dfa.ProgramDataFlow,
+                    proc,
+                    null,
+                    proc.CreateBlockDominatorGraph(),
+                    program.Platform.CreateImplicitArgumentRegisters());
 				SsaState ssa = sst.SsaState;
 
 				proc.Write(false, fut.TextWriter);
@@ -71,7 +76,7 @@ namespace Reko.UnitTests.Analysis
 		public void OutpReplaceSimple()
 		{
             var m = new ProcedureBuilder();
-            var block = m.Label("block");
+            m.Label("block");
 			var foo = new Identifier("foo", PrimitiveType.Word32, null);
 			var pfoo = new Identifier("pfoo", PrimitiveType.Pointer32, null);
             m.Assign(foo, 3);
@@ -95,13 +100,13 @@ namespace Reko.UnitTests.Analysis
 			var foo3 = new Identifier("foo3", PrimitiveType.Word32, null);
 			var pfoo = new Identifier("pfoo", PrimitiveType.Pointer32, null);
 
-            Block block1 = m.Label("block1");
-             m.Assign(foo1, Constant.Word32(1));
-             Statement stmFoo1 = m.Block.Statements.Last;
-            Block block2 = m.Label("block2");
+            m.Label("block1");
+            m.Assign(foo1, Constant.Word32(1));
+            Statement stmFoo1 = m.Block.Statements.Last;
+            m.Label("block2");
             m.Assign(foo2, Constant.Word32(2));
             Statement stmFoo2 = m.Block.Statements.Last;
-            Block block3 = m.Label("block3");
+            m.Label("block3");
             Statement stmFoo3 = m.Phi(foo3, foo1, foo2);
 
 			SsaIdentifierCollection ssaIds = new SsaIdentifierCollection();

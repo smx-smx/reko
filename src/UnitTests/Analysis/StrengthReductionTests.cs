@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -48,8 +48,7 @@ namespace Reko.UnitTests.Analysis
             Procedure proc = BuildSimpleLoop();
 
             var dom = proc.CreateBlockDominatorGraph();
-            SsaTransform ssa = new SsaTransform(new ProgramDataFlow(), proc, dom);
-            proc.Write(false, Console.Out);
+            SsaTransform ssa = new SsaTransform(new ProgramDataFlow(), proc, null, dom, new HashSet<RegisterStorage>());
             LinearInductionVariableFinder lif = new LinearInductionVariableFinder(proc, ssa.SsaState.Identifiers, dom);
             lif.Find();
 

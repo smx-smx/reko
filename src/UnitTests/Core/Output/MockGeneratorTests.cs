@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -324,7 +324,7 @@ namespace Reko.UnitTests.Core.Output
                 Identifier a = m.Local(PrimitiveType.Word32, "a");
                 Identifier b = m.Local(PrimitiveType.Word32, "b");
 
-                m.Assign(a, m.Dpb(a, m.Slice(PrimitiveType.Word16, b, 16), 0, 16));
+                m.Assign(a, m.Dpb(a, m.Slice(PrimitiveType.Word16, b, 16), 0));
             });
             VerifyTest(
                 "public class ProcedureBuilder : ProcedureMock" + nl +
@@ -333,7 +333,7 @@ namespace Reko.UnitTests.Core.Output
                 "    Identifier b = Local(PrimitiveType.Word32, \"b\");" + nl +
                 "    " + nl +
                 "    Label(\"l1\");" + nl +
-                "    Assign(a, Dpb(a, Slice(PrimitiveType.Word16, b, 16), 0, 16));" + nl +
+                "    Assign(a, Dpb(a, Slice(PrimitiveType.Word16, b, 16), 0));" + nl +
                 "}" + nl +
                 "" + nl);
 

@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,6 +18,7 @@
  */
 #endregion
 
+using NUnit.Framework;
 using Reko.Arch.X86;
 using Reko.Assemblers.x86;
 using Reko.Core;
@@ -26,7 +27,6 @@ using Reko.Core.Services;
 using Reko.Core.Types;
 using Reko.Loading;
 using Reko.Scanning;
-using NUnit.Framework;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.Design;
@@ -37,6 +37,15 @@ namespace Reko.UnitTests.Scanning
     [Ignore("This needs to be rewritten, as we are now more explicitly referring to the stack pointer")]
 	public class EscapedAccessRewriterTests
 	{
+        private ServiceContainer sc;
+
+        [SetUp]
+        public void Setup()
+        {
+            sc = new ServiceContainer();
+            sc.AddService<IFileSystemService>(new FileSystemServiceImpl());
+        }
+
 		[Test]
 		public void EarRewriteFrameAccess()
 		{
@@ -69,13 +78,15 @@ namespace Reko.UnitTests.Scanning
             var arch = new X86ArchitectureReal();
             Program program = ldr.AssembleExecutable(
                  FileUnitTester.MapTestPath(sourceFile),
-                 new X86TextAssembler(arch),
+                 new X86TextAssembler(sc, arch),
                 addr);
             var project = new Project { Programs = { program } };
-			var scan = new Scanner(program, new Dictionary<Address, ProcedureSignature>(), new ImportResolver(project), null);
-			foreach (EntryPoint ep in program.EntryPoints)
+			var scan = new Scanner(
+                program, 
+                new ImportResolver(project, program, null), null);
+			foreach (ImageSymbol ep in program.EntryPoints.Values)
 			{
-				scan.EnqueueEntryPoint(ep);
+				scan.EnqueueImageSymbol(ep, true);
 			}
 			scan.ScanImage();
 			return program;

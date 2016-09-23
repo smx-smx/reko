@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -57,9 +57,7 @@ namespace Reko.UnitTests.Core
 			Identifier id1 = new Identifier("v1", PrimitiveType.Word16, null);
 			Identifier id2 = new Identifier("v2", PrimitiveType.Word16, null);
 
-			Expression e = new BinaryExpression(
-				Operator.IMul, PrimitiveType.Word16, new BinaryExpression(
-				Operator.IAdd, PrimitiveType.Word16, id1, id2), Constant.Word16(2));
+			var e = m.IMul(m.IAdd(id1, id2), Constant.Word16(2));
 			e.Accept(cf);
 
 			Assert.AreEqual("(v1 + v2) * 0x0002", sw.ToString());
@@ -71,9 +69,7 @@ namespace Reko.UnitTests.Core
 			Identifier id1 = new Identifier("v1", PrimitiveType.Word16, null);
 			Identifier id2 = new Identifier("v2", PrimitiveType.Word16, null);
 
-			Expression e = new BinaryExpression(
-				Operator.IAdd, PrimitiveType.Word16, new BinaryExpression(
-				Operator.IMul, PrimitiveType.Word16, id1, id2), Constant.Word16(2));
+			var e = m.IAdd(m.IMul(id1, id2), Constant.Word16(2));
 			e.Accept(cf);
 
 			Assert.AreEqual("v1 * v2 + 0x0002", sw.ToString());
@@ -83,7 +79,10 @@ namespace Reko.UnitTests.Core
 		public void CfFieldAccessDeref()
 		{
 			Identifier id1 = new Identifier("v1", PrimitiveType.Word32, null);
-            Expression e = new FieldAccess(PrimitiveType.Pointer32, new Dereference(PrimitiveType.Word32, id1), "foo");
+            Expression e = new FieldAccess(
+                PrimitiveType.Pointer32,
+                m.Deref(id1),
+                new StructureField(4, PrimitiveType.Word32, "foo"));
 			e.Accept(cf);
 
 			Assert.AreEqual("v1->foo", sw.ToString());
@@ -93,7 +92,10 @@ namespace Reko.UnitTests.Core
 		public void CfDerefFieldAccess()
 		{
 			Identifier id1 = new Identifier("v1", PrimitiveType.Word32, null);
-			Expression e = new Dereference(PrimitiveType.Pointer32, new FieldAccess(PrimitiveType.Word32, id1, "foo"));
+			Expression e = m.Deref(new FieldAccess(
+                PrimitiveType.Word32, 
+                id1,
+                new StructureField(4, PrimitiveType.Word32, "foo")));
 			e.Accept(cf);
 
 			Assert.AreEqual("*v1.foo", sw.ToString());
@@ -136,7 +138,7 @@ namespace Reko.UnitTests.Core
         {
             var eq = new EquivalenceClass(new TypeVariable("Eq_2", 2));
             var sr = new ScopeResolution(eq);
-            var e = new FieldAccess(PrimitiveType.Int32, sr, "i0004");
+            var e = new FieldAccess(PrimitiveType.Int32, sr, new StructureField(4, PrimitiveType.Int32, "i0004"));
             e.Accept(cf);
             Assert.AreEqual("Eq_2::i0004", sw.ToString());
         }
@@ -192,9 +194,9 @@ namespace Reko.UnitTests.Core
         [Test]
         public void CfSegmentedAccess()
         {
-            var es = new Identifier("es", PrimitiveType.SegmentSelector, TemporaryStorage.None);
-            var ds = new Identifier("ds", PrimitiveType.SegmentSelector, TemporaryStorage.None);
-            var bx = new Identifier("bx", PrimitiveType.SegmentSelector, TemporaryStorage.None);
+            var es = new Identifier("es", PrimitiveType.SegmentSelector, RegisterStorage.None);
+            var ds = new Identifier("ds", PrimitiveType.SegmentSelector, RegisterStorage.None);
+            var bx = new Identifier("bx", PrimitiveType.SegmentSelector, RegisterStorage.None);
             var e =  new MemberPointerSelector(
                 PrimitiveType.Word16,
                 m.Deref(es),
@@ -209,9 +211,9 @@ namespace Reko.UnitTests.Core
         [Test]
         public void CfAssocSub()
         {
-            var a = new Identifier("a", PrimitiveType.Int32, TemporaryStorage.None);
-            var b = new Identifier("b", PrimitiveType.Int32, TemporaryStorage.None);
-            var c = new Identifier("c", PrimitiveType.Int32, TemporaryStorage.None);
+            var a = new Identifier("a", PrimitiveType.Int32, RegisterStorage.None);
+            var b = new Identifier("b", PrimitiveType.Int32, RegisterStorage.None);
+            var c = new Identifier("c", PrimitiveType.Int32, RegisterStorage.None);
             var e = m.ISub(a, m.ISub(b, c));
             e.Accept(cf);
             Assert.AreEqual("a - (b - c)", sw.ToString());
@@ -220,15 +222,81 @@ namespace Reko.UnitTests.Core
         [Test]
         public void CfMpsAccess()
         {
-            var a = new Identifier("a", PrimitiveType.Int32, TemporaryStorage.None);
-            var b = new Identifier("b", PrimitiveType.Int32, TemporaryStorage.None);
-            var c = new Identifier("c", PrimitiveType.Int32, TemporaryStorage.None);
+            var a = new Identifier("a", PrimitiveType.Int32, RegisterStorage.None);
+            var b = new Identifier("b", PrimitiveType.Int32, RegisterStorage.None);
+            var c = new Identifier("c", PrimitiveType.Int32, RegisterStorage.None);
             var e = m.Array(
                 PrimitiveType.Byte,
-                m.Field(PrimitiveType.Byte, m.MembPtrW(a, b), "a0004"),
+                m.Field(PrimitiveType.Byte, m.MembPtrW(a, b), new StructureField(4, PrimitiveType.Pointer32, "a0004")),
                 c);
             e.Accept(cf);
             Assert.AreEqual("(a->*b).a0004[c]", sw.ToString());
         }
-	}
+
+        [Test]
+        public void CfFloatWithDecimals()
+        {
+            var c = Constant.Real32(3.1F);
+            c.Accept(cf);
+            Assert.AreEqual("3.1F", sw.ToString());
+        }
+
+        [Test]
+        public void CfDoubleWithDecimals()
+        {
+            var c = Constant.Real64(3.1);
+            c.Accept(cf);
+            Assert.AreEqual("3.1", sw.ToString());
+        }
+
+        [Test]
+        public void CfFloatWithoutDecimals()
+        {
+            var c = Constant.Real32(3);
+            c.Accept(cf);
+            Assert.AreEqual("3.0F", sw.ToString());
+        }
+
+        [Test]
+        public void CfDoubleWithoutDecimals()
+        {
+            var c = Constant.Real64(3);
+            c.Accept(cf);
+            Assert.AreEqual("3.0", sw.ToString());
+        }
+
+        [Test]
+        public void CfFloatWithExponent()
+        {
+            var c = Constant.Real32(1e12F);
+            c.Accept(cf);
+            Assert.AreEqual("1e+12F", sw.ToString());
+        }
+
+        [Test]
+        public void CfDoubleWithExponent()
+        {
+            var c = Constant.Real64(1e18);
+            c.Accept(cf);
+            Assert.AreEqual("1e+18", sw.ToString());
+        }
+
+        [Test]
+        public void CfStructCast()
+        {
+            var s = new StructureType
+            {
+                Name = "foo",
+                Fields =
+                {
+                    { 0x0000, PrimitiveType.Int16 },
+                    { 0x0002, PrimitiveType.Int16 }
+                }
+            };
+            var id = new Identifier("id", PrimitiveType.Word32, new TemporaryStorage("id", 4, PrimitiveType.Word32));
+            var cast = new Cast(s, id);
+            cast.Accept(cf);
+            Assert.AreEqual("(struct foo) id", sw.ToString());
+        }
+    }
 }

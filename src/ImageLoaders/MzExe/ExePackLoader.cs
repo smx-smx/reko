@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -36,7 +36,8 @@ namespace Reko.ImageLoaders.MzExe
     public class ExePackLoader : ImageLoader
     {
         private IProcessorArchitecture arch;
-        private Platform platform;
+        private IPlatform platform;
+        private SegmentMap segmentMap;
 
         private uint exeHdrSize;
         private uint hdrOffset;
@@ -49,14 +50,14 @@ namespace Reko.ImageLoaders.MzExe
         private ushort ss;				// 000A
         private ushort cpUncompressed;	// 000C
 
-        private LoadedImage imgU;
+        private MemoryArea imgU;
 
         public ExePackLoader(IServiceProvider services, string filename, byte[] imgRaw)
             : base(services, filename, imgRaw)
         {
-            arch = new IntelArchitecture(ProcessorMode.Real);
-            platform = services.RequireService<IConfigurationService>()
-                .GetEnvironment("ms-dos")
+            var cfgSvc = services.RequireService<IConfigurationService>();
+            arch = cfgSvc.GetArchitecture("x86-real-16");
+            platform =cfgSvc.GetEnvironment("ms-dos")
                 .Load(Services, arch);
 
             var exe = new ExeImageLoader(services, filename, imgRaw);
@@ -72,11 +73,11 @@ namespace Reko.ImageLoaders.MzExe
             this.cpUncompressed = rdr.ReadLeUInt16();
 
             int offset = ExePackHeaderOffset(exe);
-            if (LoadedImage.CompareArrays(imgRaw, offset, signature, signature.Length))
+            if (MemoryArea.CompareArrays(imgRaw, offset, signature, signature.Length))
             {
                 relocationsOffset = 0x012D;
             }
-            else if (LoadedImage.CompareArrays(imgRaw, offset, signature2, signature2.Length))
+            else if (MemoryArea.CompareArrays(imgRaw, offset, signature2, signature2.Length))
             {
                 relocationsOffset = 0x0125;
             }
@@ -87,8 +88,8 @@ namespace Reko.ImageLoaders.MzExe
         static public bool IsCorrectUnpacker(ExeImageLoader exe, byte[] rawImg)
         {
             int offset = ExePackHeaderOffset(exe);
-            return LoadedImage.CompareArrays(rawImg, offset, signature, signature.Length) ||
-                   LoadedImage.CompareArrays(rawImg, offset, signature2, signature2.Length);
+            return MemoryArea.CompareArrays(rawImg, offset, signature, signature.Length) ||
+                   MemoryArea.CompareArrays(rawImg, offset, signature2, signature2.Length);
         }
 
         private static int ExePackHeaderOffset(ExeImageLoader exe)
@@ -101,7 +102,7 @@ namespace Reko.ImageLoaders.MzExe
             byte[] abC = RawImage;
             byte[] abU = new byte[cpUncompressed * 0x10U + ExeImageLoader.CbPsp];
             Array.Copy(abC, exeHdrSize, abU, ExeImageLoader.CbPsp, abC.Length - exeHdrSize);
-            imgU = new LoadedImage(addr, abU);
+            imgU = new MemoryArea(addr, abU);
 
             uint SI = hdrOffset - 1;
             while (abC[SI] == 0xFF)
@@ -114,7 +115,7 @@ namespace Reko.ImageLoaders.MzExe
             do
             {
                 op = abC[SI];
-                int cx = LoadedImage.ReadLeUInt16(abC, SI - 2);
+                int cx = MemoryArea.ReadLeUInt16(abC, SI - 2);
                 SI -= 3;
                 if ((op & 0xFE) == 0xB0)
                 {
@@ -136,8 +137,16 @@ namespace Reko.ImageLoaders.MzExe
                     }
                 }
             } while ((op & 1) == 0);
-            imageMap = imgU.CreateImageMap();
-            return new Program(imgU, imageMap, new X86ArchitectureReal(), platform);
+            segmentMap = new SegmentMap(
+                imgU.BaseAddress,
+                new ImageSegment(
+                    "code",
+                    imgU,
+                    AccessMode.ReadWriteExecute));
+            return new Program(
+                segmentMap,
+                arch,
+                platform);
         }
 
         public override Address PreferredBaseAddress
@@ -149,7 +158,7 @@ namespace Reko.ImageLoaders.MzExe
         public override RelocationResults Relocate(Program program, Address addrLoad)
         {
             ImageReader rdr = new LeImageReader(RawImage, hdrOffset + relocationsOffset);
-            ushort segCode = (ushort)(addrLoad.Selector + (ExeImageLoader.CbPsp >> 4));
+            ushort segCode = (ushort)(addrLoad.Selector.Value + (ExeImageLoader.CbPsp >> 4));
             ushort dx = 0;
             for (; ; )
             {
@@ -161,7 +170,11 @@ namespace Reko.ImageLoaders.MzExe
                     {
                         ushort relocOff = rdr.ReadLeUInt16();
                         ushort seg = imgU.FixupLeUInt16(relocBase + relocOff, segCode);
-                        imageMap.AddSegment(Address.SegPtr(seg, 0), seg.ToString("X4"), AccessMode.ReadWriteExecute);
+                        var segment = segmentMap.AddSegment(new ImageSegment(
+                            seg.ToString("X4"), 
+                            Address.SegPtr(seg, 0),
+                            imgU,
+                            AccessMode.ReadWriteExecute));
                     } while (--cx != 0);
                 }
                 if (dx == 0xF000)
@@ -170,19 +183,21 @@ namespace Reko.ImageLoaders.MzExe
             }
 
             this.cs += segCode;
-            imageMap.AddSegment(Address.SegPtr(cs, 0), cs.ToString("X4"), AccessMode.ReadWriteExecute);
+            segmentMap.AddSegment(Address.SegPtr(cs, 0), cs.ToString("X4"), AccessMode.ReadWriteExecute, 0);
             this.ss += segCode;
             var state = arch.CreateProcessorState();
-            state.SetRegister(Registers.ds, Constant.Word16(addrLoad.Selector));
-            state.SetRegister(Registers.es, Constant.Word16(addrLoad.Selector));
+            state.SetRegister(Registers.ds, Constant.Word16(addrLoad.Selector.Value));
+            state.SetRegister(Registers.es, Constant.Word16(addrLoad.Selector.Value));
             state.SetRegister(Registers.cs, Constant.Word16(cs));
             state.SetRegister(Registers.ss, Constant.Word16(ss));
             state.SetRegister(Registers.bx, Constant.Word16(0));
-            var entryPoints = new List<EntryPoint> 
+            var ep = new ImageSymbol(Address.SegPtr(cs, ip))
             {
-                new EntryPoint(Address.SegPtr(cs, ip), state)
+                ProcessorState = state
             };
-            return new RelocationResults(entryPoints, new RelocationDictionary());
+            var entryPoints = new List<ImageSymbol> { ep };
+            var imageSymbols = entryPoints.ToSortedList(e => e.Address, e => e);
+            return new RelocationResults(entryPoints, imageSymbols);
         }
 
         private static byte[] signature = 
@@ -216,6 +231,5 @@ namespace Reko.ImageLoaders.MzExe
             0x03, 0xF0, 0x01, 0x06, 0x02, 0x00, 0x2D, 0x10, 0x00, 0x8E, 0xD8, 0x8E, 0xC0, 0xBB, 0x00, 0x00,
             0xFA, 0x8E, 0xD6, 0x8B, 0xE7, 0xFB, 0x2E, 0xFF, 0x2F,        
         };
-        private ImageMap imageMap;
     }
 }

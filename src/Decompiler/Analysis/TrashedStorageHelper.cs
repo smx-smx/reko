@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -107,7 +107,12 @@ namespace Reko.Analysis
             return grf;
 		}
 
-		public Storage VisitFpuStackStorage(FpuStackStorage fpu)
+        public Storage VisitFlagRegister(FlagRegister freg)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Storage VisitFpuStackStorage(FpuStackStorage fpu)
 		{
             if (defining)
                 regDefs[fpu] = value;
@@ -145,8 +150,8 @@ namespace Reko.Analysis
 
 		public Storage VisitSequenceStorage(SequenceStorage seq)
 		{
-			seq.Head.Storage.Accept(this);
-			seq.Tail.Storage.Accept(this);
+			seq.Head.Accept(this);
+			seq.Tail.Accept(this);
 			if (defining)
 			{
 				regDefs[seq] = value;

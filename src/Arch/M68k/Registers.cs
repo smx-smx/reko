@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -56,7 +56,7 @@ namespace Reko.Arch.M68k
         public static FpRegister fp6;
         public static FpRegister fp7;
 
-        public static readonly RegisterStorage ccr;
+        public static readonly FlagRegister ccr;
         public static readonly RegisterStorage sr;
         public static readonly RegisterStorage usp;
         public static readonly AddressRegister pc;
@@ -93,9 +93,9 @@ namespace Reko.Arch.M68k
             fp6 = new FpRegister("fp6", 22, PrimitiveType.Real64);
             fp7 = new FpRegister("fp7", 23, PrimitiveType.Real64);
 
-            ccr = new RegisterStorage("ccr", 24, PrimitiveType.Byte);
-            sr = new RegisterStorage("sr", 25, PrimitiveType.Word16);
-            usp = new RegisterStorage("usp", 26, PrimitiveType.Word32);
+            ccr = new FlagRegister("ccr", PrimitiveType.Byte);
+            sr = new RegisterStorage("sr", 25, 0, PrimitiveType.Word16);
+            usp = new RegisterStorage("usp", 26, 0, PrimitiveType.Word32);
             pc = new AddressRegister("pc", 27, PrimitiveType.Pointer32);
 
             Max = 28;
@@ -182,19 +182,14 @@ namespace Reko.Arch.M68k
 
     public class AddressRegister : RegisterStorage
     {
-        public AddressRegister(string name, int number, PrimitiveType dt) : base(name, number, dt)
+        public AddressRegister(string name, int number, PrimitiveType dt) : base(name, number, 0, dt)
         {
-        }
-
-        public override RegisterStorage GetSubregister(int offset, int size)
-        {
-            return null;
         }
     }
 
     public class DataRegister : RegisterStorage
     {
-        public DataRegister(string name, int number, PrimitiveType dt) : base(name, number, dt)
+        public DataRegister(string name, int number, PrimitiveType dt) : base(name, number, 0, dt)
         {
         }
     }
@@ -202,7 +197,7 @@ namespace Reko.Arch.M68k
     public class FpRegister : RegisterStorage
     {
         public FpRegister(string name, int number, PrimitiveType dt)
-            : base(name, number, dt)
+            : base(name, number, 0, dt)
         {
         }
     }

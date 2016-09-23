@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -42,6 +42,24 @@ namespace Reko.Core.Absyn
 		void VisitSideEffect(AbsynSideEffect side);
         void VisitSwitch(AbsynSwitch absynSwitch);
         void VisitWhile(AbsynWhile loop);
+    }
 
+    public interface IAbsynVisitor<T>
+    {
+        T VisitAssignment(AbsynAssignment ass);
+        T VisitBreak(AbsynBreak brk);
+        T VisitCase(AbsynCase absynCase);
+        T VisitContinue(AbsynContinue cont);
+        T VisitDeclaration(AbsynDeclaration decl);
+        T VisitDefault(AbsynDefault decl);
+        T VisitDoWhile(AbsynDoWhile loop);
+        T VisitGoto(AbsynGoto gotoStm);
+        T VisitIf(AbsynIf ifStm);
+        T VisitLabel(AbsynLabel lbl);
+        T VisitLineComment(AbsynLineComment comment);
+        T VisitReturn(AbsynReturn ret);
+        T VisitSideEffect(AbsynSideEffect side);
+        T VisitSwitch(AbsynSwitch absynSwitch);
+        T VisitWhile(AbsynWhile loop);
     }
 }

@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -58,6 +58,7 @@ namespace Reko.UnitTests.Analysis
 		public void WebGlobalHandle()
         {
             Given_FakeWin32Platform(mr);
+            this.platform.Stub(p => p.LookupGlobalByName(null, null)).IgnoreArguments().Return(null);
 
             mr.ReplayAll();
 
@@ -72,22 +73,23 @@ namespace Reko.UnitTests.Analysis
 
 		private void Build(Program prog)
 		{
-			DataFlowAnalysis dfa = new DataFlowAnalysis(prog, new FakeDecompilerEventListener());
+            var eventListener = new FakeDecompilerEventListener();
+            DataFlowAnalysis dfa = new DataFlowAnalysis(prog, null, eventListener);
 			dfa.UntangleProcedures();
 			foreach (Procedure proc in prog.Procedures.Values)
 			{
 				Aliases alias = new Aliases(proc, prog.Architecture);
 				alias.Transform();
 				var gr = proc.CreateBlockDominatorGraph();
-				SsaTransform sst = new SsaTransform(dfa.ProgramDataFlow, proc, gr);
+				SsaTransform sst = new SsaTransform(dfa.ProgramDataFlow, proc, null, gr, new HashSet<RegisterStorage>());
 				SsaState ssa = sst.SsaState;
 
-				ConditionCodeEliminator cce = new ConditionCodeEliminator(ssa.Identifiers, prog.Platform);
+				ConditionCodeEliminator cce = new ConditionCodeEliminator(ssa, prog.Platform);
 				cce.Transform();
 
 				DeadCode.Eliminate(proc, ssa);
 
-				var vp = new ValuePropagator(ssa.Identifiers, proc);
+				var vp = new ValuePropagator(prog.Architecture, ssa);
 				vp.Transform();
 
 				DeadCode.Eliminate(proc, ssa);

@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,7 +31,7 @@ namespace Reko.Core.Serialization
     [XmlRoot(ElementName="SIGNATURES", Namespace = "", IsNullable = false)]
     public partial class UnpackerSignatureFile_v1
     {
-        [XmlElementAttribute("ENTRY", Form = XmlSchemaForm.Unqualified)]
+        [XmlElement("ENTRY", Form = XmlSchemaForm.Unqualified)]
         public UnpackerSignature_v1[] Signatures;
     }
 

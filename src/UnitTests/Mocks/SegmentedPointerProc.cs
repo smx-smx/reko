@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -33,10 +33,10 @@ namespace Reko.UnitTests.Mocks
         protected override void BuildBody()
         {
             var m = this;
-            Identifier ds = m.Frame.EnsureRegister(new RegisterStorage("ds", 1, PrimitiveType.SegmentSelector));
-            Identifier es = m.Frame.EnsureRegister(new RegisterStorage("es", 2, PrimitiveType.SegmentSelector));
-            Identifier bx = m.Frame.EnsureRegister(new RegisterStorage("bx", 3, PrimitiveType.Word16));
-            Identifier es_bx = m.Frame.EnsureSequence(es, bx, PrimitiveType.SegPtr32);
+            Identifier ds = m.Frame.EnsureRegister(new RegisterStorage("ds", 1, 0, PrimitiveType.SegmentSelector));
+            Identifier es = m.Frame.EnsureRegister(new RegisterStorage("es", 2, 0, PrimitiveType.SegmentSelector));
+            Identifier bx = m.Frame.EnsureRegister(new RegisterStorage("bx", 3, 0, PrimitiveType.Word16));
+            Identifier es_bx = m.Frame.EnsureSequence(es.Storage, bx.Storage, PrimitiveType.SegPtr32);
             m.SegStore(ds, m.Word16(0x300), m.Word16(0x1234));
             m.SegStore(ds, m.Word16(0x302), m.Word16(0x5550));
             m.Assign(es_bx, m.SegMem(PrimitiveType.SegPtr32, ds, m.Word16(0x300)));

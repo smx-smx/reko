@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -180,18 +180,9 @@ namespace Reko.UnitTests.Mocks
 
         public Identifier Flags(string s)
         {
-            uint grf = 0;
-            for (int i = 0; i < s.Length; ++i)
-            {
-                switch (s[i])
-                {
-                case 'S': grf |= 0x01; break;
-                case 'C': grf |= 0x02; break;
-                case 'Z': grf |= 0x04; break;
-                case 'O': grf |= 0x10; break;
-                }
-            }
-            return base.Flags(grf, s);
+            return Frame.EnsureFlagGroup(Architecture.GetFlagGroup(s));
+        
+            //return base.Flags(Architecture.GetFlagGroup(s).FlagRegister, grf, s);
         }
 
         public Application Fn(string name, params Expression[] exps)
@@ -321,19 +312,19 @@ namespace Reko.UnitTests.Mocks
             }
         }
 
-        public Identifier Reg32(string name)
+        public Identifier Reg32(string name, int number)
         {
-            return Frame.EnsureRegister(new RegisterStorage(name, 1, PrimitiveType.Word32));
+            return Frame.EnsureRegister(new RegisterStorage(name, number, 0, PrimitiveType.Word32));
         }
 
-        public Identifier Reg16(string name)
+        public Identifier Reg16(string name, int number)
         {
-            return Frame.EnsureRegister(new RegisterStorage(name, 1, PrimitiveType.Word16));
+            return Frame.EnsureRegister(new RegisterStorage(name, number, 0, PrimitiveType.Word16));
         }
 
-        public Identifier Reg8(string name)
+        public Identifier Reg8(string name, int number)
         {
-            return Frame.EnsureRegister(new RegisterStorage(name, 1, PrimitiveType.Byte));
+            return Frame.EnsureRegister(new RegisterStorage(name, number, 0, PrimitiveType.Byte));
         }
     }
 }

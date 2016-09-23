@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -36,7 +36,7 @@ namespace Reko.UnitTests.Core
 		[Test]
 		public void ExtpBind()
 		{
-			var sig = new ProcedureSignature(
+			var sig = new FunctionType(
 				new Identifier(Registers.ax.Name, PrimitiveType.Word16, Registers.ax),
 				new Identifier [] {
 					new Identifier(Registers.bx.Name, PrimitiveType.Word16, Registers.bx),

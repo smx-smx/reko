@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -72,7 +72,7 @@ namespace Reko.Gui
             var codeSvc = sp.GetService<ICodeViewerService>();
             var hit = hits[i];
             if (codeSvc != null)
-                codeSvc.DisplayProcedure(hit.Procedure);
+                codeSvc.DisplayProcedure(hit.Program, hit.Procedure);
 
             var mvs = sp.GetService<ILowLevelViewService>();
             if (mvs == null)

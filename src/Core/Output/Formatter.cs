@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,6 +37,10 @@ namespace Reko.Core.Output
 			this.Indentation = 4;
 		}
 
+        /// <summary>
+        /// This method is used to indent with spaces or tabs before the
+        /// code on this line.
+        /// </summary>
 		public void Indent()
 		{
 			int n = Indentation;
@@ -123,5 +127,53 @@ namespace Reko.Core.Output
 				--n;
 			}
 		}
+    }
+
+    public class NullFormatter : Formatter
+    {
+        public override void Terminate()
+        {
+        }
+
+        public override Formatter Write(char ch)
+        {
+            return this;
+        }
+
+        public override void Write(string s)
+        {
+        }
+
+        public override void Write(string format, params object[] arguments)
+        {
+        }
+
+        public override void WriteComment(string comment)
+        {
+        }
+
+        public override void WriteHyperlink(string text, object href)
+        {
+        }
+
+        public override void WriteKeyword(string keyword)
+        {
+        }
+
+        public override void WriteLine()
+        {
+        }
+
+        public override void WriteLine(string s)
+        {
+        }
+
+        public override void WriteLine(string format, params object[] arguments)
+        {
+        }
+
+        public override void WriteType(string typeName, DataType dt)
+        {
+        }
     }
 }

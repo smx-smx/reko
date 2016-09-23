@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@
 #endregion
 
 using Reko.Core;
+using Reko.Core.Services;
 using Reko.Core.Types;
 using System;
 using System.Collections.Generic;
@@ -60,7 +61,7 @@ namespace Reko.Typing
 				: null;
 		}
 
-		public bool ReplaceAll()
+		public bool ReplaceAll(DecompilerEventListener eventListener)
 		{
 			changed = false;
 			classesVisited  = new HashSet<EquivalenceClass>();
@@ -68,6 +69,8 @@ namespace Reko.Typing
             // Replace the DataType of all the equivalence classes
 			foreach (TypeVariable tv in store.TypeVariables)
 			{
+                if (eventListener.IsCanceled())
+                    return false;
 				EquivalenceClass eq = tv.Class;
 				if (!classesVisited.Contains(eq))
 				{
@@ -80,12 +83,16 @@ namespace Reko.Typing
             // Replace the DataType of all the TypeVariables
 			foreach (TypeVariable tv in store.TypeVariables)
 			{
+                if (eventListener.IsCanceled())
+                    return false;
                 tv.DataType = Replace(tv.DataType);
 			}
 
 			foreach (EquivalenceClass eq in classesVisited)
 			{
-				if (eq != program.Globals.TypeVariable.Class &&
+                if (eventListener.IsCanceled())
+                    return false;
+                if (eq != program.Globals.TypeVariable.Class &&
                     (eq.DataType is PrimitiveType ||
                     eq.DataType is VoidType ||
 					eq.DataType is EquivalenceClass ||
@@ -182,7 +189,7 @@ namespace Reko.Typing
         public override DataType VisitStructure(StructureType str)
         {
             //if (visitedTypes.Contains(str))
-            //    return str;
+            //   return str;
             //visitedTypes.Add(str);
             return base.VisitStructure(str);
         }

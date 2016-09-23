@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -41,7 +41,7 @@ namespace Reko.Typing
 	/// </remarks>
 	public class TraitCollector : InstructionVisitor<DataType>, ExpressionVisitor<DataType>
 	{
-		private Program prog;
+		private Program program;
         private Procedure proc;
 		private TypeFactory factory;
 		private ITypeStore store;
@@ -52,14 +52,14 @@ namespace Reko.Typing
 
 		private static TraceSwitch trace = new TraceSwitch("TraitCollector", "Traces the work of the Trait Collector");
 
-		public TraitCollector(TypeFactory factory, ITypeStore store, ITraitHandler handler, Program prog)
+		public TraitCollector(TypeFactory factory, ITypeStore store, ITraitHandler handler, Program program)
 		{
 			this.factory = factory;
 			this.store = store;
 			this.handler = handler;
-            this.prog = prog;
-			this.aem = new ArrayExpressionMatcher(prog.Platform.PointerType);
-			this.atrco = new AddressTraitCollector(factory, store, handler, prog);
+            this.program = program;
+			this.aem = new ArrayExpressionMatcher(program.Platform.PointerType);
+			this.atrco = new AddressTraitCollector(factory, store, handler, program);
 		}
 
 		/// <summary>
@@ -67,8 +67,8 @@ namespace Reko.Typing
 		/// </summary>
 		private void AddProcedureTraits(Procedure proc)
 		{
-			ProcedureSignature sig = proc.Signature;
-            if (sig.ReturnValue != null)
+			FunctionType sig = proc.Signature;
+            if (!sig.HasVoidReturn)
             {
                 handler.DataTypeTrait(sig.ReturnValue, sig.ReturnValue.DataType);
             }
@@ -82,7 +82,7 @@ namespace Reko.Typing
             if (pc.Procedure.Signature == null)
                 return;
 
-            ProcedureSignature sig = pc.Procedure.Signature;
+            FunctionType sig = pc.Procedure.Signature;
             if (appl.Arguments.Length != sig.Parameters.Length)
                 throw new InvalidOperationException(
                     string.Format("Call to {0} had {1} arguments instead of the expected {2}.",
@@ -92,7 +92,7 @@ namespace Reko.Typing
                 handler.EqualTrait(appl.Arguments[i], sig.Parameters[i]);
                 sig.Parameters[i].Accept(this);
             }
-            if (sig.ReturnValue != null)
+            if (!sig.HasVoidReturn)
                 handler.EqualTrait(appl, sig.ReturnValue);
         }
 
@@ -106,11 +106,11 @@ namespace Reko.Typing
 			atrco.Collect(basePtr, basePtrSize, field, effectiveAddress);
 		}
 
-		public void CollectProgramTraits(Program prog)
+		public void CollectProgramTraits(Program program)
 		{
-			this.prog = prog;
-            handler.DataTypeTrait(prog.Globals, prog.Globals.DataType);
-            foreach (Procedure p in prog.Procedures.Values)
+			this.program = program;
+            handler.DataTypeTrait(program.Globals, program.Globals.DataType);
+            foreach (Procedure p in program.Procedures.Values)
             {
                 proc = p;
                 AddProcedureTraits(p);
@@ -201,7 +201,7 @@ namespace Reko.Typing
                 call.Callee, 
                 new Pointer(
                     new CodeType(), 
-                    prog.Platform.PointerType.Size));
+                    program.Platform.PointerType.Size));
             return call.Callee.Accept(this);
         }
 
@@ -228,7 +228,7 @@ namespace Reko.Typing
                 return VoidType.Instance;
 
             var dt = ret.Expression.Accept(this);
-            if (proc.Signature != null && proc.Signature.ReturnValue != null)
+            if (!proc.Signature.HasVoidReturn)
             {
                 dt = handler.EqualTrait(proc.Signature.ReturnValue, ret.Expression);
             }
@@ -301,7 +301,7 @@ namespace Reko.Typing
                 return id.DataType ;
 
 			var dt = handler.DataTypeTrait(id, id.DataType);
-            if (!prog.InductionVariables.TryGetValue(id, out ivCur))
+            if (!program.InductionVariables.TryGetValue(id, out ivCur))
                 ivCur = null;
             return dt;
 		}
@@ -325,7 +325,6 @@ namespace Reko.Typing
 			binExp.Left.Accept(this);
 			var ivLeft = ivCur;
 			binExp.Right.Accept(this);
-			var ivRight = ivCur;
 
 			ivCur = null;
 			if (ivLeft != null)
@@ -434,7 +433,16 @@ namespace Reko.Typing
 				handler.DataTypeTrait(binExp.Right, dt);
                 return dt;
             }
-			throw new NotImplementedException("NYI: " + binExp.Operator + " in " + binExp);
+            else if (binExp.Operator == Operator.Cand ||
+                binExp.Operator == Operator.Cor)
+            {
+                var dt = PrimitiveType.Bool;
+                handler.DataTypeTrait(binExp, dt);
+                handler.DataTypeTrait(binExp.Left, dt);
+                handler.DataTypeTrait(binExp.Right, dt);
+                return dt;
+            }
+            throw new NotImplementedException("NYI: " + binExp.Operator + " in " + binExp);
 		}
 
 		public DataType VisitBranch(Branch b)
@@ -467,8 +475,8 @@ namespace Reko.Typing
             {
                 handler.MemAccessTrait(
                     null, 
-                    prog.Globals,
-                    prog.Platform.PointerType.Size,
+                    program.Globals,
+                    program.Platform.PointerType.Size,
                     c,
                     c.ToInt32() * 0x10);   //$REVIEW Platform-dependent
             }
@@ -516,7 +524,7 @@ namespace Reko.Typing
 		{
 			mps.BasePointer.Accept(this);
 			mps.MemberPointer.Accept(this);
-			return handler.DataTypeTrait(mps, prog.Platform.PointerType);
+			return handler.DataTypeTrait(mps, program.Platform.PointerType);
 		}
 
 		public DataType VisitMemoryAccess(MemoryAccess access)
@@ -563,7 +571,7 @@ namespace Reko.Typing
 
 		public DataType VisitProcedureConstant(ProcedureConstant pc)
 		{
-			ProcedureSignature sig = pc.Procedure.Signature;
+			FunctionType sig = pc.Procedure.Signature;
 			DataType [] argTypes = null;
 			if (sig != null && sig.Parameters != null)
 			{
@@ -585,7 +593,7 @@ namespace Reko.Typing
 					}
 				}
 			}
-            return sig != null && sig.ReturnValue != null ? sig.ReturnValue.DataType : null;
+            return sig != null && !sig.HasVoidReturn ? sig.ReturnValue.DataType : null;
 		}
 
         private void CollectProcedureCharacteristics()

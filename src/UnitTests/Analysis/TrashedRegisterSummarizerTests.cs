@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -106,7 +106,7 @@ namespace Reko.UnitTests.Analysis
         public void EqualConstants()
         {
             var r4 = arch.GetRegister(4);
-            var id = proc.Frame.EnsureRegister(r4);
+            proc.Frame.EnsureRegister(r4);
             ctx.RegisterState[r4] = Constant.Word32(3);
             trs.PropagateToProcedureSummary();
             ctx.RegisterState[r4] = Constant.Word32(3);

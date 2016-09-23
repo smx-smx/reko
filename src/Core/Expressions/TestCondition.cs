@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,12 +26,13 @@ using System.Text;
 namespace Reko.Core.Expressions
 {
     /// <summary>
-    /// Represents testing the expression to see if the condition code is true, and generating a
-    /// boolean value.
+    /// Represents testing the expression to see if the condition code is
+    /// true, and generating a boolean value.
     /// </summary>
     /// <remarks>
-    /// This is a very low-level expression modelling the condition codes of certain processor
-    /// architectures, and should be rewritten by the later decompiler stages to a boolean expression.
+    /// This is a very low-level expression modelling the condition codes 
+    /// of certain processor architectures, and should be rewritten by the
+    /// later decompiler stages to a boolean expression.
     /// </remarks>
     public class TestCondition : Expression
     {

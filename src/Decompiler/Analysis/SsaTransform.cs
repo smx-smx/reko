@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,18 +26,25 @@ using Reko.Core.Operators;
 using Reko.Core.Types;
 using System.Collections.Generic;
 using System.Linq;
+using System;
 
 namespace Reko.Analysis
 {
 	/// <summary>
 	/// Transforms a <see cref="Reko.Core.Procedure"/> to Static Single Assignment form.
 	/// </summary>
+    /// <remarks>
+    /// This class implements the SSA algorithm from Appel's "Modern compiler 
+    /// implementatation in [language of your choice]."
+    /// </remarks>
 	public class SsaTransform
 	{
         private ProgramDataFlow programFlow;
 		private Procedure proc;
+        private IImportResolver importResolver;
+        private HashSet<RegisterStorage> implicitRegs;
 
-		private const byte BitDefined = 1;
+        private const byte BitDefined = 1;
 		private const byte BitDeadIn = 2;
 		private const byte BitHasPhi = 4;
         private Dictionary<Expression, byte>[] AOrig;
@@ -47,10 +54,12 @@ namespace Reko.Analysis
 		/// </summary>
 		/// <param name="proc"></param>
 		/// <param name="gr"></param>
-		public SsaTransform(ProgramDataFlow programFlow, Procedure proc, DominatorGraph<Block> gr)
+		public SsaTransform(ProgramDataFlow programFlow, Procedure proc, IImportResolver importResolver, DominatorGraph<Block> gr, HashSet<RegisterStorage> implicitRegs)
 		{
             this.programFlow = programFlow;
 			this.proc = proc;
+            this.importResolver = importResolver;
+            this.implicitRegs = implicitRegs;
             this.SsaState = new SsaState(proc, gr);
             this.AOrig = CreateA();
 
@@ -88,6 +97,11 @@ namespace Reko.Analysis
             return ldv.Definitions;
 		}
 
+        /// <summary>
+        /// Temporary variables are never live-in, so we avoid getting phi
+        /// functions all over the place by marking them explicitly as dead-in.
+        /// </summary>
+        /// <param name="def"></param>
 		private void MarkTemporariesDeadIn(Dictionary<Expression, byte>[] def)
 		{
             foreach (var block in proc.ControlGraph.Blocks)
@@ -199,6 +213,7 @@ namespace Reko.Analysis
 		/// </summary>
 		private class LocateDefinedVariables : InstructionVisitorBase
 		{
+            private HashSet<RegisterStorage> implicitRegs;
             private ProgramDataFlow programFlow;
             private Procedure proc;
 			private Block block;
@@ -211,6 +226,7 @@ namespace Reko.Analysis
 
 			public LocateDefinedVariables(SsaTransform ssaXform, Dictionary<Expression, byte>[] defOrig)
 			{
+                this.implicitRegs = ssaXform.implicitRegs;
                 this.programFlow = ssaXform.programFlow;
 				this.proc = ssaXform.proc;
                 this.ssa = ssaXform.SsaState;
@@ -311,12 +327,26 @@ namespace Reko.Analysis
                 else
                 {
                     // Hell node implementation - define all register variables.
+                    if (ci.Uses.Count > 0 || ci.Definitions.Count > 0)
+                        return;
                     foreach (Identifier id in proc.Frame.Identifiers)
                     {
-                        if (id.Storage is RegisterStorage || id.Storage is FlagGroupStorage)
+                        if (id.Storage is TemporaryStorage)
                         {
-                            MarkDefined(id);
+                            continue;
                         }
+                        var reg = id.Storage as RegisterStorage;
+                        if (reg != null)
+                        {
+                            if (implicitRegs.Contains(reg))
+                                continue;
+                        }
+                        else if (!(id.Storage is FlagGroupStorage))
+                        {
+                            continue;
+                        }
+                        ci.Definitions.Add(new DefInstruction(id));
+                        MarkDefined(id);
                     }
                 }
 			}
@@ -355,6 +385,7 @@ namespace Reko.Analysis
 
 		public class VariableRenamer : InstructionTransformer
 		{
+            private HashSet<RegisterStorage> implicitRegs;
             private ProgramDataFlow programFlow;
             private SsaState ssa;
             private bool renameFrameAccess;
@@ -362,6 +393,7 @@ namespace Reko.Analysis
 			private Dictionary<Identifier, Identifier> rename;		// most recently used name for var x.
 			private Statement stmCur; 
 			private Procedure proc;
+            private IImportResolver importResolver;
             private HashSet<Expression> existingDefs;
 
 			/// <summary>
@@ -374,9 +406,11 @@ namespace Reko.Analysis
 			{
                 this.programFlow = ssaXform.programFlow;
 				this.ssa = ssaXform.SsaState;
+                this.implicitRegs = ssaXform.implicitRegs;
                 this.renameFrameAccess = ssaXform.RenameFrameAccesses;
                 this.addUseInstructions = ssaXform.AddUseInstructions;
                 this.proc = ssaXform.proc;
+                this.importResolver = ssaXform.importResolver;
 				this.rename = new Dictionary<Identifier, Identifier>();
 				this.stmCur = null;
                 this.existingDefs = proc.EntryBlock.Statements
@@ -482,17 +516,10 @@ namespace Reko.Analysis
                     .Select(u => u.Expression)
                     .ToHashSet();
                 block.Statements.AddRange(rename.Values
-                    .Where(id => !existing.Contains(id))
+                    .Where(id => !existing.Contains(id) &&
+                                 !(id.Storage is StackArgumentStorage))
                     .OrderBy(id => id.Name)     // Sort them for stability; unit test are sensitive to shifting order 
                     .Select(id => new Statement(0, new UseInstruction(id), block)));
-            }
-
-            private void AddUseInstructions(CallInstruction ci)
-            {
-                var existing = ci.Uses.Select(u => u.Expression).ToHashSet();
-                ci.Uses.UnionWith(rename.Values
-                    .Where(id => !existing.Contains(id))
-                    .Select(id => new UseInstruction(id)));
             }
 
             private void AddDefInstructions(CallInstruction ci, ProcedureFlow2 flow)
@@ -583,8 +610,9 @@ namespace Reko.Analysis
 			}
 
 			public override Instruction TransformCallInstruction(CallInstruction ci)
-			{
+            {
                 ci.Callee = ci.Callee.Accept(this);
+
                 ProcedureConstant pc;
                 if (ci.Callee.As(out pc))
                 {
@@ -592,27 +620,60 @@ namespace Reko.Analysis
                     ProcedureFlow2 procFlow;
                     if (procCallee != null && programFlow.ProcedureFlows2.TryGetValue(procCallee, out procFlow))
                     {
-                        AddUseInstructions(ci);
                         AddDefInstructions(ci, procFlow);
+                        return ci;
                     }
-                    return ci;
                 }
 
-				// Hell node implementation - use all register variables.
+                RenameAllRegisterIdentifiers(ci);
+                return ci;
+            }
 
-				foreach (Identifier id in proc.Frame.Identifiers)
-				{
-					if (id.Storage is RegisterStorage || id.Storage is FlagGroupStorage)
-					{
-						NewUse(id, stmCur);
-					}
-				}
-				return ci;
-			}
+            /// <summary>
+            /// Because we don't have a proper signature for the callee, we're forced to
+            /// guess. Use all registers and flags in this procedure.
+            /// </summary>
+            /// <param name="ci"></param>
+            private void RenameAllRegisterIdentifiers(CallInstruction ci)
+            {
+                // Hell node implementation - use all register variables that
+                // aren't implicit on this platform.
 
-			public override Expression VisitApplication(Application appl)
+                var alreadyExistingUses = ci.Uses.Select(u => ssa.Identifiers[(Identifier)u.Expression].OriginalIdentifier).ToHashSet();
+                foreach (Identifier id in ssa.Identifiers.Select(s => s.OriginalIdentifier).Distinct().ToList())
+                {
+                    if (IsMutableRegister(id.Storage) || id.Storage is FlagGroupStorage ||
+                        id.Storage is StackLocalStorage)
+                    {
+                        if (!alreadyExistingUses.Contains(id))
+                        {
+                            alreadyExistingUses.Add(id);
+                            var newId = NewUse(id, stmCur);
+                            ci.Uses.Add(new UseInstruction(newId));
+                        }
+                    }
+                }
+                foreach (DefInstruction def in ci.Definitions)
+                {
+                    var id = (Identifier)def.Expression;
+                    if (IsMutableRegister(id.Storage) || id.Storage is FlagGroupStorage ||
+                        id.Storage is StackLocalStorage)
+                    {
+                        def.Expression = NewDef(id, null, false);
+                    }
+                }
+            }
+
+            private bool IsMutableRegister(Storage storage)
+            {
+                var reg = storage as RegisterStorage;
+                return reg != null && !implicitRegs.Contains(reg);
+            }
+
+            public override Expression VisitApplication(Application appl)
 			{
-				for (int i = 0; i < appl.Arguments.Length; ++i)
+                appl.Procedure = appl.Procedure.Accept(this);
+                for (int i = 0; i < appl.Arguments.Length; ++i)
 				{
                     UnaryExpression unary = appl.Arguments[i] as UnaryExpression;
                     if (unary != null && unary.Operator == Operator.AddrOf)
@@ -642,7 +703,7 @@ namespace Reko.Analysis
 
 			public override Expression VisitIdentifier(Identifier id)
 			{
-				return NewUse(id, stmCur);
+                return NewUse(id, stmCur);
 			}
 
             public override Expression VisitMemoryAccess(MemoryAccess access)
@@ -653,7 +714,37 @@ namespace Reko.Analysis
                     var idNew = NewUse(idFrame, stmCur);
                     return idNew;
                 }
-                return base.VisitMemoryAccess(access);
+                var ea = access.EffectiveAddress.Accept(this);
+                BinaryExpression bin;
+                Identifier id;
+                Constant c = null;
+                if (ea.As(out bin) &&
+                    bin.Left.As(out id) &&
+                    bin.Right.As(out c) &&
+                    rename.ContainsKey(id))
+                {
+                    var sid = ssa.Identifiers[rename[id]];
+                    var cOther = sid.DefExpression as Constant;
+                    if (cOther != null)
+                    {
+                        c = bin.Operator.ApplyConstants(cOther, c);
+                    }
+                }
+                else
+                {
+                    c = ea as Constant;
+                }
+
+                if (c != null)
+                {
+                    access.EffectiveAddress = c;
+                    var e = importResolver.ResolveToImportedProcedureConstant(stmCur, c);
+                    if (e != null)
+                        return e;
+                }
+                access.MemoryId = (MemoryIdentifier)access.MemoryId.Accept(this);
+                access.EffectiveAddress = ea;
+                return access;
             }
 
             public override Expression VisitSegmentedAccess(SegmentedAccess access)
@@ -706,5 +797,234 @@ namespace Reko.Analysis
                 return base.TransformUseInstruction(u);
             }
 		}
+    }
+
+	/// <summary>
+	/// Transforms a <see cref="Reko.Core.Procedure"/> to Static Single Assignment
+    /// form.
+	/// </summary>
+    /// <remarks>
+    /// EXPERIMENTAL - consult uxmal before using
+    /// 
+    /// This class implements another SSA algorithm that doesn't require 
+    /// calculation of the dominator graph. It is expected that when it is fully
+    /// implemented, it will take over from SsaTransform above.
+    /// </remarks>
+    public class SsaTransform2 : InstructionTransformer 
+    {
+        private Block block;
+        private Statement stm;
+        private Dictionary<Block, Dictionary<Storage, SsaIdentifier>> currentDef;
+        private Dictionary<Block, Dictionary<Storage, SsaIdentifier>> incompletePhis;
+        private HashSet<Block> sealedBlocks;
+        private SsaState ssa;
+        private AliasState asta;
+
+        public void Transform(Procedure proc)
+        {
+            this.ssa = new SsaState(proc, null);
+            this.asta = new AliasState();
+            this.currentDef = new Dictionary<Block, Dictionary<Storage, SsaIdentifier>>();
+            this.incompletePhis = new Dictionary<Block, Dictionary<Storage, SsaIdentifier>>();
+            this.sealedBlocks = new HashSet<Block>();
+            foreach (Block b in new DfsIterator<Block>(proc.ControlGraph).PreOrder())
+            {
+                this.block = b;
+                this.currentDef.Add(block, new Dictionary<Storage, SsaIdentifier>()); // new StorageEquality()));
+                foreach (var s in b.Statements.ToList())
+                {
+                    this.stm = s;
+                    stm.Instruction = stm.Instruction.Accept(this);
+                }
+            }
+        }
+
+        public SsaState SsaState { get { return ssa; } }
+
+        public override Instruction TransformAssignment(Assignment a)
+        {
+            var src = a.Src.Accept(this);
+            var sid = ssa.Identifiers.Add(a.Dst, this.stm, src, false);
+            var idNew = WriteVariable(a.Dst, block, sid, null);
+            return new Assignment(idNew, src);
+        }
+
+        public Identifier WriteVariable(Identifier id, Block b, SsaIdentifier sid, SsaIdentifier sidPrev)
+        {
+            asta.Add(id.Storage);
+            currentDef[block][id.Storage] = sid;
+            sid.Previous = sidPrev;
+            return sid.Identifier;
+        }
+
+        public override Expression VisitIdentifier(Identifier id)
+        {
+            asta.Add(id.Storage);
+            return ReadVariable(id, block).Identifier;
+        }
+
+        public SsaIdentifier ReadVariable(Identifier id, Block b)
+        { 
+            SsaIdentifier ssaId;
+            if (currentDef[b].TryGetValue(id.Storage, out ssaId))
+            {
+                // Defined locally in this block.
+                return ssaId;
+            }
+            else
+            {
+                return ReadVariableRecursive(id, b);
+            }
+        }
+
+        private SsaIdentifier ReadVariableRecursive(Identifier id, Block b)
+        {
+            SsaIdentifier val;
+            SsaIdentifier sidPrev = null;
+            if (false)  // !sealedBlocks.Contains(b))
+            {
+                // Incomplete CFG
+                //val = newPhi(id, b);
+                //incompletePhis[b][id.Storage] = val;
+            }
+            else if (b.Pred.Count == 0)
+            {
+                // Undef'ined or unreachable parameter; assume it's a def.
+                val = NewDef(id, b);
+            }
+            else if (b.Pred.Count == 1)
+            {
+                val = ReadVariable(id, b.Pred[0]);
+                sidPrev = val;
+            }
+            else
+            {
+                // Break potential cycles with operandless phi
+                val = NewPhi(id, b);
+                WriteVariable(id, b, val, null);
+                val = AddPhiOperands(id, val);
+            }
+            WriteVariable(id, b, val, sidPrev);
+            return val;
+        }
+
+        /// <summary>
+        /// Creates a phi statement with no slots for the predecessor blocks, then
+        /// inserts the phi statement as the first statement of the block.
+        /// </summary>
+        /// <param name="b">Block into which the phi statement is inserted</param>
+        /// <param name="v">Destination variable for the phi assignment</param>
+        /// <returns>The inserted phi Assignment</returns>
+        private SsaIdentifier NewPhi( Identifier id, Block b)
+        {
+            var phiAss = new PhiAssignment(id, 0);
+            var stm = new Statement(0, phiAss, b);
+            b.Statements.Insert(0, stm);
+
+            var sid = ssa.Identifiers.Add(phiAss.Dst, stm, phiAss.Src, false);
+            phiAss.Dst = sid.Identifier;
+            return sid;
+        }
+
+        private SsaIdentifier AddPhiOperands(Identifier id, SsaIdentifier phi)
+        {
+            // Determine operands from predecessors.
+            ((PhiAssignment)phi.DefStatement.Instruction).Src =
+                new PhiFunction(
+                    id.DataType,
+                    phi.DefStatement.Block.Pred.Select(p => ReadVariable(id, p).Identifier).ToArray());
+            return TryRemoveTrivial(phi);
+        }
+
+        /// <summary>
+        /// If the phi function is trivial, remove it.
+        /// </summary>
+        /// <param name="phi"></param>
+        /// <returns></returns>
+        private SsaIdentifier TryRemoveTrivial(SsaIdentifier phi)
+        {
+            Identifier same = null;
+            foreach (Identifier op in ((PhiAssignment)phi.DefStatement.Instruction).Src.Arguments)
+            {
+                if (op == same || op == phi.Identifier)
+                {
+                    // Unique value or self-reference
+                    continue;
+                }
+                if (same != null)
+                {
+                    // The phi merges at least two values; not trivial
+                    return phi;
+                }
+                same = op;
+            }
+            SsaIdentifier sid;
+            if (same == null)
+            {
+                // Undef'ined or unreachable parameter; assume it's a def.
+                sid = NewDef(phi.OriginalIdentifier, phi.DefStatement.Block);
+            }
+            else
+            {
+                sid = ssa.Identifiers[same];
+            }
+
+            // Remember all users except for phi
+            var users = phi.Uses.Where(u => u != phi.DefStatement).ToList();
+
+            // Reroute all uses of phi to use same. Remove phi.
+            replaceBy(phi, same);
+
+            // Remove all phi uses which may have become trivial now.
+            foreach (var use in users)
+            {
+                var phiAss = use.Instruction as PhiAssignment;
+                if (phiAss != null)
+                {
+                    TryRemoveTrivial(ssa.Identifiers[phiAss.Dst]);
+                }
+            }
+            return sid;
+        }
+
+        private SsaIdentifier NewDef(Identifier id, Block b)
+        {
+            var sid = ssa.Identifiers.Add(id, null, null, false);
+            sid.DefStatement = new Statement(0, new DefInstruction(id), b);
+            b.Statements.Add(sid.DefStatement);
+            return sid;
+        }
+
+        private void replaceBy(SsaIdentifier phi, Identifier same)
+        {
+        }
+
+        private void sealBlock(Block block)
+        {
+            foreach (var sid in incompletePhis[block].Values)
+            {
+                AddPhiOperands(sid.Identifier, sid);
+            }
+            sealedBlocks.Add(block);
+        }
+
+        public class StorageEquality : IEqualityComparer<Storage>
+        {
+            public bool Equals(Storage x, Storage y)
+            {
+                if (x.Domain != y.Domain)
+                    return false;
+                var xStart = x.BitAddress;
+                var xEnd = x.BitAddress + x.BitSize;
+                var yStart = y.BitAddress;
+                var yEnd = y.BitAddress + y.BitSize;
+                return (xEnd > yStart || yEnd > xStart);
+            }
+
+            public int GetHashCode(Storage obj)
+            {
+                return ((int)obj.Domain).GetHashCode();
+            }
+        }
     }
 }

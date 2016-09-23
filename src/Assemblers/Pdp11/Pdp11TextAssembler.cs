@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -44,6 +44,7 @@ namespace Reko.Assemblers.Pdp11
         public Pdp11TextAssembler(IEmitter emitter)
         {
             this.emitter = emitter;
+            this.ImageSymbols = new List<ImageSymbol>();
         }
 
         public Program Assemble(Address addrBase, TextReader reader)
@@ -72,8 +73,6 @@ namespace Reko.Assemblers.Pdp11
 
         private void ProcessLine()
         {
-            if (lexer.Peek().Linenumber == 171) //$DEBUG
-                lexer.ToString();
             if (lexer.PeekAndDiscard(TokenType.EOL))
                 return;
             if (lexer.PeekAndDiscard(TokenType._Page))
@@ -242,10 +241,12 @@ namespace Reko.Assemblers.Pdp11
 
         public Address StartAddress { get; private set; }
 
-        public ICollection<EntryPoint> EntryPoints
+        public ICollection<ImageSymbol> EntryPoints
         {
             get { throw new NotImplementedException(); }
         }
+        
+        public ICollection<ImageSymbol> ImageSymbols { get; private set; }
 
         public Dictionary<Address, ImportReference> ImportReferences
         {

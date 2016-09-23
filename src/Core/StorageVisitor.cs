@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,12 +23,14 @@ using System;
 namespace Reko.Core
 {
     /// <summary>
-    /// Visitor pattern for storages, parametrized by the returned value of all the visitor methods.
+    /// Visitor pattern for storages, parametrized by the returned value of
+    /// all the visitor methods.
     /// </summary>
     /// <typeparam name="T">Returned value</typeparam>
 	public interface StorageVisitor<T>
 	{
 		T VisitFlagGroupStorage(FlagGroupStorage grf);
+        T VisitFlagRegister(FlagRegister freg);
 		T VisitFpuStackStorage(FpuStackStorage fpu);
 		T VisitMemoryStorage(MemoryStorage global);
 		T VisitStackLocalStorage(StackLocalStorage local);
@@ -37,11 +39,12 @@ namespace Reko.Core
 		T VisitSequenceStorage(SequenceStorage seq);
 		T VisitStackArgumentStorage(StackArgumentStorage stack);
 		T VisitTemporaryStorage(TemporaryStorage temp);
-	}
+    }
 
     public interface StorageVisitor<C, T>
     {
         T VisitFlagGroupStorage(FlagGroupStorage grf, C context);
+        T VisitFlagRegister(FlagRegister freg, C context);
         T VisitFpuStackStorage(FpuStackStorage fpu, C context);
         T VisitMemoryStorage(MemoryStorage global, C context);
         T VisitStackLocalStorage(StackLocalStorage local, C context);

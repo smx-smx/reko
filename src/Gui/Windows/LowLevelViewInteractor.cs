@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,13 +19,13 @@
 #endregion
 
 using Reko.Core;
-using Reko.Core.Expressions;
+using Reko.Core.Machine;
+using Reko.Core.Output;
 using Reko.Core.Types;
+using Reko.Gui.Forms;
 using Reko.Gui.Windows.Controls;
 using System;
-using System.Collections.Generic;
 using System.ComponentModel.Design;
-using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -49,6 +49,7 @@ namespace Reko.Gui.Windows
         private NavigationInteractor<Address> navInteractor;
 
         public LowLevelView Control { get { return control; } }
+        public IWindowFrame Frame { get; set; }
 
         public Program Program
         {
@@ -58,13 +59,17 @@ namespace Reko.Gui.Windows
                 program = value;
                 if (value != null)
                 {
-                    control.MemoryView.ProgramImage = value.Image;
                     control.MemoryView.ImageMap = value.ImageMap;
+                    control.MemoryView.SegmentMap = value.SegmentMap;
                     control.MemoryView.Architecture = value.Architecture;
-                    control.DisassemblyView.Model = new DisassemblyTextModel(value);
-                    control.ImageMapView.Image = value.Image;
+                    control.DisassemblyView.Program = value;
+                    var seg = program.SegmentMap.Segments.Values.First();
+                    control.DisassemblyView.Program = value;
+                    control.DisassemblyView.Model = new DisassemblyTextModel(value, seg);
                     control.ImageMapView.ImageMap = value.ImageMap;
-                    control.ImageMapView.Granularity = value.Image.Bytes.Length;
+                    control.ImageMapView.SegmentMap = value.SegmentMap;
+                    control.ImageMapView.Granularity = value.SegmentMap.GetExtent();
+                    control.ByteMapView.SegmentMap = value.SegmentMap;
                 }
             }
         }
@@ -81,7 +86,6 @@ namespace Reko.Gui.Windows
         public Control CreateControl()
         {
             var uiService = services.RequireService<IDecompilerShellUiService>();
-            var uiPrefsSvc = services.RequireService<IUiPreferencesService>();
             this.control = new LowLevelView();
             this.Control.Font = new Font("Lucida Console", 10F); //$TODO: use user preference
             this.Control.CurrentAddressChanged += LowLevelView_CurrentAddressChanged;
@@ -92,6 +96,7 @@ namespace Reko.Gui.Windows
             this.Control.MemoryView.ContextMenu = uiService.GetContextMenu(MenuIds.CtxMemoryControl);
             this.control.MemoryView.Services = this.services;
 
+            this.Control.DisassemblyView.StyleClass = UiStyles.Disassembler;
             this.Control.DisassemblyView.SelectedObjectChanged += DisassemblyView_SelectedObjectChanged;
             this.Control.DisassemblyView.ContextMenu = uiService.GetContextMenu(MenuIds.CtxDisassembler);
             this.Control.DisassemblyView.Services = this.services;
@@ -104,19 +109,8 @@ namespace Reko.Gui.Windows
             this.navInteractor.Attach(this.Control);
 
             typeMarker = new TypeMarker(control.MemoryView);
-            typeMarker.TextChanged += typeMarker_FormatType;
-            typeMarker.TextAccepted += typeMarker_TextAccepted;
 
             return control;
-        }
-
-        private void typeMarker_TextAccepted(object sender, TypeMarkerEventArgs e)
-        {
-            var item = SetTypeAtAddressRange(GetSelectedAddressRange().Begin, e.UserText);
-            if (item == null)
-                return;
-            // Advance selection to beyond item.
-            this.SelectedAddress = item.Address + item.Size;
         }
 
         public void SetSite(IServiceProvider sp)
@@ -141,7 +135,7 @@ namespace Reko.Gui.Windows
 
         private void UserNavigateToAddress(Address addrFrom, Address addrTo)
         {
-            if (!program.Image.IsValidAddress(addrTo))
+            if (!program.SegmentMap.IsValidAddress(addrTo))
                 return;
             navInteractor.RememberAddress(addrFrom);
             control.CurrentAddress = addrTo;        // ...and move to the new position.
@@ -159,6 +153,7 @@ namespace Reko.Gui.Windows
                     case CmdIds.ActionMarkType:
                     case CmdIds.ViewFindWhatPointsHere:
                     case CmdIds.ActionMarkProcedure:
+                    case CmdIds.TextEncodingChoose:
                         status.Status = MenuStatus.Visible | MenuStatus.Enabled; return true;
                     case CmdIds.EditCopy:
                     case CmdIds.ViewFindPattern:
@@ -172,13 +167,41 @@ namespace Reko.Gui.Windows
             else if (Control.DisassemblyView.Focused)
             {
                 var selAddress = Control.DisassemblyView.SelectedObject as Address;
+                var instr = Control.DisassemblyView.SelectedObject as MachineInstruction;
                 if (cmdId.Guid == CmdSets.GuidReko)
                 {
                     switch (cmdId.ID)
                     {
+                    case CmdIds.EditCopy:
+                        status.Status = ValidDisassemblerSelection()
+                            ? MenuStatus.Visible | MenuStatus.Enabled
+                            : MenuStatus.Visible;
+                        return true;
                     case CmdIds.OpenLink:
                     case CmdIds.OpenLinkInNewWindow:
                         status.Status = selAddress != null ? MenuStatus.Visible | MenuStatus.Enabled : 0;
+                        return true;
+                    case CmdIds.EditAnnotation:
+                        status.Status = instr != null ? MenuStatus.Visible | MenuStatus.Enabled : 0;
+                        return true;
+                    case CmdIds.ActionCallTerminates:
+                        if (instr != null)
+                        {
+                            if ((instr.InstructionClass &  InstructionClass.Call) != 0)
+                            {
+                                status.Status = MenuStatus.Visible | MenuStatus.Enabled;
+                            }
+                            else
+                            {
+                                status.Status = MenuStatus.Visible;
+                            }
+                        }
+                        else
+                        {
+                            status.Status = 0;
+                        }
+                        return true;
+                    case CmdIds.TextEncodingChoose:
                         return true;
                     }
                 }
@@ -200,6 +223,7 @@ namespace Reko.Gui.Windows
                     case CmdIds.ActionMarkProcedure: MarkAndScanProcedure(); return true;
                     case CmdIds.ViewFindWhatPointsHere: return ViewWhatPointsHere();
                     case CmdIds.ViewFindPattern: return ViewFindPattern();
+                    case CmdIds.TextEncodingChoose: return ChooseTextEncoding();
                     }
                 }
             }
@@ -207,6 +231,13 @@ namespace Reko.Gui.Windows
             {
                 if (cmdId.Guid == CmdSets.GuidReko)
                 {
+                    switch (cmdId.ID)
+                    {
+                    case CmdIds.EditCopy: return CopyDisassemblerSelectionToClipboard();
+                    case CmdIds.EditAnnotation: return EditDasmAnnotation();
+                    case CmdIds.TextEncodingChoose: return ChooseTextEncoding();
+                    case CmdIds.ActionCallTerminates: return EditCallSite();
+                    }
                 }
             }
             return false;
@@ -223,7 +254,7 @@ namespace Reko.Gui.Windows
 
         public void GotoAddress()
         {
-            var addrRange = GetSelectedAddressRange();
+            AddressRange addrRange = GetSelectedAddressRange();
             if (addrRange == null)
                 return;
             var rdr = program.CreateImageReader(addrRange.Begin);
@@ -244,32 +275,8 @@ namespace Reko.Gui.Windows
             AddressRange addrRange;
             if (!TryGetSelectedAddressRange(out addrRange))
                 return;
-            try
-            {
-                var address = addrRange.Begin;
-                MarkAndScanProcedure(address);
-                services.RequireService<IProjectBrowserService>().Reload();
-            }
-            catch (Exception ex)
-            {
-                services.RequireService<IDecompilerShellUiService>().ShowError(ex, "An error happened while scanning the procedure.");
-            }
-        }
-
-        private void MarkAndScanProcedure(Address address)
-        {
-            var decompiler = services.GetService<IDecompilerService>().Decompiler;
-            var proc = decompiler.ScanProcedure(program, address);
-            var userp = new Reko.Core.Serialization.Procedure_v1
-            {
-                Address = address.ToString(),
-                Name = proc.Name,
-            };
-            var ups = program.UserProcedures;
-            if (!ups.ContainsKey(address))
-            {
-                ups.Add(address, userp);
-            }
+            var address = new ProgramAddress(program, addrRange.Begin);
+            services.RequireService<ICommandFactory>().MarkProcedure(address).Do();
         }
 
         private bool TryGetSelectedAddressRange(out AddressRange addrRange)
@@ -303,12 +310,21 @@ namespace Reko.Gui.Windows
                 return true;
             if (control.MemoryView.Focused)
             {
-                 var decompiler = services.GetService<IDecompilerService>().Decompiler;
-                 var dumper = new Dumper(decompiler.Project.Programs.First().Architecture);
+                var decompiler = services.GetService<IDecompilerService>().Decompiler;
+                var dumper = new Dumper(decompiler.Project.Programs.First().Architecture);
                 var sb = new StringWriter();
-                dumper.DumpData(control.MemoryView.ProgramImage, range, sb);
+                dumper.DumpData(control.MemoryView.SegmentMap, range, new TextFormatter(sb));
                 Clipboard.SetText(sb.ToString());       //$TODO: abstract this.
             }
+            return true;
+        }
+
+        private bool CopyDisassemblerSelectionToClipboard()
+        {
+            var ms = new MemoryStream();
+            control.DisassemblyView.Selection.Save(ms, DataFormats.UnicodeText);
+            var text = new string(Encoding.Unicode.GetChars(ms.ToArray()));
+            Clipboard.SetData(DataFormats.UnicodeText, text);
             return true;
         }
 
@@ -317,9 +333,20 @@ namespace Reko.Gui.Windows
             var addrRange = control.MemoryView.GetAddressRange();
             if (addrRange.IsValid)
             {
-                typeMarker.Show(control.MemoryView.AddressToPoint(addrRange.Begin));
+                typeMarker.Show(
+                    control.MemoryView.AddressToPoint(addrRange.Begin),
+                    typeMarker_TextAccepted);
             }
             return true;
+        }
+
+        private void typeMarker_TextAccepted(string text)
+        {
+            var item = SetTypeAtAddressRange(GetSelectedAddressRange().Begin, text);
+            if (item == null)
+                return;
+            // Advance selection to beyond item.
+            this.SelectedAddress = item.Address + item.Size;
         }
 
         private bool ValidSelection()
@@ -333,21 +360,9 @@ namespace Reko.Gui.Windows
             return false;
         }
 
-        public void typeMarker_FormatType(object sender, TypeMarkerEventArgs e)
-        {
-            try
-            {
-                var parser = new HungarianParser();
-                var dataType = parser.Parse(e.UserText);
-                if (dataType == null)
-                    e.FormattedType = " - Null - ";
-                else
-                    e.FormattedType = dataType.ToString();
-            }
-            catch
-            {
-                e.FormattedType = " - Error - ";
-            }
+        private bool ValidDisassemblerSelection()
+        { 
+            return !control.DisassemblyView.Selection.IsEmpty;
         }
 
         public ImageMapItem SetTypeAtAddressRange(Address address, string userText)
@@ -379,27 +394,7 @@ namespace Reko.Gui.Windows
                 return true;
             if (program == null)
                 return true;
-            var resultSvc = services.GetService<ISearchResultService>();
-            if (resultSvc == null)
-                return true;
-
-            try
-            {
-                var arch = program.Architecture;
-                var image = program.Image;
-                var rdr = program.Architecture.CreateImageReader(program.Image, 0);
-                var addrControl = program.Platform.CreatePointerScanner(
-                    program.ImageMap,
-                    rdr,
-                    new[] { 
-                    addrRange.Begin
-                },
-                    PointerScannerFlags.All);
-                resultSvc.ShowSearchResults(new AddressSearchResult(services, addrControl.Select(lin => new AddressSearchHit(program, lin))));
-            } catch (Exception ex)
-            {
-                services.RequireService<IDecompilerShellUiService>().ShowError(ex, "An error occurred when searching for pointers.");
-            }
+            services.RequireService<ICommandFactory>().ViewWhatPointsHere(program, addrRange.Begin).Do();
             return true;
         }
 
@@ -418,22 +413,76 @@ namespace Reko.Gui.Windows
                 {
                     var re = Scanning.Dfa.Automaton.CreateFromPattern(dlg.Patterns.Text);
                     var hits = 
-                        re.GetMatches(program.Image.Bytes, 0)
-                        .Select(offset => new AddressSearchHit
-                        {
-                            Program = program,
-                            Address = program.Image.BaseAddress + offset
-                        });
-                    srSvc.ShowSearchResults(new AddressSearchResult(this.services, hits));
+                        //$BUG: wrong result
+                        program.SegmentMap.Segments.Values
+                        .SelectMany(s => re.GetMatches(s.MemoryArea.Bytes, 0))
+                        .Select(offset => new ProgramAddress(
+                            program,
+                            program.ImageMap.BaseAddress + offset));
+                    srSvc.ShowAddressSearchResults(hits, AddressSearchDetails.Code);
                 }
             }
             return true;
         }
 
+        public bool ChooseTextEncoding()
+        {
+            var dlgFactory = services.RequireService<IDialogFactory>();
+            var uiSvc = services.RequireService<IDecompilerShellUiService>();
+            using (ITextEncodingDialog dlg = dlgFactory.CreateTextEncodingDialog())
+            {
+                if (uiSvc.ShowModalDialog(dlg) == DialogResult.OK)
+                {
+                    var enc = dlg.GetSelectedTextEncoding();
+                    this.control.MemoryView.Encoding = enc;
+                    program.User.TextEncoding = enc;
+                    this.control.DisassemblyView.RecomputeLayout();
+                }
+            }
+            return true;
+        }
+
+        public bool EditDasmAnnotation()
+        {
+            return true;
+        }
+
+        public bool EditCallSite()
+        {
+            var instr = (MachineInstruction)Control.DisassemblyView.SelectedObject;
+            var dlgFactory = services.RequireService<IDialogFactory>();
+            var uiSvc = services.RequireService<IDecompilerShellUiService>();
+            var ucd = GetUserCallDataFromAddress(instr.Address);
+            using (var dlg = dlgFactory.CreateCallSiteDialog(this.program, ucd))
+            {
+                if (DialogResult.OK == uiSvc.ShowModalDialog(dlg))
+                {
+                    ucd = dlg.GetUserCallData(null);
+                    SetUserCallData(ucd);
+                }
+            }
+            return true;
+        }
+
+        private UserCallData GetUserCallDataFromAddress(Address addr)
+        {
+            UserCallData ucd;
+            if (!program.User.Calls.TryGetValue(addr, out ucd))
+            {
+                ucd = new UserCallData { Address = addr };
+            }
+            return ucd;
+        }
+
+        private void SetUserCallData(UserCallData ucd)
+        {
+            program.User.Calls[ucd.Address] = ucd;
+        }
+
         private string SelectionToHex(AddressRange addr)
         {
             var sb = new StringBuilder();
-            var rdr = program.Architecture.CreateImageReader(program.Image, addr.Begin);
+            var rdr = program.CreateImageReader(addr.Begin);
             var sep = "";
             while (rdr.Address <= addr.End)
             {
@@ -452,8 +501,14 @@ namespace Reko.Gui.Windows
             this.ignoreAddressChange = true;
             this.Control.MemoryView.SelectedAddress = addr;
             this.Control.MemoryView.TopAddress = addr;
-            this.Control.DisassemblyView.SelectedObject = addr;
-            this.control.DisassemblyView.TopAddress = addr;
+
+            ImageSegment seg;
+            if (program.SegmentMap.TryFindSegment(addr, out seg))
+            {
+                this.Control.DisassemblyView.Model  = new DisassemblyTextModel(program, seg);
+                this.Control.DisassemblyView.SelectedObject = addr;
+                this.control.DisassemblyView.TopAddress = addr;
+            }
             this.SelectionChanged.Fire(this, new SelectionChangedEventArgs(new AddressRange(addr, addr)));
             UserNavigateToAddress(Control.MemoryView.TopAddress, addr);
             this.ignoreAddressChange = false;
@@ -511,7 +566,7 @@ namespace Reko.Gui.Windows
         private void DisassemblyControl_Navigate(object sender, EditorNavigationArgs e)
         {
             var addr = e.Destination as Address;
-            if (e == null)
+            if (addr == null)
                 return;
             UserNavigateToAddress(Control.DisassemblyView.TopAddress, addr);
         }

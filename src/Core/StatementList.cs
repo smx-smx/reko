@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -38,9 +38,11 @@ namespace Reko.Core
             Add(new Statement(linearAddress, instr, block));
         }
 
-        public void Insert(int position, ulong linearAddress, Instruction instr)
+        public Statement Insert(int position, ulong linearAddress, Instruction instr)
         {
-            base.Insert(position, new Statement(linearAddress, instr, block));
+            var stm = new Statement(linearAddress, instr, block);
+            base.Insert(position, stm);
+            return stm;
         }
 
 		public Statement Last

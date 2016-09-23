@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -49,7 +49,7 @@ namespace Reko.Evaluation
 		{
 			if (cBits != null)
 			{
-				int bitMask = Mask(dpb.BitCount) << dpb.BitPosition;
+				int bitMask = Mask(dpb.InsertedBits.DataType.BitSize) << dpb.BitPosition;
 				int maskedVal = cSrc.ToInt32() & ~bitMask;
 				int newBits = cBits.ToInt32() << dpb.BitPosition;
 				return Constant.Create(cSrc.DataType, maskedVal | (newBits & bitMask));

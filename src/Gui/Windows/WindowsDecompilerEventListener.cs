@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,6 +28,9 @@ using System.ComponentModel;
 using System.Text;
 using System.IO;
 using System.Windows.Forms;
+using System.Threading;
+using System.ComponentModel.Design;
+using Reko.Gui.Forms;
 
 namespace Reko.Gui.Windows
 {
@@ -36,7 +39,7 @@ namespace Reko.Gui.Windows
     /// </summary>
     public class WindowsDecompilerEventListener : IWorkerDialogService, DecompilerEventListener
     {
-        private WorkerDialog dlg;
+        private IWorkerDialog dlg;
         private Action task;
         private IServiceProvider sp;
         private IDecompilerShellUiService uiSvc;
@@ -45,6 +48,8 @@ namespace Reko.Gui.Windows
 
         private string status;
         private const int STATUS_UPDATE_ONLY = -4711;
+        private CancellationTokenSource cancellationSvc;
+        private bool isCanceled;
 
         public WindowsDecompilerEventListener(IServiceProvider sp)
         {
@@ -53,14 +58,16 @@ namespace Reko.Gui.Windows
             diagnosticSvc = sp.GetService<IDiagnosticsService>();
         }
 
-        private WorkerDialog CreateDialog(string caption)
+        private IWorkerDialog CreateDialog(string caption)
         {
             if (dlg != null)
                 throw new InvalidOperationException("Dialog is already running.");
-            this.dlg = new WorkerDialog();
-
+            this.dlg = sp.RequireService<IDialogFactory>().CreateWorkerDialog();
+            this.cancellationSvc = new CancellationTokenSource();
+            this.sp.RequireService<IServiceContainer>().AddService<CancellationTokenSource>(cancellationSvc);
             dlg.Load += new EventHandler(dlg_Load);
             dlg.Closed += new EventHandler(dlg_Closed);
+            dlg.CancellationButton.Click += dlg_Cancelled;
             dlg.Worker.WorkerSupportsCancellation = true;
             dlg.Worker.WorkerReportsProgress = true;
             dlg.Worker.RunWorkerCompleted += new RunWorkerCompletedEventHandler(Worker_RunWorkerCompleted);
@@ -105,20 +112,12 @@ namespace Reko.Gui.Windows
         /// <param name="newCaption"></param>
         public void SetCaption(string newCaption)
         {
-            dlg.Invoke(new Action<string>(delegate(string c)
-                {
-                    dlg.Caption.Text = c;
-                }),
-                newCaption);
+            dlg.Invoke(() => { dlg.Caption.Text = newCaption; });
         }
 
         public void ShowError(string failedOperation, Exception ex)
         {
-            dlg.Invoke(new Action<Exception>(delegate(Exception exc)
-                {
-                    uiSvc.ShowError(ex, failedOperation);
-                }),
-                ex);
+            dlg.Invoke(() => { uiSvc.ShowError(ex, failedOperation); });
         }
 
         public void FinishBackgroundWork()
@@ -127,14 +126,25 @@ namespace Reko.Gui.Windows
 
         void dlg_Load(object sender, EventArgs e)
         {
+            this.isCanceled = false;
+            dlg.CancellationButton.Enabled = true;
             dlg.Worker.RunWorkerAsync(task);
         }
 
         private void dlg_Closed(object sender, EventArgs e)
         {
-            dlg.Worker.RunWorkerCompleted -= new RunWorkerCompletedEventHandler(Worker_RunWorkerCompleted);
-            dlg.Worker.ProgressChanged -= new ProgressChangedEventHandler(Worker_ProgressChanged);
+            dlg.Worker.RunWorkerCompleted -= Worker_RunWorkerCompleted;
+            dlg.Worker.ProgressChanged -= Worker_ProgressChanged;
             task = null;
+            sp.RequireService<IServiceContainer>().RemoveService(typeof(CancellationTokenSource));
+        }
+
+        private void dlg_Cancelled(object sender, EventArgs e)
+        {
+            cancellationSvc.Cancel();
+            this.isCanceled = true;
+            Warn(new NullCodeLocation(""), "User canceled the decompiler.");
+            dlg.CancellationButton.Enabled = false;
         }
 
         void Worker_DoWork(object sender, DoWorkEventArgs e)
@@ -186,14 +196,29 @@ namespace Reko.Gui.Windows
             diagnosticSvc.Warn(location, message);
         }
 
+        public void Warn(ICodeLocation location, string message, params object[] args)
+        {
+            diagnosticSvc.Warn(location, message, args);
+        }
+
         public void Error(ICodeLocation location, string message)
         {
             diagnosticSvc.Error(location, message);
         }
 
+        public void Error(ICodeLocation location, string message, params object[] args)
+        {
+            diagnosticSvc.Error(location, message, args);
+        }
+
         public void Error(ICodeLocation location, Exception ex, string message)
         {
             diagnosticSvc.Error(location, ex, message);
+        }
+
+        public void Error(ICodeLocation location, Exception ex, string message, params object[] args)
+        {
+            diagnosticSvc.Error(location, ex, message, args);
         }
 
         void DecompilerEventListener.ShowStatus(string caption)
@@ -206,14 +231,24 @@ namespace Reko.Gui.Windows
             return new AddressNavigator(program, addr, sp);
         }
 
-        ICodeLocation DecompilerEventListener.CreateBlockNavigator(Block block)
+        ICodeLocation DecompilerEventListener.CreateBlockNavigator(Program program, Block block)
         {
-            return new BlockNavigator(block, sp);
+            return new BlockNavigator(program, block, sp);
         }
 
-        ICodeLocation DecompilerEventListener.CreateProcedureNavigator(Procedure proc)
+        ICodeLocation DecompilerEventListener.CreateProcedureNavigator(Program program, Procedure proc)
         {
-            return new ProcedureNavigator(proc, sp);
+            return new ProcedureNavigator(program, proc, sp);
+        }
+
+        ICodeLocation DecompilerEventListener.CreateStatementNavigator(Program program, Statement stm)
+        {
+            return new StatementNavigator(program, stm, sp);
+        }
+
+        ICodeLocation DecompilerEventListener.CreateJumpTableNavigator(Program program, Address addrIndirectJump, Address addrVector, int stride)
+        {
+            return new JumpVectorNavigator(program, addrIndirectJump, addrVector, stride, sp);
         }
 
         private void ShowStatus(string newStatus)
@@ -230,9 +265,13 @@ namespace Reko.Gui.Windows
                 return;
             System.Threading.Interlocked.Exchange<string>(ref status, caption);
             var percentDone = (int)((numerator * 100L) / denominator);
-            if (percentDone < 0)
-                percentDone.ToString();
             dlg.Worker.ReportProgress(percentDone);
+        }
+
+        // Is usually called on a worker thread.
+        bool DecompilerEventListener.IsCanceled()
+        {
+            return this.isCanceled;
         }
 
         #endregion

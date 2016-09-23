@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,185 +18,323 @@
  */
 #endregion
 
-using Reko.Core.Expressions;
-using Reko.Core.Operators;
-using Reko.Core.Types;
-
 using System;
+using Reko.Core.Expressions;
+using Reko.Core.Types;
+using Reko.Core.Operators;
 using System.Diagnostics;
 
 namespace Reko.Typing
 {
-	/// <summary>
-	/// Given an expression with a complex type, rebuilds it to accomodate the 
-	/// complex data type.
-	/// </summary>
+    /// <summary>
+    /// Given an expression whose type is "complex" (e.g. pointer
+    /// or structure types), and optional index expresssion and/or 
+    /// integer offset, creates a C-like expression of the type:
+    ///     - array index reference (e.g. a[i])
+    ///     - structure field reference (e.g. ptr->x)
+    ///     - union alternative reference (e.g. u->r)
+    ///     - member pointer dereference (e.g. ptr->*foo)
+    ///     - simple pointer dereference (e.g. *ptr)
+    /// </summary>
     /// <remarks>
-    /// Complex expressions are assumed to take the form of a + b, where a is of complex type
-    /// (such as pointer, structure, array etc) and b is "simple", such as an constant of integer type
-    /// or an expression of integer type. Expressions where both a and b are complex make no sense:
-    /// what do you get if you add two pointers? Also, expressions where both a and b are simple 
-    /// should never reach this class, as such expressions are by definition simple also.
+    /// It is assumed that the constituent expressions have already
+    /// been converted; this class is not intended to execute
+    /// recursively.
     /// </remarks>
-	public class ComplexExpressionBuilder : IDataTypeVisitor<Expression>
-	{
-        private DataType dtResult;          // The data type of the resulting expression (field type).
-		private DataType dt;                // Data type of the complex expression
-		private DataType dtOriginal;
-		private Expression basePointer;     // (possibly null) 'base' in Segmented address.
-		private Expression complexExp;      // The "root" expression we will wrap with 
-        private Expression indexExp;        // if not null, an index expression to use for arrays.
-		private int offset;
-		private bool dereferenced;
-		private bool seenPtr;
-        private DataTypeComparer comp; 
-        
+    public class ComplexExpressionBuilder : IDataTypeVisitor<Expression>
+    {
+        private Expression expComplex;      // The expression we wish to convert to high-level code.
+        private Expression index;           // Optional index expression (like ptr + i). Should never be a constant (see "offset" member variable)
+        private Expression basePtr;         // Non-null if x86-style base segment present.
+        private DataType dtComplex;         // DataType inferred by reko
+        private DataType dtComplexOrig;     // DataType of only this expression.
+        private int offset;                 // constant offset from expComplex.
+        private DataType enclosingPtr;
+        private bool dereferenced;          // True if expComplex was dereferenced (Mem0[expComplex])
+        private bool dereferenceGenerated;       // True if a dereferencing expression has been emitted (field access or the like.
+        private int depth;
+
         public ComplexExpressionBuilder(
-            DataType dtResult, 
-            DataType dt, 
-            DataType dtOrig,
-            Expression basePointer,
-            Expression complexExp, 
-            Expression indexExp,
+            DataType dtResult,
+            Expression basePtr,
+            Expression complex,
+            Expression index,
             int offset)
         {
-            this.dtResult = dtResult;
-            this.dt = dt;
-            this.dtOriginal = dtOrig;
-            this.basePointer = basePointer;
-            this.complexExp = complexExp;
-            this.indexExp = indexExp;
+            this.basePtr = basePtr;
+            this.expComplex = complex;
+            this.index = index;
             this.offset = offset;
-            this.comp = new DataTypeComparer();
         }
 
-		public Expression BuildComplex()
-		{
-            var exp = dt.Accept(this);
+        /// <summary>
+        /// Build the complex expression.
+        /// </summary>
+        /// <param name="dereferenced">True if this is being executed
+        /// in the context of a MemAccess or SegmentedMemAccess.</param>
+        /// <returns>The rewritten expression.</returns>
+        public Expression BuildComplex(bool dereferenced)
+        {
+            depth = 0; //$DEBUG;
+            this.enclosingPtr = null;
+            if (expComplex.TypeVariable != null)
+            {
+                this.dtComplex = expComplex.TypeVariable.DataType;
+                this.dtComplexOrig = expComplex.TypeVariable.OriginalDataType;
+            }
+            else
+            {
+                this.dtComplex = expComplex.DataType;
+                this.dtComplexOrig = expComplex.DataType;
+            }
+            var dtComplex = this.dtComplex;
+            this.dereferenced = dereferenced;
+            var exp = this.dtComplex.Accept(this);
+            if (!dereferenced && dereferenceGenerated)
+            {
+                exp = new UnaryExpression(Operator.AddrOf, dtComplex, exp);
+            }
+            if (dereferenced && !dereferenceGenerated)
+            {
+                exp = CreateDereference(dtComplex, exp);
+            }
             return exp;
-		}
-
-		private Expression CreateDereference(DataType dt, Expression e)
-		{
-			if (basePointer != null)
-				return new MemberPointerSelector(dt, new Dereference(dt, basePointer), e);
-			else if (e != null)
-				return new Dereference(dt, e);
-			else
-				return new ScopeResolution(dt);
-		}
-
-        private Expression CreateUnreferenced(DataType dt, Expression e)
-        {
-            if (basePointer != null)
-            {
-                var mps = new MemberPointerSelector(dt, new Dereference(dt, basePointer), e);
-                if (dt is ArrayType)
-                {
-                    return mps;
-                }
-                return new UnaryExpression(
-                    Operator.AddrOf,
-                    new Pointer(dt, 4),         //$BUG: hardwired '4'.
-                    mps);
-            }
-            else if (e != null)
-            {
-                return e;
-            }
-            else
-                throw new NotImplementedException();
         }
 
-        private Expression CreateFieldAccess(DataType dtStructure, DataType dtField, Expression exp, string fieldName)
+        public Expression VisitArray(ArrayType at)
         {
-            if (exp != null)
-            {
-                if (basePointer != null)
-                {
-                    exp = new MemberPointerSelector(dtField, basePointer, exp);
-                }
-                return new FieldAccess(dtField, exp, fieldName);
-            }
-            else
-            {
-                var scope = new ScopeResolution(dtStructure);
-                return new FieldAccess(dtField, scope, fieldName);
-            }
+            int i = (int)(offset / at.ElementType.Size);
+            int r = (int)(offset % at.ElementType.Size);
+            index = ScaleDownIndex(index, at.ElementType.Size);
+            dtComplex = at.ElementType;
+            dtComplexOrig = at.ElementType;
+            this.expComplex.DataType = at;
+            expComplex = CreateArrayAccess(at.ElementType, at, i, index);
+            index = null;       // we've consumed the index.
+            offset = r;
+            return dtComplex.Accept(this);
         }
 
-		private Expression RewritePointer(DataType dtPtr, DataType dtPointee, DataType dtPointeeOriginal)
-		{
-			if (seenPtr)
-			{
-				return complexExp;
-			}
+        public Expression VisitClass(ClassType ct)
+        {
+            throw new NotImplementedException();
+        }
 
-			seenPtr = true;
-            Expression result;
-			if (dtPointee is PrimitiveType || dtPointee is Pointer || dtPointee is MemberPointer ||
-                dtPointee is CodeType ||
-                comp.Compare(dtPtr, dtResult) == 0)
-			{
-                if (dtPointee.Size == 0)
-                    Debug.Print("WARNING: {0} has size 0, which should be impossible", dtPointee);
-                if (offset == 0 || dtPointee is ArrayType || dtPointee.Size > 0 && offset % dtPointee.Size == 0)
+        public Expression VisitCode(CodeType c)
+        {
+            return expComplex;
+        }
+
+        public Expression VisitEnum(EnumType e)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Expression VisitEquivalenceClass(EquivalenceClass eq)
+        {
+            this.dtComplex = eq.DataType;
+            return this.dtComplex.Accept(this);
+        }
+
+        public Expression VisitFunctionType(FunctionType ft)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Expression VisitMemberPointer(MemberPointer memptr)
+        {
+            if (enclosingPtr != null)
+            {
+                return expComplex;
+            }
+            var pointee = memptr.Pointee;
+            var origMemptr = dtComplexOrig.ResolveAs<MemberPointer>();
+            if (origMemptr != null)
+            {
+                pointee = origMemptr.Pointee;
+            }
+            return RewritePointer(memptr, memptr.Pointee, pointee);
+        }
+
+        public Expression VisitPointer(Pointer ptr)
+        {
+            if (enclosingPtr != null)
+            {
+                return expComplex;
+            }
+            var pointee = ptr.Pointee;
+            var origPtr = dtComplexOrig.ResolveAs<Pointer>();
+            if (origPtr != null)
+            {
+                pointee = origPtr.Pointee;
+            }
+            return RewritePointer(ptr, ptr.Pointee, pointee);
+        }
+
+        private Expression RewritePointer(DataType ptr, DataType dtPointee, DataType dtOrigPointee)
+        {
+            if (++depth > 20)
+            {
+                Debug.Print("*** Quitting; determine cause of recursion"); //$DEBUG
+                return expComplex;
+            }
+            enclosingPtr = ptr;
+            this.dtComplex = dtPointee;
+            this.dtComplexOrig = dtOrigPointee;
+            return dtComplex.Accept(this);
+        }
+
+        public Expression VisitPrimitive(PrimitiveType pt)
+        {
+            if (enclosingPtr == null)
+            {
+                // We're not in a pointer context.
+                expComplex.DataType = dtComplex;
+                return expComplex;
+            }
+            if (offset == 0 || pt.Size > 0 && offset % pt.Size == 0)
+            {
+                if (offset == 0 && index == null)
                 {
-                    int idx = (offset == 0 || dtPointee is ArrayType)
-                        ? 0
-                        : offset / dtPointee.Size;
-                    if (idx == 0 && this.indexExp == null)
+                    if (dereferenced)
                     {
-                        if (Dereferenced)
-                            result = CreateDereference(dtPointee, complexExp);
+                        if (!dereferenceGenerated)
+                        {
+                            dereferenceGenerated = true;
+                            return CreateDereference(pt, expComplex);
+                        }
                         else
-                            result = CreateUnreferenced(dtPointee, complexExp);
+                        {
+                            return expComplex;
+                        }
                     }
                     else
                     {
-                        result = CreateArrayAccess(dtPointee, dtPtr, idx, indexExp, Dereferenced);
+                        return CreateUnreferenced(pt, expComplex);
                     }
                 }
                 else
                 {
-                    result = new PointerAddition(dtPtr, complexExp, offset);
+                    return CreateArrayAccess(pt, enclosingPtr, offset / pt.Size, index);
                 }
-			}
-			else
-			{
-                // Drill down.
-				dtOriginal = dtPointeeOriginal;
-				complexExp = CreateDereference(dtPointee, complexExp);
-				bool deref = Dereferenced;  //$REVIEW: causes problems with arrayType
-				Dereferenced = true;       //$REVUEW: causes problems with arrayType
-				basePointer = null;
-				result = dtPointee.Accept(this);
-				if (!deref)
-				{
-					result = new UnaryExpression(UnaryOperator.AddrOf, dtPtr, result);
-				}
-				Dereferenced = deref;       //$REVIEW: causes problems with arrayType
-			}
-			seenPtr = false;
-            return result;
-		}
+            }
+            throw new NotImplementedException();
+        }
 
-        private Expression CreateArrayAccess(DataType dtPointee, DataType dtPointer, int offset, Expression arrayIndex, bool dereferenced)
+
+        public Expression VisitReference(ReferenceTo refTo)
         {
-            if (offset == 0 && !dereferenced)
-                return complexExp;
-            arrayIndex = CreateArrayIndexExpression(offset, arrayIndex);
-            if (dereferenced)
+            return refTo.Referent.Accept(this);
+        }
+
+        public Expression VisitString(StringType str)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Expression VisitStructure(StructureType str)
+        {
+            if (++depth > 20)
             {
-                return new ArrayAccess(dtPointee, complexExp, arrayIndex);
+                Debug.Print("*** recursion too deep, quitting. Determine error then remove this"); //$DEBUG
+                return expComplex;
+            }
+            if (enclosingPtr != null)
+            {
+                int strSize = str.GetInferredSize();
+                if (str.Size > 0 // We know the size of the struct, for sure.
+                    && (offset >= strSize && offset % strSize == 0 && index == null))
+                {
+                    var exp = CreateArrayAccess(str, enclosingPtr, offset / strSize, index);
+                    index = null;
+                    --depth;
+                    return exp;
+                }
+                else if (index != null && offset == 0)
+                {
+                    var idx = this.ScaleDownIndex(index, strSize);
+                    index = null;
+                    var exp = CreateArrayAccess(str, enclosingPtr, 0, idx);
+                    --depth;
+                    return exp;
+                }
+            }
+            StructureField field = str.Fields.LowerBound(this.offset);
+            if (field == null)
+                throw new TypeInferenceException("Expected structure type {0} to have a field at offset {1} ({1:X}).", str.Name, offset);
+
+            dtComplex = field.DataType;
+            dtComplexOrig = field.DataType.ResolveAs<DataType>();
+            this.expComplex = CreateFieldAccess(str, field.DataType, expComplex, field);
+            offset -= field.Offset;
+            var e = dtComplex.Accept(this);
+            --depth;
+            return e;
+        }
+
+        public Expression VisitTypeReference(TypeReference typeref)
+        {
+            return typeref.Referent.Accept(this);
+        }
+
+        public Expression VisitTypeVariable(TypeVariable tv)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Expression VisitUnion(UnionType ut)
+        {
+            UnionAlternative alt = ut.FindAlternative(dtComplexOrig);
+            if (alt == null)
+            {
+                Debug.Print("Unable to find {0} in {1} (offset {2}).", dtComplexOrig, ut, offset);          //$diagnostic service
+                return expComplex;
+            }
+
+            dtComplex = alt.DataType;
+            dtComplexOrig = alt.DataType;
+            if (ut.PreferredType != null)
+            {
+                expComplex = new Cast(ut.PreferredType, expComplex);
             }
             else
             {
-                return new BinaryExpression(Operator.IAdd, dtPointer, complexExp, arrayIndex);
+                expComplex = CreateFieldAccess(ut, alt.DataType, expComplex, alt);
+            }
+            return dtComplex.Accept(this);
+        }
+
+        public Expression VisitUnknownType(UnknownType ut)
+        {
+            return expComplex;
+        }
+
+        public Expression VisitVoidType(VoidType voidType)
+        {
+            throw new NotImplementedException();
+        }
+
+        private Expression CreateArrayAccess(DataType dtPointee, DataType dtPointer, int offset, Expression arrayIndex)
+        {
+            if (offset == 0 && arrayIndex == null && !dereferenced)
+                return expComplex;
+            arrayIndex = CreateArrayIndexExpression(offset, arrayIndex);
+            if (dereferenced)
+            {
+                enclosingPtr = null;
+                dereferenceGenerated = true;
+                return new ArrayAccess(dtPointee, expComplex, arrayIndex);
+            }
+            else
+            {
+                // Could generate &a[index] here, but 
+                // a + index is more idiomatic C/C++
+                dereferenceGenerated = false;
+                return new BinaryExpression(Operator.IAdd, dtPointer, expComplex, arrayIndex);
             }
         }
 
-        private static Expression CreateArrayIndexExpression(int offset, Expression arrayIndex)
+        Expression CreateArrayIndexExpression(int offset, Expression arrayIndex)
         {
             BinaryOperator op = offset < 0 ? Operator.ISub : Operator.IAdd;
             offset = Math.Abs(offset);
@@ -214,121 +352,83 @@ namespace Reko.Typing
             }
             return arrayIndex;
         }
-        
-        public bool Dereferenced
-		{
-			get { return dereferenced; } 
-			set { dereferenced = value; }
-		}
 
-		public Expression VisitArray(ArrayType array)
-		{
-			int i = (int) (offset / array.ElementType.Size);
-			int r = (int) (offset % array.ElementType.Size);
-			dt = array.ElementType;
-			dtOriginal = array.ElementType;
-            complexExp.DataType = array;
-			complexExp = CreateArrayAccess(dt, array, i, indexExp, dereferenced);
-            dereferenced = true;
-			offset = r;
-			return dt.Accept(this);
-		}
-
-		public Expression VisitFunctionType(FunctionType ft)
-		{
-			throw new NotImplementedException();
-		}
-
-        public Expression VisitCode(CodeType ct)
+        private Expression CreateDereference(DataType dt, Expression e)
         {
-            return complexExp;
+            this.dereferenceGenerated = true;
+            if (basePtr != null)
+                return new MemberPointerSelector(dt, new Dereference(dt, basePtr), e);
+            else if (e != null)
+                return new Dereference(dt, e);
+            else
+                return new ScopeResolution(dt);
         }
 
-		public Expression VisitPrimitive(PrimitiveType pt)
-		{
-			return complexExp;
-		}
-
-        public Expression VisitEnum(EnumType e)
+        private Expression CreateUnreferenced(DataType dt, Expression e)
         {
-            return complexExp;
+            if (basePtr != null)
+            {
+                var mps = new MemberPointerSelector(dt, new Dereference(dt, basePtr), e);
+                if (dt is ArrayType)
+                {
+                    return mps;
+                }
+                return new UnaryExpression(
+                    Operator.AddrOf,
+                    new Pointer(dt, 4),         //$BUG: hardwired '4'.
+                    mps);
+            }
+            else if (e != null)
+            {
+                return e;
+            }
+            else
+                throw new NotImplementedException();
         }
 
-        public Expression VisitEquivalenceClass(EquivalenceClass eq)
+        private Expression CreateFieldAccess(DataType dtStructure, DataType dtField, Expression exp, Field field)
         {
-            dt = eq.DataType;
-            dtOriginal = eq.DataType;
-            return dt.Accept(this);
+            if (enclosingPtr != null)
+            {
+                dereferenceGenerated = true;
+                exp = CreateDereference(dtStructure, exp);
+                if (dtField.ResolveAs<ArrayType>() != null)
+                {
+                    dereferenceGenerated = false;
+                }
+            }
+            var fa = new FieldAccess(dtField, exp, field);
+            return fa;
         }
 
-		public Expression VisitPointer(Pointer ptr)
-		{
-			return RewritePointer(ptr, ptr.Pointee, ptr.Pointee);
-		}
-
-		public Expression VisitMemberPointer(MemberPointer memptr)
-		{
-            //if (!(dtOriginal is MemberPointer))
-            //    throw new TypeInferenceException("MemberPointer expression {0}  was expected to have MemberPointer as its " +
-            //        "original type, but was {1}.", memptr, dtOriginal);
-			return RewritePointer(memptr, memptr.Pointee,  dtOriginal.ResolveAs<MemberPointer>().Pointee);
-		}
-
-        public Expression VisitString(StringType str)
+        private Expression ScaleDownIndex(Expression exp, int elementSize)
         {
-            throw new NotImplementedException();
+            if (exp == null || elementSize == 1)
+                return exp;
+            BinaryExpression bin;
+            Constant cRight = null;
+            if (!exp.As(out bin) ||
+                (bin.Operator != Operator.IMul && bin.Operator != Operator.UMul && bin.Operator != Operator.SMul) ||
+                !bin.Right.As(out cRight) ||
+                cRight.ToInt32() % elementSize != 0)
+            {
+                return new BinaryExpression(
+                    Operator.SDiv,
+                    exp.DataType,
+                    exp,
+                    Constant.Int32(elementSize));
+            }
+
+            // Expression is of the form (* x c) where c is a multuple of elementSize.
+
+            var scale = cRight.ToInt32() / elementSize;
+            if (scale == 1)
+                return bin.Left;
+            return new BinaryExpression(
+                bin.Operator,
+                bin.DataType,
+                bin.Left,
+                Constant.Int32(scale));
         }
-
-		public Expression VisitStructure(StructureType str)
-		{
-			StructureField field = str.Fields.LowerBound(this.offset);
-			if (field == null)
-				throw new TypeInferenceException("Expected structure type {0} to have a field at offset {1} ({1:X}).", str.Name, offset);
-		
-			dt = field.DataType;
-			dtOriginal = field.DataType;
-			complexExp = CreateFieldAccess(str, field.DataType, complexExp, field.Name);
-			offset -= field.Offset;
-			return dt.Accept(this);
-		}
-
-        public Expression VisitTypeReference(TypeReference typeref)
-        {
-            return typeref.Referent.Accept(this);
-        }
-
-        public Expression VisitTypeVariable(TypeVariable tv)
-        {
-            throw new NotImplementedException();
-        }
-
-		public Expression VisitUnion(UnionType ut)
-		{
-			UnionAlternative alt = ut.FindAlternative(dtOriginal);
-			if (alt == null)
-				throw new TypeInferenceException("Unable to find {0} in {1} (offset {2}).", dtOriginal, ut, offset);
-
-			dt = alt.DataType;
-			dtOriginal = alt.DataType;
-			if (ut.PreferredType != null)
-			{
-				complexExp = new Cast(ut.PreferredType, complexExp);
-			}
-			else
-			{
-				complexExp = new FieldAccess(alt.DataType, complexExp, alt.Name);
-			}
-			return dt.Accept(this);
-		}
-
-        public Expression VisitUnknownType(UnknownType unk)
-        {
-            throw new NotImplementedException();
-        }
-
-        public Expression VisitVoidType(VoidType vt)
-        {
-            throw new NotImplementedException();
-        }
-	}
+    }
 }

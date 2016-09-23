@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,11 +26,13 @@ using System.Text;
 
 namespace Reko.Gui.Controls
 {
-    public interface IComboBox
+    public interface IComboBox : IControl
     {
         event EventHandler TextChanged;
+        event EventHandler SelectedIndexChanged;
 
         object DataSource { get; set; }
+        bool Enabled { get; set; }
         IList Items { get; }
         int SelectedIndex { get; set; }
         object SelectedValue { get; set; }

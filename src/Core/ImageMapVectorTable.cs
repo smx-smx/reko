@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,24 +29,16 @@ namespace Reko.Core
     /// </summary>
     public class ImageMapVectorTable : ImageMapItem
     {
-        public ImageMapVectorTable(Address addrTable, bool fCallTable)
+        public ImageMapVectorTable(Address addr, Address[] vector, int size)
         {
-            this.TableAddress = addrTable;
-            this.IsCallTable = fCallTable;
-            this.Addresses = new List<Address>();
-            this.RegisterUsed = new Dictionary<Address, int>();
-        }
-
-        public ImageMapVectorTable(bool isCallTable, Address[] vector, int size)
-        {
-            this.IsCallTable = isCallTable;
+            this.Address = addr;
             this.Addresses = new List<Address>(vector);
-            this.RegisterUsed = new Dictionary<Address,int>();
+            this.Size = (uint) size;
         }
 
-        public Address TableAddress { get; private set; }
+        /// <summary>
+        /// The destinations of the jump table
+        /// </summary>
         public List<Address> Addresses { get; private set; }
-        public bool IsCallTable { get; private set;}
-        public Dictionary<Address,int> RegisterUsed { get; private set; }
     }
 }

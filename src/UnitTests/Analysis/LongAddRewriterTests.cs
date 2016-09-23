@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -42,9 +42,8 @@ namespace Reko.UnitTests.Analysis
         private Identifier dx;
         private Identifier SCZ;
         private Identifier CF;
-        private PrimitiveType w16 = PrimitiveType.Word16;
         private ProcedureBuilder m;
-        private Block block;
+        private FlagRegister flags;
 
         public LongAddRewriterTests()
         {
@@ -65,8 +64,8 @@ namespace Reko.UnitTests.Analysis
 
         protected override void RunTest(Program prog, TextWriter writer)
         {
-            var dfa = new DataFlowAnalysis(prog, new FakeDecompilerEventListener());
             var eventListener = new FakeDecompilerEventListener();
+            var dfa = new DataFlowAnalysis(prog, null, eventListener);
             var trf = new TrashedRegisterFinder(prog, prog.Procedures.Values, dfa.ProgramDataFlow, eventListener);
             trf.Compute();
             trf.RewriteBasicBlocks();
@@ -85,15 +84,14 @@ namespace Reko.UnitTests.Analysis
         {
             m = new ProcedureBuilder(arch);
             frame = m.Frame;
-            ax = frame.EnsureRegister(new RegisterStorage("ax", 0, PrimitiveType.Word16));
-            bx = frame.EnsureRegister(new RegisterStorage("bx", 3, PrimitiveType.Word16));
-            cx = frame.EnsureRegister(new RegisterStorage("cx", 1, PrimitiveType.Word16));
-            dx = frame.EnsureRegister(new RegisterStorage("dx", 2, PrimitiveType.Word16));
-            SCZ = frame.EnsureFlagGroup(7, "SCZ", PrimitiveType.Byte);
-            CF = frame.EnsureFlagGroup(arch.CarryFlagMask, "C", PrimitiveType.Bool);
+            ax = frame.EnsureRegister(new RegisterStorage("ax", 0, 0, PrimitiveType.Word16));
+            bx = frame.EnsureRegister(new RegisterStorage("bx", 3, 0, PrimitiveType.Word16));
+            cx = frame.EnsureRegister(new RegisterStorage("cx", 1, 0, PrimitiveType.Word16));
+            dx = frame.EnsureRegister(new RegisterStorage("dx", 2, 0, PrimitiveType.Word16));
+            flags = new FlagRegister("flags", PrimitiveType.Word16);
+            SCZ = frame.EnsureFlagGroup(flags, 7, "SCZ", PrimitiveType.Byte);
+            CF = frame.EnsureFlagGroup(flags, arch.CarryFlagMask, "C", PrimitiveType.Bool);
             rw = new LongAddRewriter(m.Procedure, arch);
-            Procedure proc = new Procedure("test", frame);
-            block = new Block(proc, "bloke");
         }
 
         [Test]
@@ -144,7 +142,7 @@ namespace Reko.UnitTests.Analysis
         public void Match_AddRecConst()
         {
             var i1 = m.Assign(ax, m.IAdd(ax, 0x5678));
-            var i2 = m.Assign(CF, m.Cond(ax));
+            m.Assign(CF, m.Cond(ax));
             var i3 = m.Assign(dx, m.IAdd(m.IAdd(dx, 0x1234), CF));
             var instr = CreateLongInstruction(i1, i3);
             Assert.AreEqual("dx_ax = dx_ax + 0x12345678", instr.ToString());
@@ -154,7 +152,7 @@ namespace Reko.UnitTests.Analysis
         public void Match_AddConstant()
         {
             var in1 = m.Assign(ax, m.IAdd(ax, 1));
-            var in2 = m.Assign(CF, m.Cond(ax));
+            m.Assign(CF, m.Cond(ax));
             var in3 = m.Assign(dx, m.IAdd(m.IAdd(dx, 0), CF));
             var instr = CreateLongInstruction(in1, in3);
             Assert.AreEqual("dx_ax = dx_ax + 0x00000001", instr.ToString());
@@ -215,9 +213,7 @@ namespace Reko.UnitTests.Analysis
 ";
             var sb = new StringWriter();
             block.Write(sb);
-            Console.WriteLine(sb);
             Assert.AreEqual(sExp, sb.ToString());
-
         }
 
         [Test]
@@ -247,7 +243,6 @@ namespace Reko.UnitTests.Analysis
 ";
             var sb = new StringWriter();
             block.Write(sb);
-            Console.WriteLine(sb);
             Assert.AreEqual(sExp, sb.ToString());
         }
     }

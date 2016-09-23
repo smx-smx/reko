@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -57,6 +57,7 @@ namespace Reko.ImageLoaders.OdbgScript
 
     public partial class OllyLang : IScriptInterpreter
     {
+        private IServiceProvider services;
         private enum eBreakpointType { PP_INT3BREAK = 0x10, PP_MEMBREAK = 0x20, PP_HWBREAK = 0x40 };
 
         const byte OS_VERSION_HI = 1;  // High plugin version
@@ -103,8 +104,8 @@ namespace Reko.ImageLoaders.OdbgScript
         private rulong pmemforexec;
         private rulong membpaddr, membpsize;
 
-        private bool require_addonaction;
-        private bool back_to_debugloop;
+        //private bool require_addonaction;
+        //private bool back_to_debugloop;
 
         private string errorstr;
 
@@ -215,6 +216,7 @@ namespace Reko.ImageLoaders.OdbgScript
             }
         }
 
+
         // Commands that can be executed
         Dictionary<string, Func<string[], bool>> commands = new Dictionary<string, Func<string[], bool>>();
 
@@ -230,8 +232,8 @@ namespace Reko.ImageLoaders.OdbgScript
         bool cf;
 
         // Cursor for REF / (NEXT)REF function
-        int adrREF;
-        int curREF;
+        //int adrREF;
+        //int curREF;
 
         void SetCMPFlags(int diff)
         {
@@ -425,8 +427,9 @@ namespace Reko.ImageLoaders.OdbgScript
 #endif
 };
 
-        public OllyLang()
+        public OllyLang(IServiceProvider services)
         {
+            this.services = services;
             this.script = new OllyScript(this);
 
             #region Initialize command array
@@ -611,7 +614,6 @@ namespace Reko.ImageLoaders.OdbgScript
             commands["wrt"] = DoWRT;
             commands["wrta"] = DoWRTA;
             #endregion
-
 #if LATER
             commands["error"] = DoError;
             commands["dnf"] = DoDumpAndFix;
@@ -800,7 +802,7 @@ namespace Reko.ImageLoaders.OdbgScript
 
             callbacks.Clear();
             debuggee_running = false;
-            require_addonaction = false;
+            //require_addonaction = false;
 
             run_till_return = false;
             return_to_usercode = false;
@@ -1409,8 +1411,13 @@ namespace Reko.ImageLoaders.OdbgScript
                     }
                     else
                     {
+                        var ea = Address.Ptr32((uint) src);
+                        ImageSegment segment;
+                        if (!Host.SegmentMap.TryFindSegment(ea, out segment))
+                            throw new AccessViolationException();
                         byte[] buffer = new byte[STRING_READSIZE];
-                        if (Host.Image.TryReadBytes((uint)(src - Host.Image.BaseAddress.ToLinear()), buffer.Length, buffer))
+
+                        if (segment.MemoryArea.TryReadBytes(ea, buffer.Length, buffer))
                         {
                             buffer[buffer.Length - 1] = 0;
                             value = Encoding.UTF8.GetString(buffer);
@@ -1500,7 +1507,11 @@ namespace Reko.ImageLoaders.OdbgScript
                 {
                     Debug.Assert(src != 0);
                     uint dw;
-                    bool ret = Host.Image.TryReadLeUInt32(Address.Ptr32((uint)src), out dw);
+                    var ea = Address.Ptr32((uint)src);
+                    ImageSegment segment;
+                    if (!Host.SegmentMap.TryFindSegment(ea, out segment))
+                        throw new AccessViolationException();
+                    bool ret = segment.MemoryArea.TryReadLeUInt32(ea, out dw);
                     value = dw;
                     return ret;
                 }
@@ -1561,7 +1572,11 @@ namespace Reko.ImageLoaders.OdbgScript
                 if (GetRulong(tmp, out src))
                 {
                     Debug.Assert(src != 0);
-                    value = Host.Image.ReadLeDouble(Address.Ptr32((uint)src)).ToDouble();
+                    var ea = Address.Ptr32((uint) src);
+                    ImageSegment segment;
+                    if (!Host.SegmentMap.TryFindSegment(ea, out segment))
+                        throw new AccessViolationException();
+                    value = segment.MemoryArea.ReadLeDouble(ea).ToDouble();
                     return true;
                 }
             }
@@ -1794,12 +1809,11 @@ namespace Reko.ImageLoaders.OdbgScript
             return sb.ToString();
         }
 
-        //Add zero char before dw values, ex: 0DEADBEEF (to be assembled) usefull if first char is letter
+        //Add zero char before dw values, ex: 0DEADBEEF (to be assembled) useful if first char is letter
         public string FormatAsmDwords(string asmLine)
         {
             // Create command and arguments
             string args;
-            string cSep = "";
             int pos = asmLine.IndexOfAny(Helper.whitespaces.ToCharArray());
 
             if (pos < 0)
@@ -2001,7 +2015,7 @@ namespace Reko.ImageLoaders.OdbgScript
                 }
                 else if (run_till_return)
                 {
-                    var instr = (IntelInstruction) Host.DisassembleEx(Debugger.InstructionPointer);
+                    var instr = (X86Instruction) Host.DisassembleEx(Debugger.InstructionPointer);
                     if (instr.code == Arch.X86.Opcode.ret ||
                        instr.code == Arch.X86.Opcode.retf)
                     {
@@ -2018,7 +2032,7 @@ namespace Reko.ImageLoaders.OdbgScript
                     that's not gonna do us any good for jumps
                     so we'll stepinto except for a few exceptions
                     */
-                    var instr = (IntelInstruction) Host.DisassembleEx(Debugger.InstructionPointer);
+                    var instr = (X86Instruction) Host.DisassembleEx(Debugger.InstructionPointer);
                     if (instr.code == Arch.X86.Opcode.call || instr.code == Arch.X86.Opcode.rep ||
                         instr.code == Arch.X86.Opcode.repne)
                         Debugger.StepOver(StepOverCallback);

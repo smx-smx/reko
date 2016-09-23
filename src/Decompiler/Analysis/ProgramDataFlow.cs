@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,7 +26,8 @@ using System.Collections.Generic;
 namespace Reko.Analysis
 {
 	/// <summary>
-	/// Contains dataflow information for each procedure and each block of the program.
+	/// Contains dataflow information for each procedure and each block of 
+    /// the program.
 	/// </summary>
 	public class ProgramDataFlow
 	{
@@ -41,18 +42,18 @@ namespace Reko.Analysis
             procFlow2 = new Dictionary<Procedure, ProcedureFlow2>();
 		}
 
-		public ProgramDataFlow(Program prog) : this()
+		public ProgramDataFlow(Program program) : this()
 		{
-			foreach (Procedure proc in prog.Procedures.Values)
+			foreach (Procedure proc in program.Procedures.Values)
 			{
-				procFlow[proc] = new ProcedureFlow(proc, prog.Architecture);
+				procFlow[proc] = new ProcedureFlow(proc, program.Architecture);
 				foreach (Block block in proc.ControlGraph.Blocks)
 				{
 					blockFlow[block] = new BlockFlow(
                         block, 
-                        prog.Architecture.CreateRegisterBitset(),
+                        new HashSet<RegisterStorage>(),
                         new SymbolicEvaluationContext(
-                            prog.Architecture,
+                            program.Architecture,
                             proc.Frame));
 				}
 			}

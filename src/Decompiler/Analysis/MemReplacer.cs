@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,17 +28,18 @@ using System;
 namespace Reko.Analysis
 {
 	/// <summary>
-	/// Placeholder that replaces MEM nodes with C-like equivalents. It's placeholder because 
-	/// it does no real intelligent work trying to figure out what types the objects have. 
-	/// When type analysis is complete, this class should be removed.
+	/// Placeholder that replaces MEM nodes with C-like equivalents. It's
+    /// placeholder because it does no real intelligent work trying to figure
+    /// out what types the objects have. When type analysis is complete, this
+    /// class should be removed.
 	/// </summary>
 	public class MemReplacer : InstructionTransformer
 	{
-		private Program prog;
+		private Program program;
 
-		public MemReplacer(Program prog) 
+		public MemReplacer(Program program) 
 		{
-			this.prog = prog; 
+			this.program = program; 
 		}
 
 		public void Transform(Procedure proc)
@@ -51,7 +52,7 @@ namespace Reko.Analysis
 
 		public void RewriteProgram()
 		{
-			foreach (Procedure proc in prog.Procedures.Values)
+			foreach (Procedure proc in program.Procedures.Values)
 			{
 				Transform(proc);
 			}
@@ -69,17 +70,22 @@ namespace Reko.Analysis
 			Identifier id = ea as Identifier;
 			if (id != null)
 			{
-				return new FieldAccess(type, new Dereference(type, id), string.Format("{0}00000000", type.Prefix));
+                return new FieldAccess(type, new Dereference(type, id), CreateField(type, 0));
 			}
 			BinaryExpression b = ea as BinaryExpression;
 			if (b != null)
 			{
 				c = b.Right as Constant;
 				if (c != null && b.Operator == Operator.IAdd)
-					return new FieldAccess(type, new Dereference(type, b.Left), string.Format("{0}{1:X8}", type.Prefix, c.ToUInt32()));
+					return new FieldAccess(type, new Dereference(type, b.Left), CreateField(type, c.ToInt32()));
 			}
 			return new Dereference(null, ea);
 		}
+
+        private Field CreateField(DataType type, int offset)
+        {
+            return new StructureField(offset, type);
+        }
 
         public override Expression VisitSegmentedAccess(SegmentedAccess access)
         {
@@ -90,7 +96,7 @@ namespace Reko.Analysis
             Constant c = ea as Constant;
             if (c != null)
             {
-                return new FieldAccess(type, new Dereference(type, basePtr), string.Format("{0}{1:X4}", type.Prefix, c.ToInt16()));
+                return new FieldAccess(type, new Dereference(type, basePtr), CreateField(type, c.ToInt16()));
             }
             BinaryExpression b = ea as BinaryExpression;
             if (b != null && b.Operator == Operator.IAdd)
@@ -99,7 +105,7 @@ namespace Reko.Analysis
                 if (c != null)
                 {
                     return new FieldAccess(type, new MemberPointerSelector(type, basePtr, b.Left),
-                        string.Format("{0}{1:X4}", type.Prefix, c.ToInt16()));
+                        CreateField(type, c.ToInt16()));
                 }
             }
             return new MemberPointerSelector(null, basePtr, ea);

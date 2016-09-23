@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,7 +23,6 @@ using Gee.External.Capstone.Arm;
 using Reko.Core;
 using Reko.Core.Expressions;
 using Reko.Core.Operators;
-using Reko.Core.Machine;
 using Reko.Core.Rtl;
 using Reko.Core.Types;
 using System;
@@ -78,6 +77,7 @@ namespace Reko.Arch.Arm
                 this.ops = instr.ArchitectureDetail.Operands;
 
                 this.ric = new RtlInstructionCluster(instrs.Current.Address, instr.Bytes.Length);
+                this.ric.Class = RtlClass.Linear;
                 this.emitter = new RtlEmitter(ric.Instructions);
                 switch (instr.Id)
                 {
@@ -479,8 +479,6 @@ namespace Reko.Arch.Arm
         case Opcode.CBZ:
         case Opcode.MOVS:
         case Opcode.POP:
-        case Opcode.PUSH:
-        case Opcode.NOP:
         case Opcode.YIELD:
         case Opcode.WFE:
         case Opcode.WFI:
@@ -508,9 +506,11 @@ namespace Reko.Arch.Arm
                 case Opcode.LDRSH: RewriteLdr(PrimitiveType.Int16); break;
                 case Opcode.LDM: RewriteLdm(); break;
                 case Opcode.LDMDB: RewriteLdm(); break;
+                case Opcode.NOP: emitter.Nop(); break;
                 case Opcode.MOV: RewriteMov(); break;
                 case Opcode.MVN: RewriteUnaryOp(Operator.Not); break;
                 case Opcode.ORR: RewriteBinOp(Operator.Or, false); break;
+                case Opcode.PUSH: RewritePush(); break;
                 case Opcode.RSB: RewriteRevBinOp(Operator.ISub, instr.ArchitectureDetail.UpdateFlags); break;
                 case Opcode.STM: RewriteStm(); break;
                 case Opcode.STMDB: RewriteStm(); break;
@@ -527,6 +527,11 @@ namespace Reko.Arch.Arm
             }
         }
 
+        private RtlClass Classify(CapstoneArmInstruction instr)
+        {
+            throw new NotImplementedException();
+        }
+
         private AddressCorrelatedException NYI()
         {
             return new AddressCorrelatedException(
@@ -540,6 +545,7 @@ namespace Reko.Arch.Arm
             Address addr = Address.Ptr32((uint)Dst.ImmediateValue.Value);
             if (link)
             {
+                ric.Class = RtlClass.Transfer;
                 if (instr.ArchitectureDetail.CodeCondition == ArmCodeCondition.AL)
                 {
                     emitter.Call(addr, 0);
@@ -553,10 +559,12 @@ namespace Reko.Arch.Arm
             {
                 if (instr.ArchitectureDetail.CodeCondition == ArmCodeCondition.AL)
                 {
+                    ric.Class = RtlClass.Transfer;
                     emitter.Goto(addr);
                 }
                 else
                 {
+                    ric.Class = RtlClass.ConditionalTransfer;
                     emitter.Branch(TestCond(instr.ArchitectureDetail.CodeCondition), addr, RtlClass.ConditionalTransfer);
                 }
             }
@@ -726,7 +734,7 @@ namespace Reko.Arch.Arm
 
         private Identifier FlagGroup(FlagM bits, string name, PrimitiveType type)
         {
-            return frame.EnsureFlagGroup((uint) bits, name, type);
+            return frame.EnsureFlagGroup(A32Registers.cpsr, (uint) bits, name, type);
         }
 
         private void RewriteSvc()

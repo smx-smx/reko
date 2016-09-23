@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,57 +22,134 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Reko.Core.Expressions;
+using Reko.Core.Services;
+using Reko.Core.Types;
 
 namespace Reko.Core
 {
     public interface IImportResolver
     {
-        ExternalProcedure ResolveProcedure(string moduleName, string importName, Platform platform);
-        ExternalProcedure ResolveProcedure(string moduleName, int ordinal, Platform platform);
+        ExternalProcedure ResolveProcedure(string moduleName, string importName, IPlatform platform);
+        ExternalProcedure ResolveProcedure(string moduleName, int ordinal, IPlatform platform);
+        Identifier ResolveGlobal(string moduleName, string globalName, IPlatform platform);
+        ProcedureConstant ResolveToImportedProcedureConstant(Statement stm, Constant c);
     }
 
     /// <summary>
-    /// An import resolver tries to resolve a reference to external code or data  by consulting the 
-    /// current project first hand, and the platform in second hand. Doing it that way allows users to
-    /// override platform definitions as the need arises.
+    /// An import resolver tries to resolve a reference to external code or
+    /// data by consulting the current project first hand, and the platform
+    /// in second hand. Doing it that way allows users to override platform
+    /// definitions as the need arises.
     /// </summary>
     public class ImportResolver : IImportResolver
     {
         private Project project;
+        private Program program;
+        private DecompilerEventListener eventListener;
 
-        public ImportResolver(Project project)
+        public ImportResolver(Project project, Program program, DecompilerEventListener eventListener)
         {
             if (project == null)
                 throw new ArgumentNullException("project");
             this.project = project;
+            this.program = program;
+            this.eventListener = eventListener;
         }
 
-        public ExternalProcedure ResolveProcedure(string moduleName, string importName, Platform platform)
+        public ExternalProcedure ResolveProcedure(string moduleName, string importName, IPlatform platform)
         {
-            foreach (var module in project.MetadataFiles.Where(m => m.TypeLibrary != null))
+            if (!string.IsNullOrEmpty(moduleName))
             {
-                SystemService svc;
-                if (module.TypeLibrary.ServicesByName.TryGetValue(importName, out svc))
+                foreach (var program in project.Programs)
                 {
-                    return new ExternalProcedure(svc.Name, svc.Signature, svc.Characteristics);
+                    ModuleDescriptor mod;
+                    if (!program.EnvironmentMetadata.Modules.TryGetValue(moduleName, out mod))
+                        continue;
+
+                    SystemService svc;
+                    if (mod.ServicesByName.TryGetValue(importName, out svc))
+                    {
+                        return new ExternalProcedure(svc.Name, svc.Signature, svc.Characteristics);
+                    }
                 }
             }
+
+            foreach (var program in project.Programs)
+            {
+                FunctionType sig;
+                if (program.EnvironmentMetadata.Signatures.TryGetValue(importName, out sig))
+                {
+                    var chr = platform.LookupCharacteristicsByName(importName);
+                    if (chr != null)
+                        return new ExternalProcedure(importName, sig, chr);
+                    else
+                        return new ExternalProcedure(importName, sig);
+                }
+            }
+
             return platform.LookupProcedureByName(moduleName, importName);
         }
 
-        public ExternalProcedure ResolveProcedure(string moduleName, int ordinal, Platform platform)
+        public ExternalProcedure ResolveProcedure(string moduleName, int ordinal, IPlatform platform)
         {
-            foreach (var module in project.MetadataFiles.Where(m =>
-                string.Compare(m.ModuleName, moduleName, true) == 0 && //$BUGBUG: platform-dependent string comparison.
-                m.TypeLibrary != null))
+            foreach (var program in project.Programs)
             {
+                ModuleDescriptor mod;
+                if (!program.EnvironmentMetadata.Modules.TryGetValue(moduleName, out mod))
+                    continue;
+
                 SystemService svc;
-                if (module.TypeLibrary.ServicesByVector.TryGetValue(ordinal, out svc))
+                if (mod.ServicesByVector.TryGetValue(ordinal, out svc))
                 {
                     return new ExternalProcedure(svc.Name, svc.Signature, svc.Characteristics);
                 }
             }
+
             return platform.LookupProcedureByOrdinal(moduleName, ordinal);
         }
+
+        public Identifier ResolveGlobal(string moduleName, string globalName, IPlatform platform)
+        {
+            foreach (var program in project.Programs)
+            {
+                ModuleDescriptor mod;
+                if (!program.EnvironmentMetadata.Modules.TryGetValue(moduleName, out mod))
+                    continue;
+
+                DataType dt;
+                if (mod.Globals.TryGetValue(globalName, out dt))
+                {
+                    return new Identifier(globalName, dt, new MemoryStorage());
+                }
+            }
+
+            foreach (var program in project.Programs)
+            {
+                DataType dt;
+                if (program.EnvironmentMetadata.Globals.TryGetValue(globalName, out dt))
+                {
+                    return new Identifier(globalName, dt, new MemoryStorage());
+                }
+            }
+            return platform.LookupGlobalByName(moduleName, globalName);
+        }
+
+        public ProcedureConstant ResolveToImportedProcedureConstant(Statement stm, Constant c)
+        {
+            var addrInstruction = program.SegmentMap.MapLinearAddressToAddress(stm.LinearAddress);
+            var addrImportThunk = program.Platform.MakeAddressFromConstant(c);
+            ImportReference impref;
+            if (!program.ImportReferences.TryGetValue(addrImportThunk, out impref))
+                return null;
+
+            var extProc = impref.ResolveImportedProcedure(
+                this,
+                program.Platform,
+                new AddressContext(program, addrInstruction, this.eventListener));
+            return new ProcedureConstant(program.Platform.PointerType, extProc);
+        }
+
+       
     }
 }

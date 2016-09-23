@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,7 +26,9 @@ using System.Collections.Generic;
 namespace Reko.Core
 {
     /// <summary>
-    /// A disassembler can be considered an enumerator of disassembled instructions.
+    /// A disassembler can be considered an enumerator of disassembled
+    /// instructions. This convenience class lets implementors focus on the
+    /// important method, DisassembleInstruction.
     /// </summary>
     /// <typeparam name="TInstr"></typeparam>
     public abstract class DisassemblerBase<TInstr> : IDisposable, IEnumerable<TInstr>
@@ -35,7 +37,7 @@ namespace Reko.Core
         {
             for (;;)
             {
-                var instr = DisassembleInstruction();
+                TInstr instr = DisassembleInstruction();
                 if (instr == null)
                     break;
                 yield return instr;

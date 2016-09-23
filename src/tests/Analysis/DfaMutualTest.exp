@@ -2,7 +2,7 @@
 // stackDelta: 0; fpuStackDelta: 0; fpuMaxParam: -1
 // MayUse:  dx
 // LiveOut:
-// Trashed: SCZO ax dx al dl ah dh
+// Trashed: SCZO ah al ax dh dl dx eax edx rax rdx
 // Preserved: sp
 // fn0C00_0000
 // Return size: 0
@@ -20,11 +20,11 @@ fn0C00_0000_exit:
 // stackDelta: 0; fpuStackDelta: 0; fpuMaxParam: -1
 // MayUse:  dx
 // LiveOut: ax dx
-// Trashed: SCZO ax dx al dl ah dh
+// Trashed: SCZO ah al ax dh dl dx eax edx rax rdx
 // Preserved: sp
 // fn0C00_0004
 // Return size: 0
-word16 fn0C00_0004(word16 dx, ptr16 dxOut)
+word16 fn0C00_0004(word16 dx, ptr16 & dxOut)
 fn0C00_0004_entry:
 	// succ:  l0C00_0004
 l0C00_0004:
@@ -47,7 +47,7 @@ fn0C00_0004_exit:
 // stackDelta: 0; fpuStackDelta: 0; fpuMaxParam: -1
 // MayUse:  dx
 // LiveOut: dx
-// Trashed: SCZO ax dx al dl ah dh
+// Trashed: SCZO ah al ax dh dl dx eax edx rax rdx
 // Preserved: sp
 // fn0C00_0013
 // Return size: 0

@@ -1,6 +1,6 @@
 ﻿#region License
 /* 
- * Copyright (C) 1999-2015 John Källén.
+ * Copyright (C) 1999-2016 John Källén.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,13 +29,34 @@ namespace Reko.Arch.M68k
 {
     public class M68kInstruction : MachineInstruction
     {
+        private const InstructionClass Linear = InstructionClass.Linear;
+        private const InstructionClass Transfer = InstructionClass.Transfer;
+        private const InstructionClass Cond = InstructionClass.Conditional;
+        private const InstructionClass CallTransfer = InstructionClass.Call | InstructionClass.Transfer;
+        private const InstructionClass CondTransfer = InstructionClass.Conditional | InstructionClass.Transfer;
+
+        private static Dictionary<Opcode, InstructionClass> classOf;
+
         public Opcode code;
         public PrimitiveType dataWidth;
         public MachineOperand op1;
         public MachineOperand op2;
         public MachineOperand op3;
 
+        public override bool IsValid { get { return code != Opcode.illegal; } }
+
         public override int OpcodeAsInteger { get { return (int)code; } }
+
+        public override MachineOperand GetOperand(int i)
+        {
+            switch (i)
+            {
+            case 0: return op1;
+            case 1: return op2;
+            case 2: return op3;
+            default: return null;
+            }
+        }
 
         public override void Render(MachineInstructionWriter writer)
         {
@@ -82,6 +103,68 @@ namespace Reko.Arch.M68k
             case 32: return ".l";
             default: throw new InvalidOperationException(string.Format("Unsupported data width {0}.", dataWidth.BitSize));
             }
+        }
+
+        public override InstructionClass InstructionClass
+        {
+            get
+            {
+                InstructionClass cl;
+                if (!classOf.TryGetValue(code, out cl))
+                    cl = InstructionClass.Linear;
+                return cl;
+            }
+        }
+
+        static M68kInstruction()
+        {
+            classOf = new Dictionary<Opcode, InstructionClass>
+            {
+                { Opcode.illegal, InstructionClass.Invalid },
+
+                { Opcode.bcc,      CondTransfer },
+                { Opcode.bcs,      CondTransfer },
+                { Opcode.beq,      CondTransfer },
+                { Opcode.bge,      CondTransfer },
+                { Opcode.bgt,      CondTransfer },
+                { Opcode.bhi,      CondTransfer },
+                { Opcode.ble,      CondTransfer },
+                { Opcode.blt,      CondTransfer },
+                { Opcode.bmi,      CondTransfer },
+                { Opcode.bne,      CondTransfer },
+                { Opcode.bpl,      CondTransfer },
+                { Opcode.bra,      Transfer },
+                { Opcode.bsr,      CallTransfer },
+                { Opcode.bvc,      CondTransfer },
+                { Opcode.bvs,      CondTransfer },
+
+                { Opcode.callm,    CallTransfer },
+                { Opcode.jmp,      Transfer },
+                { Opcode.jsr,      CallTransfer },
+                { Opcode.reset,    Transfer },
+
+                { Opcode.rtd,      Transfer },
+                { Opcode.rte,      Transfer },
+                { Opcode.rtm,      Transfer },
+                { Opcode.rtr,      Transfer },
+                { Opcode.rts,      Transfer },
+
+                { Opcode.traphi,   CondTransfer },
+                { Opcode.trapls,   CondTransfer },
+                { Opcode.trapcc,   CondTransfer },
+                { Opcode.trapcs,   CondTransfer },
+                { Opcode.trapne,   CondTransfer },
+                { Opcode.trapeq,   CondTransfer },
+                { Opcode.trapvc,   CondTransfer },
+                { Opcode.trapvs,   CondTransfer },
+                { Opcode.trappl,   CondTransfer },
+                { Opcode.trapmi,   CondTransfer },
+                { Opcode.trapge,   CondTransfer },
+                { Opcode.traplt,   CondTransfer },
+                { Opcode.trapgt,   CondTransfer },
+                { Opcode.traple,   CondTransfer },
+                { Opcode.trapv,    CondTransfer },
+            };
         }
     }
 }
