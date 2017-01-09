@@ -1,6 +1,6 @@
 [submodule "external/Capstone.NET"]
 	path = external/Capstone.NET
-	url = git@github.com:smx-smx/Capstone.NET.git
+	url = https://github.com/smx-smx/Capstone.NET.git
 [submodule "external/capstone"]
 	path = external/capstone
 	url = https://github.com/aquynh/capstone.git
