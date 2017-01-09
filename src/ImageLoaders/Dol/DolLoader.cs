@@ -63,13 +63,12 @@ namespace Reko.ImageLoaders.Dol
 			BeImageReader rdr = new BeImageReader(this.RawImage, 0);
 			this.hdr = new FileHeader(rdr);
 
-            var addrNull = Address.Ptr32(0);
             var mem = new MemoryArea(addrLoad, this.RawImage);
 			var segments = new List<ImageSegment>();
 
 			// Create code segments
 			for (uint i=0, snum=1; i<7; i++, snum++) {
-				if (hdr.addressText[i] == addrNull)
+				if (hdr.addressText[i] == Address32.NULL)
 					continue;
 
 				segments.Add(new ImageSegment(
@@ -81,7 +80,7 @@ namespace Reko.ImageLoaders.Dol
 
 			// Create all data segments
 			for (uint i = 0, snum = 1; i < 11; i++, snum++) {
-				if (hdr.addressData[i] == addrNull)
+				if (hdr.addressData[i] == Address32.NULL)
 					continue;
 				segments.Add(new ImageSegment(
 					string.Format("Data{0}", snum),
