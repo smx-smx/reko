@@ -56,7 +56,7 @@ namespace Reko.Arch.PowerPC
             //this.state = ppcState;
             this.frame = frame;
             this.host = host;
-            this.dasm = arch.CreateDisassemblerImpl(rdr).GetEnumerator();
+            this.dasm = arch.CreateInternalDisassemblerImpl(rdr).GetEnumerator();
         }
 
         public IEnumerator<RtlInstructionCluster> GetEnumerator()
