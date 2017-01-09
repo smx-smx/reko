@@ -324,7 +324,7 @@ namespace Reko.Arch.PowerPC
         { }
 
 		public override IEnumerable<MachineInstruction> CreateDisassembler(ImageReader imageReader) {
-			throw new NotImplementedException();
+			return new PowerPcDisassembler(this, imageReader);
 		}
 
 		public override IEnumerable<Address> CreatePointerScanner(
@@ -353,7 +353,7 @@ namespace Reko.Arch.PowerPC
         { }
 
 		public override IEnumerable<MachineInstruction> CreateDisassembler(ImageReader imageReader) {
-			throw new NotImplementedException();
+			return new PowerPcDisassembler(this, imageReader);
 		}
 
 		public override IEnumerable<Address> CreatePointerScanner(
