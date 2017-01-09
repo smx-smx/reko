@@ -16,6 +16,9 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Architectures", "Architectures", "{18994109-C4D5-49F9-86E0-3B5B1046C08E}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PowerPC", "Arch\PowerPC\PowerPC.csproj", "{B7DC39DD-6693-4F71-AE7F-007C5C62CBAA}"
+	ProjectSection(ProjectDependencies) = postProject
+		{1297DCEE-009D-4739-8124-3F064EA9EA10} = {1297DCEE-009D-4739-8124-3F064EA9EA10}
+	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "M68k", "Arch\M68k\M68k.csproj", "{38A94634-B2B2-4A89-AF02-2A2898B93343}"
 EndProject

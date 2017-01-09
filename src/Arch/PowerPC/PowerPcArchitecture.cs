@@ -112,14 +112,14 @@ namespace Reko.Arch.PowerPC
 
         #region IProcessorArchitecture Members
 
-        public PowerPcDisassembler CreateDisassemblerImpl(ImageReader rdr)
+		public InternalPowerPcDisassembler CreateInternalDisassemblerImpl(ImageReader rdr)
         {
-            return new PowerPcDisassembler(this, rdr, WordWidth);
+            return new InternalPowerPcDisassembler(this, rdr, WordWidth);
         }
 
-        public override IEnumerable<MachineInstruction> CreateDisassembler(ImageReader rdr)
+        public IEnumerable<MachineInstruction> CreateInternalDisassembler(ImageReader rdr)
         {
-            return new PowerPcDisassembler(this, rdr, WordWidth);
+            return new InternalPowerPcDisassembler(this, rdr, WordWidth);
         }
 
         public override ImageReader CreateImageReader(MemoryArea image, Address addr)
@@ -323,7 +323,11 @@ namespace Reko.Arch.PowerPC
             : base(PrimitiveType.Word32)
         { }
 
-        public override IEnumerable<Address> CreatePointerScanner(
+		public override IEnumerable<MachineInstruction> CreateDisassembler(ImageReader imageReader) {
+			throw new NotImplementedException();
+		}
+
+		public override IEnumerable<Address> CreatePointerScanner(
             SegmentMap map, 
             ImageReader rdr, 
             IEnumerable<Address> knownAddresses,
@@ -348,7 +352,11 @@ namespace Reko.Arch.PowerPC
             : base(PrimitiveType.Word64)
         { }
 
-        public override IEnumerable<Address> CreatePointerScanner(
+		public override IEnumerable<MachineInstruction> CreateDisassembler(ImageReader imageReader) {
+			throw new NotImplementedException();
+		}
+
+		public override IEnumerable<Address> CreatePointerScanner(
             SegmentMap map,
             ImageReader rdr,
             IEnumerable<Address> knownAddresses,

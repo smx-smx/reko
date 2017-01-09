@@ -24,6 +24,8 @@ using Reko.Core.Types;
 using System;
 using System.Collections.Generic;
 using System.Text;
+using Gee.External.Capstone;
+using Gee.External.Capstone.PowerPc;
 
 namespace Reko.Arch.PowerPC
 {
@@ -44,12 +46,16 @@ namespace Reko.Arch.PowerPC
         public MachineOperand op5;
         public bool setsCR0;
 
-        public PowerPcInstruction(Opcode opcode)
+		public PowerPcInstruction(Opcode opcode)
         {
             this.opcode = opcode;
         }
 
-        public PowerPcInstruction(Opcode opcode, MachineOperand op1, MachineOperand op2, MachineOperand op3, bool setsCR0)
+		public PowerPcInstruction(Instruction<Gee.External.Capstone.PowerPc.PowerPcInstruction, PowerPcRegister, PowerPcInstructionGroup, PowerPcInstructionDetail> current) {
+			throw new NotImplementedException();
+		}
+
+		public PowerPcInstruction(Opcode opcode, MachineOperand op1, MachineOperand op2, MachineOperand op3, bool setsCR0)
         {
             this.opcode = opcode;
             this.op1 = op1;
@@ -211,7 +217,7 @@ namespace Reko.Arch.PowerPC
                 { Opcode.bsolrl,    LinkCondTransfer },
             };
         }
-    }
+	}
 
     public class AddressOperand : MachineOperand
     {
