@@ -8,7 +8,7 @@ using Gee.External.Capstone.PowerPc;
 using Reko.Core;
 
 namespace Reko.Arch.PowerPC {
-	class PowerPcDisassembler : DisassemblerBase<PowerPcInstruction> {
+	public class PowerPcDisassembler : DisassemblerBase<PowerPcInstruction> {
 		private IEnumerator<Instruction<Gee.External.Capstone.PowerPc.PowerPcInstruction, PowerPcRegister, PowerPcInstructionGroup, PowerPcInstructionDetail>> stream;
 
 		public PowerPcDisassembler(DisassembleMode mode, ImageReader rdr) {
