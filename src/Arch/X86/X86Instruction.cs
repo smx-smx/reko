@@ -30,8 +30,8 @@ namespace Reko.Arch.X86
     /// <summary>
     /// Models an X86 instruction.
     /// </summary>
-    public class X86Instruction : MachineInstruction
-	{
+    public class X86Instruction : MachineInstructionImpl
+    {
         private const InstructionClass CondLinear = InstructionClass.Conditional | InstructionClass.Linear;
         private const InstructionClass CondTransfer = InstructionClass.Conditional | InstructionClass.Transfer;
         private const InstructionClass LinkTransfer = InstructionClass.Call | InstructionClass.Transfer;

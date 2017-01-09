@@ -143,7 +143,7 @@ namespace Reko.UnitTests.Gui.Windows.Controls
                 .Return(instrs);
         }
 
-        private class TestInstruction : MachineInstruction
+        private class TestInstruction : MachineInstructionImpl
         {
             public override int OpcodeAsInteger
             {

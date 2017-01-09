@@ -29,7 +29,7 @@ using Gee.External.Capstone.PowerPc;
 
 namespace Reko.Arch.PowerPC
 {
-    public class PowerPcInstruction : MachineInstruction
+    public class PowerPcInstruction : MachineInstructionImpl
     {
         private const InstructionClass Transfer = InstructionClass.Transfer;
         private const InstructionClass CondTransfer = InstructionClass.Conditional | InstructionClass.Transfer;

@@ -25,7 +25,7 @@ using System.Text;
 
 namespace Reko.UnitTests.Mocks
 {
-    public class FakeInstruction : MachineInstruction
+    public class FakeInstruction : MachineInstructionImpl
     {
         private Operation operation;
         private MachineOperand[] ops;

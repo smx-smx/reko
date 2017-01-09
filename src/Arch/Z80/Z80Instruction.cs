@@ -26,7 +26,7 @@ using System.Text;
 
 namespace Reko.Arch.Z80
 {
-    public class Z80Instruction : MachineInstruction
+    public class Z80Instruction : MachineInstructionImpl
     {
         private static Dictionary<Opcode, InstructionClass> classOf;
 

@@ -27,7 +27,7 @@ using System.Text;
 
 namespace Reko.Arch.Sparc
 {
-    public class SparcInstruction : MachineInstruction
+    public class SparcInstruction : MachineInstructionImpl
     {
         private const InstructionClass Transfer = InstructionClass.Delay | InstructionClass.Transfer;
         private const InstructionClass CondTransfer = InstructionClass.Delay | InstructionClass.Transfer | InstructionClass.Conditional;

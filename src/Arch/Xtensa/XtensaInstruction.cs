@@ -24,7 +24,7 @@ using System.Collections.Generic;
 
 namespace Reko.Arch.Xtensa
 {
-    public class XtensaInstruction : MachineInstruction
+    public class XtensaInstruction : MachineInstructionImpl
     {
         private static readonly Dictionary<Opcodes, string> instrNames = new Dictionary<Opcodes, string>
         {

@@ -32,7 +32,7 @@ namespace Reko.Arch.Arm
 {
     using CapstoneArmInstruction = Instruction<Arm64Instruction, Arm64Register, Arm64InstructionGroup, Arm64InstructionDetail>;
 
-    public class AArch64Instruction : MachineInstruction
+    public class AArch64Instruction : MachineInstructionImpl
     {
         private static Dictionary<Arm64Instruction, InstructionClass> classOf;
 

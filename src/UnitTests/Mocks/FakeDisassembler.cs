@@ -30,7 +30,7 @@ namespace Reko.UnitTests.Mocks
     {
         private IEnumerator<MachineInstruction> instrs;
         private Address addr;
-        private MachineInstruction instr;
+        private MachineInstructionImpl instr;
 
         public FakeDisassembler(Address a, IEnumerator<MachineInstruction> e)
         {
@@ -42,7 +42,7 @@ namespace Reko.UnitTests.Mocks
         {
             if (!instrs.MoveNext())
                 return null;
-            instr = instrs.Current;
+            instr = (MachineInstructionImpl) instrs.Current;
             instr.Address = addr;
             instr.Length = 4;
             addr += 4;

@@ -26,7 +26,7 @@ using System.Text;
 
 namespace Reko.Arch.Vax
 {
-    public class VaxInstruction : MachineInstruction
+    public class VaxInstruction : MachineInstructionImpl
     {
         internal MachineOperand[] Operands;
         private static Dictionary<Opcode, InstructionClass> classOf;

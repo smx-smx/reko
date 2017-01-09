@@ -26,7 +26,7 @@ using System.Text;
 
 namespace Reko.Arch.Pdp11
 {
-    public class Pdp11Instruction : MachineInstruction
+    public class Pdp11Instruction : MachineInstructionImpl
     {
         private static Dictionary<Opcode, InstructionClass> classOf;
 

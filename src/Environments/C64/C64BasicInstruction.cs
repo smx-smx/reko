@@ -31,7 +31,7 @@ namespace Reko.Environments.C64
     /// That's right, your eyes are not fooling you. This class models
     /// C64 basic instructions as MachineInstructions.
     /// </summary>
-    public class C64BasicInstruction : MachineInstruction
+    public class C64BasicInstruction : MachineInstructionImpl
     {
         public ushort NextAddress;
         public byte[] Line;
