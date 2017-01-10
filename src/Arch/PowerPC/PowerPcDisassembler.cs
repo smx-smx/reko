@@ -60,7 +60,7 @@ namespace Reko.Arch.PowerPC {
             {
             }
 
-            protected override Instruction<Gee.External.Capstone.PowerPc.PowerPcInstruction, PowerPcRegister, PowerPcInstructionGroup, PowerPcInstructionDetail> CreateInstruction(NativeInstruction nativeInstruction)
+            public override Instruction<Gee.External.Capstone.PowerPc.PowerPcInstruction, PowerPcRegister, PowerPcInstructionGroup, PowerPcInstructionDetail> CreateManagedInstruction()
             {
                 return new PowerPcInstruction();
             }
