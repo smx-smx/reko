@@ -96,45 +96,45 @@ namespace Reko.Arch.PowerPC
         public void Render(MachineInstructionWriter writer)
         {
             writer.WriteOpcode(base.Mnemonic);
-            if (base.Operands == 0)
-                return;
             writer.Tab();
             var sep = ",";
             foreach (var op in ArchitectureDetail.Operands)
             {
+                //$TODO smx-smx: the ArchitectureDetail.Operands property is 
+                // null. it needs to be filled in the Capstone.NET project.
 
             }
-        /* Ye Olde Code. Remove when ready.
-            var op = string.Format("{0}{1}", 
-                opcode,
-                setsCR0 ? "." : "");
-            writer.WriteOpcode(op);
-            if (op1 != null)
-            {
-                writer.Tab();
-                op1.Write(true, writer);
-                if (op2 != null)
+            /* Ye Olde Code. Remove when ready.
+                var op = string.Format("{0}{1}", 
+                    opcode,
+                    setsCR0 ? "." : "");
+                writer.WriteOpcode(op);
+                if (op1 != null)
                 {
-                    writer.Write(',');
-                    op2.Write(true, writer);
-                    if (op3 != null)
+                    writer.Tab();
+                    op1.Write(true, writer);
+                    if (op2 != null)
                     {
                         writer.Write(',');
-                        op3.Write(true, writer);
-                        if (op4 != null)
+                        op2.Write(true, writer);
+                        if (op3 != null)
                         {
-                            writer.Write(",");
-                            op4.Write(true, writer);
-                            if (op5 != null)
+                            writer.Write(',');
+                            op3.Write(true, writer);
+                            if (op4 != null)
                             {
                                 writer.Write(",");
-                                op5.Write(true, writer);
+                                op4.Write(true, writer);
+                                if (op5 != null)
+                                {
+                                    writer.Write(",");
+                                    op5.Write(true, writer);
+                                }
                             }
                         }
                     }
                 }
-            }
-            */
+                */
         }
 
         public override string ToString()

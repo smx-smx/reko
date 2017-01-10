@@ -64,6 +64,8 @@ namespace Reko.ImageLoaders.Dol
 		public DolHeader(DolStructure hdr) {
 			this.offsetText = hdr.offsetText;
 			this.offsetData = hdr.offsetData;
+            this.sizeText = hdr.sizeText;
+            this.sizeData = hdr.sizeData;
 			this.sizeText = hdr.sizeText;
 			this.sizeBSS = hdr.sizeBSS;
 
@@ -105,61 +107,94 @@ namespace Reko.ImageLoaders.Dol
 			return Load(addrLoad, arch, platform);
 		}
 
-		public override Program Load(Address addrLoad, IProcessorArchitecture arch, IPlatform platform) {
-			BeImageReader rdr = new BeImageReader(this.RawImage, 0);
-			try {
-				this.hdr = new DolHeader(new StructureReader<DolStructure>(rdr).Read());
-			} catch (Exception ex) {
-				throw new BadImageFormatException("Invalid DOL header. " + ex.Message);
-			}
+		public override Program Load(Address addrLoad, IProcessorArchitecture arch, IPlatform platform)
+        {
+            BeImageReader rdr = new BeImageReader(this.RawImage, 0);
+            try
+            {
+                this.hdr = new DolHeader(new StructureReader<DolStructure>(rdr).Read());
+            }
+            catch (Exception ex)
+            {
+                throw new BadImageFormatException("Invalid DOL header.", ex);
+            }
 
-			var segments = new List<ImageSegment>();
+            SegmentMap segmentMap = BuildSegmentMap(addrLoad, this.hdr);
 
-			// Create code segments
-			for (uint i = 0, snum = 1; i < 7; i++, snum++) {
-				if (hdr.addressText[i] == Address32.NULL)
-					continue;
+            var entryPoint = new ImageSymbol(this.hdr.entrypoint) { Type = SymbolType.Procedure };
+            var program = new Program(
+                segmentMap,
+                arch,
+                platform)
+            {
+                ImageSymbols = { { this.hdr.entrypoint, entryPoint } },
+                EntryPoints = { { this.hdr.entrypoint, entryPoint } }
+            };
+            return program;
+        }
 
-				segments.Add(new ImageSegment(
-					string.Format("Text{0}", snum),
-					hdr.addressText[i], hdr.sizeText[i],
-					AccessMode.ReadExecute
-				));
-			}
+        public SegmentMap BuildSegmentMap(Address addrLoad, DolHeader header)
+        {
+            var segments = new List<ImageSegment>();
 
-			// Create all data segments
-			for (uint i = 0, snum = 1; i < 11; i++, snum++) {
-				if (hdr.addressData[i] == Address32.NULL)
-					continue;
-				segments.Add(new ImageSegment(
-					string.Format("Data{0}", snum),
-					hdr.addressData[i], hdr.sizeData[i],
-					AccessMode.ReadWrite
-				));
-			}
+            // Create code segments. They are named "Text1", "Text2"... according to
+            // http://wiibrew.org/wiki/DOL
+            for (uint i = 0; i < 7; i++)
+            {
+                if (header.addressText[i] == Address32.NULL)
+                    continue;
+                var seg = LoadSegment(
+                    string.Format("Text{0}", i+1),
+                    header.offsetText[i],
+                    header.sizeText[i],
+                    header.addressText[i],
+                    AccessMode.ReadExecute);
+                segments.Add(seg);
+            }
 
-			if (hdr.addressBSS != Address32.NULL) {
-				segments.Add(new ImageSegment(
-					".bss",
-					hdr.addressBSS, hdr.sizeBSS,
-					AccessMode.ReadWrite
-				));
-			}
+            // Create all data segments, named "Data0", "Data1"...
+            for (uint i = 0; i < 11; i++)
+            {
+                if (header.addressData[i] == Address32.NULL)
+                    continue;
+                var seg = LoadSegment(
+                     string.Format("Data{0}", i),
+                     header.offsetData[i],
+                     header.sizeData[i],
+                     header.addressData[i],
+                     AccessMode.ReadWrite);
+                segments.Add(seg);
+            }
 
-			var segmentMap = new SegmentMap(addrLoad, segments.ToArray());
+            if (header.addressBSS != Address32.NULL)
+            {
+                var mem = new MemoryArea(header.addressBSS, new byte[header.sizeBSS]);
+                var seg = new ImageSegment(".bss", header.addressBSS, mem, AccessMode.ReadWrite);
+                seg.Size = header.sizeBSS;
+                segments.Add(seg);
+            }
+            var segmentMap = new SegmentMap(addrLoad, segments.ToArray());
+            return segmentMap;
+        }
 
-			var entryPoint = new ImageSymbol(this.hdr.entrypoint) { Type = SymbolType.Procedure };
-			var program = new Program(
-				segmentMap,
-				arch,
-				platform) {
-				ImageSymbols = { { this.hdr.entrypoint, entryPoint } },
-				EntryPoints = { { this.hdr.entrypoint, entryPoint } }
-			};
-			return program;
-		}
+        /// <summary>
+        /// Loads a segment from the image file into a MemoryArea at the correct place in
+        /// memory.
+        /// </summary>
+        private ImageSegment LoadSegment(
+            string name, 
+            uint offset, 
+            uint size,
+            Address addr,
+            AccessMode access)
+        {
+            var bytes = new byte[size];
+            Array.Copy(RawImage, (int)offset, bytes, 0, size);
+            var mem = new MemoryArea(addr, bytes);
+            return new ImageSegment(name, addr, mem, access) { Size = size };
+        }
 
-		public override RelocationResults Relocate(Program program, Address addrLoad) {
+        public override RelocationResults Relocate(Program program, Address addrLoad) {
 			throw new NotImplementedException();
 		}
 	}

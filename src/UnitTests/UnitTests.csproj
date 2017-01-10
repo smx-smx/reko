@@ -98,6 +98,7 @@
     <Compile Include="Environments\Windows\MsPrintfFormatParserTests.cs" />
     <Compile Include="Environments\Windows\X86_64ProcedureSerializerTests.cs" />
     <Compile Include="Fragments\FCmpFragment.cs" />
+    <Compile Include="ImageLoaders\Dol\DolLoaderTests.cs" />
     <Compile Include="Mocks\FakeTypeDeserializer.cs" />
     <Compile Include="Core\Analysis\PyBuildValueFormatParserTests.cs" />
     <Compile Include="Mocks\XmlnsHidingWriter.cs" />
@@ -697,6 +698,10 @@
     <ProjectReference Include="..\ImageLoaders\BinHex\BinHex.csproj">
       <Project>{3F73B4EB-4EE6-45DF-AA07-06ECDEFA5BD9}</Project>
       <Name>BinHex</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\ImageLoaders\Dol\Dol.csproj">
+      <Project>{5B6DA2CA-5CA1-4A84-8084-9D6780F64BCF}</Project>
+      <Name>Dol</Name>
     </ProjectReference>
     <ProjectReference Include="..\ImageLoaders\Elf\Elf.csproj">
       <Project>{33DCEC6D-66F2-4AB7-9DD9-293DBB5414B1}</Project>

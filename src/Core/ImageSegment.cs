@@ -152,7 +152,7 @@ namespace Reko.Core
 
         public override string ToString()
 		{
-			return string.Format("Segment {0} at {1}, {2} / {3} bytes", Name, Address.ToString(), ContentSize, Size);
+			return string.Format("Segment {0} at {1}, {2:X} / {3:X} bytes", Name, Address.ToString(), ContentSize, Size);
 		}
     }
 
