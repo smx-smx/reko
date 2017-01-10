@@ -24,6 +24,7 @@ using System.Text;
 
 namespace Reko.Arch.PowerPC
 {
+    /*
     public enum Opcode : ushort
     {
         illegal,
@@ -270,4 +271,5 @@ namespace Reko.Arch.PowerPC
         xori,
         xoris,
     }
+    */
 }

@@ -31,6 +31,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using ImmediateOperand = Reko.Core.Machine.ImmediateOperand;
+using Opcode = Gee.External.Capstone.PowerPc.PowerPcInstruction;
 
 namespace Reko.Environments.Ps3
 {
@@ -100,29 +101,26 @@ namespace Reko.Environments.Ps3
 
         public override ProcedureBase GetTrampolineDestination(ImageReader rdr, IRewriterHost host)
         {
-            var dasm = new InternalPowerPcDisassembler(
-                (PowerPcArchitecture64) Architecture,
-                rdr,
-                PrimitiveType.Word64);
+            var dasm = PowerPcDisassembler.Create64(rdr);
             PowerPcInstruction instr;
             ImmediateOperand immOp;
             MemoryOperand memOp;
 
             //addi r12,r0,0000
             instr = dasm.DisassembleInstruction();
-            if (instr.Opcode != Opcode.addi)
+            if (instr.Opcode != Opcode.ADDI)
                 return null;
 
             //oris r12,r12,0006
             instr = dasm.DisassembleInstruction();
-            if (instr.Opcode != Opcode.oris)
+            if (instr.Opcode != Opcode.ORIS)
                 return null;
             immOp = (ImmediateOperand) instr.op3;
             uint aFuncDesc = immOp.Value.ToUInt32() << 16;
 
             //lwz r12,nnnn(r12)
             instr = dasm.DisassembleInstruction();
-            if (instr.Opcode != Opcode.lwz)
+            if (instr.Opcode != Opcode.LWZ)
                 return null;
             memOp = (MemoryOperand)instr.op2;
             int offset = memOp.Offset.ToInt32();
@@ -130,28 +128,28 @@ namespace Reko.Environments.Ps3
 
             //std r2,40(r1)
             instr = dasm.DisassembleInstruction();
-            if (instr.Opcode != Opcode.std)
+            if (instr.Opcode != Opcode.STD)
                 return null;
 
             //lwz r0,0(r12)
             // Have a pointer to a trampoline
             instr = dasm.DisassembleInstruction();
-            if (instr.Opcode != Opcode.lwz)
+            if (instr.Opcode != Opcode.LWZ)
                 return null;
 
             //lwz r2,4(r12)
             instr = dasm.DisassembleInstruction();
-            if (instr.Opcode != Opcode.lwz)
+            if (instr.Opcode != Opcode.LWZ)
                 return null;
 
             // mtctr r0
             instr = dasm.DisassembleInstruction();
-            if (instr.Opcode != Opcode.mtctr)
+            if (instr.Opcode != Opcode.MTCTR)
                 return null;
 
             // bcctr 14,00
             instr = dasm.DisassembleInstruction();
-            if (instr.Opcode != Opcode.bcctr)
+            if (instr.Opcode != Opcode.BCCTR)
                 return null;
 
             // Read the function pointer from the function descriptor.

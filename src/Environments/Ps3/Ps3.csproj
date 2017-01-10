@@ -56,6 +56,10 @@
     <Compile Include="Ps3Platform.cs" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\..\external\Capstone.NET\Gee.External.Capstone\Gee.External.Capstone.csproj">
+      <Project>{1297dcee-009d-4739-8124-3f064ea9ea10}</Project>
+      <Name>Gee.External.Capstone</Name>
+    </ProjectReference>
     <ProjectReference Include="..\..\Arch\PowerPC\PowerPC.csproj">
       <Project>{B7DC39DD-6693-4F71-AE7F-007C5C62CBAA}</Project>
       <Name>PowerPC</Name>

@@ -8,11 +8,24 @@ using Gee.External.Capstone.PowerPc;
 using Reko.Core;
 
 namespace Reko.Arch.PowerPC {
-	public class PowerPcDisassembler : DisassemblerBase<PowerPcInstruction> {
-		private IEnumerator<Instruction<Gee.External.Capstone.PowerPc.PowerPcInstruction, PowerPcRegister, PowerPcInstructionGroup, PowerPcInstructionDetail>> stream;
+    public class PowerPcDisassembler : DisassemblerBase<PowerPcInstruction>
+    {
+        private IEnumerator<Instruction<Gee.External.Capstone.PowerPc.PowerPcInstruction, PowerPcRegister, PowerPcInstructionGroup, PowerPcInstructionDetail>> stream;
 
-		public PowerPcDisassembler(DisassembleMode mode, ImageReader rdr) {
-			var dasm = CapstoneDisassembler.CreatePowerPcDisassembler(mode);
+        public static PowerPcDisassembler Create32(ImageReader rdr)
+        {
+            //$sxm: todo!
+            throw new NotImplementedException();
+        }
+
+        public static PowerPcDisassembler Create64(ImageReader rdr)
+        {
+            //$sxm: todo!
+            throw new NotImplementedException();
+        }
+
+        public PowerPcDisassembler(DisassembleMode mode, ImageReader rdr) {
+			var dasm = new InternalDisassembler(mode);
 			dasm.EnableDetails = true;
 			this.stream = dasm.DisassembleStream(
 				rdr.Bytes,
@@ -36,9 +49,21 @@ namespace Reko.Arch.PowerPC {
 
 		public override PowerPcInstruction DisassembleInstruction() {
 			if (stream.MoveNext()) {
-				return new Reko.Arch.PowerPC.PowerPcInstruction(stream.Current);
+				return (PowerPcInstruction) stream.Current;
 			} else
 				return null;
 		}
+
+        private class InternalDisassembler : CapstonePowerPcDisassembler
+        {
+            public InternalDisassembler(DisassembleMode mode) : base(mode)
+            {
+            }
+
+            protected override Instruction<Gee.External.Capstone.PowerPc.PowerPcInstruction, PowerPcRegister, PowerPcInstructionGroup, PowerPcInstructionDetail> CreateInstruction(NativeInstruction nativeInstruction)
+            {
+                return new PowerPcInstruction();
+            }
+        }
 	}
 }

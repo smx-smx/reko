@@ -30,6 +30,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text;
+using Opcode = Gee.External.Capstone.PowerPc.PowerPcInstruction;
 
 namespace Reko.Arch.PowerPC
 {
@@ -112,14 +113,16 @@ namespace Reko.Arch.PowerPC
 
         #region IProcessorArchitecture Members
 
-		public InternalPowerPcDisassembler CreateInternalDisassemblerImpl(ImageReader rdr)
+		public PowerPcDisassembler CreateInternalDisassemblerImpl(ImageReader rdr)
         {
-            return new InternalPowerPcDisassembler(this, rdr, WordWidth);
+            throw new NotImplementedException();        //$ sxm-sxm: for you to do!
+            //return new PowerPcDisassembler(this, rdr, WordWidth);
         }
 
         public IEnumerable<MachineInstruction> CreateInternalDisassembler(ImageReader rdr)
         {
-            return new InternalPowerPcDisassembler(this, rdr, WordWidth);
+            throw new NotImplementedException();        //$ sxm-sxm: for you to do!
+            //return new InternalPowerPcDisassembler(this, rdr, WordWidth);
         }
 
         public override ImageReader CreateImageReader(MemoryArea image, Address addr)
@@ -191,13 +194,13 @@ namespace Reko.Arch.PowerPC
         {
             var e = rdr.GetEnumerator();
 
-            if (!e.MoveNext() || (e.Current.Opcode != Opcode.addis && e.Current.Opcode != Opcode.oris))
+            if (!e.MoveNext() || (e.Current.Opcode != Opcode.ADDIS && e.Current.Opcode != Opcode.ORIS))
                 return null;
             var addrInstr = e.Current.Address;
             var reg = ((RegisterOperand)e.Current.op1).Register;
             var uAddr = ((ImmediateOperand)e.Current.op3).Value.ToUInt32() << 16;
 
-            if (!e.MoveNext() || e.Current.Opcode != Opcode.lwz)
+            if (!e.MoveNext() || e.Current.Opcode != Opcode.LWZ)
                 return null;
             var mem = e.Current.op2 as MemoryOperand;
             if (mem == null)
@@ -207,12 +210,12 @@ namespace Reko.Arch.PowerPC
             uAddr = (uint)((int)uAddr + mem.Offset.ToInt32());
             reg = ((RegisterOperand)e.Current.op1).Register;
 
-            if (!e.MoveNext() || e.Current.Opcode != Opcode.mtctr)
+            if (!e.MoveNext() || e.Current.Opcode != Opcode.MTCTR)
                 return null;
             if (((RegisterOperand)e.Current.op1).Register != reg)
                 return null;
 
-            if (!e.MoveNext() || e.Current.Opcode != Opcode.bcctr)
+            if (!e.MoveNext() || e.Current.Opcode != Opcode.BCCTR)
                 return null;
 
             // We saw a thunk! now try to resolve it.
