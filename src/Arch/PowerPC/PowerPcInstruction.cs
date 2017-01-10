@@ -95,6 +95,15 @@ namespace Reko.Arch.PowerPC
 
         public void Render(MachineInstructionWriter writer)
         {
+            writer.WriteOpcode(base.Mnemonic);
+            if (base.Operands == 0)
+                return;
+            writer.Tab();
+            var sep = ",";
+            foreach (var op in ArchitectureDetail.Operands)
+            {
+
+            }
         /* Ye Olde Code. Remove when ready.
             var op = string.Format("{0}{1}", 
                 opcode,
@@ -128,7 +137,7 @@ namespace Reko.Arch.PowerPC
             */
         }
 
-        public override  string ToString()
+        public override string ToString()
         {
             var sr = new StringRenderer();
             Render(sr);
