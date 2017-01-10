@@ -241,6 +241,9 @@
     <Environments Include="$(SolutionDir)Environments\ZX81\$(OutDir)Reko.Environments.ZX81.*" />
     <Libraries Include="$(SolutionDir)Libraries\Libc\$(OutDir)Reko.Libraries.Libc.*" />
     <Libraries Include="$(SolutionDir)Libraries\Python\$(OutDir)Reko.Libraries.Python.*" />
+    <ExternalComponents Condition="'$(Configuration)' == 'Debug'" Include="$(SolutionDir)..\external\capstone\msvc\capstone_dll\bin\Win32\Debug\capstone.dll" />
+    <ExternalComponents Condition="'$(Configuration)' == 'Debug'" Include="$(SolutionDir)..\external\Capstone.NET\Gee.External.Capstone.Proxy\bin\Win32\NativeDebug\Gee.External.Capstone.Proxy.dll" />
+    <ExternalComponents Condition="'$(Configuration)' == 'Debug'" Include="$(SolutionDir)..\external\Capstone.NET\Gee.External.Capstone\bin\x86\.NET45Debug\Gee.External.Capstone.dll" />
     <ConfigurationFiles Include="$(SolutionDir)Drivers\reko.config" />
   </ItemGroup>
   <Import Project="$(VSToolsPath)\WebApplications\Microsoft.WebApplication.targets" Condition="'$(VSToolsPath)' != ''" />

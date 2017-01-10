@@ -24,7 +24,7 @@ using System;
 
 namespace Reko.Arch.Mips
 {
-    public class MipsInstruction : MachineInstruction
+    public class MipsInstruction : MachineInstructionImpl
     {
         private const InstructionClass LinkCondTransfer = InstructionClass.Conditional | InstructionClass.Call | InstructionClass.Transfer | InstructionClass.Delay;
         private const InstructionClass CondTransfer = InstructionClass.Conditional | InstructionClass.Transfer | InstructionClass.Delay;

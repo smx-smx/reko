@@ -27,7 +27,7 @@ using System.Text;
 
 namespace Reko.Arch.Cil
 {
-    public class CilInstruction : MachineInstruction
+    public class CilInstruction : MachineInstructionImpl
     {
         private static Dictionary<OpCode, string> mpopcodetostring = new Dictionary<OpCode, string>
         {

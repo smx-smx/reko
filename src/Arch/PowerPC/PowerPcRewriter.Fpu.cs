@@ -31,7 +31,7 @@ namespace Reko.Arch.PowerPC
     {
         private void MaybeEmitCr1(Expression e)
         {
-            if (!instr.setsCR0)
+            if (!instr.ArchitectureDetail.UpdateCr0)
                 return;
             var cr1 = frame.EnsureFlagGroup(arch.cr, 0x2, "cr1", PrimitiveType.Byte);
             emitter.Assign(cr1, emitter.Cond(e));

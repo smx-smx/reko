@@ -25,6 +25,7 @@ using NUnit.Framework;
 using System;
 using System.Collections.Generic;
 using System.Text;
+using Opcode = Gee.External.Capstone.PowerPc.PowerPcInstruction;
 
 namespace Reko.UnitTests.Arch.PowerPC
 {
@@ -66,14 +67,14 @@ namespace Reko.UnitTests.Arch.PowerPC
         public void PPCDis_IllegalOpcode()
         {
             PowerPcInstruction instr = DisassembleBytes(new byte[] { 00, 00, 00, 00 });
-            Assert.AreEqual(Opcode.illegal, instr.Opcode);
+            Assert.AreEqual(Opcode.INVALID, instr.Opcode);
         }
 
         [Test]
         public void PPCDis_Ori()
         {
             PowerPcInstruction instr = DisassembleBytes(new byte[] { 0x60, 0x1F, 0x44, 0x44 });
-            Assert.AreEqual(Opcode.ori, instr.Opcode);
+            Assert.AreEqual(Opcode.ORI, instr.Opcode);
             Assert.AreEqual(3, instr.Operands);
             Assert.AreEqual("ori\tr31,r0,4444", instr.ToString());
         }

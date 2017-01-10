@@ -24,7 +24,7 @@ using System.Collections.Generic;
 
 namespace Reko.Arch.RiscV
 {
-    public class RiscVInstruction : MachineInstruction
+    public class RiscVInstruction : MachineInstructionImpl
     {
         private static Dictionary<Opcode, string> opcodeNames;
         private static Dictionary<Opcode, InstructionClass> instrClasses;

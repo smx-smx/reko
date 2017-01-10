@@ -31,7 +31,7 @@ namespace Reko.Arch.PowerPC
     {
         private void MaybeEmitCr6(Expression e)
         {
-            if (!instr.setsCR0)
+            if (!instr.ArchitectureDetail.UpdateCr0)
                 return;
             var cr6 = frame.EnsureRegister(arch.CrRegisters[6]);
             emitter.Assign(cr6, emitter.Cond(e));

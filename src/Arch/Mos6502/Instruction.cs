@@ -26,7 +26,7 @@ using System.Text;
 
 namespace Reko.Arch.Mos6502
 {
-    public class Instruction : MachineInstruction
+    public class Instruction : MachineInstructionImpl
     {
         private static Dictionary<Opcode, InstructionClass> classOf;
 

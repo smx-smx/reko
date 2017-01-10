@@ -27,18 +27,18 @@ namespace Reko.Core.Machine
     /// <summary>
     /// Abstract base class for low-level machine instructions.
     /// </summary>
-    public abstract class MachineInstruction
+    public abstract class MachineInstructionImpl : MachineInstruction
     {
         /// <summary>
         /// The address at which the instruction begins.
         /// </summary>
-        public Address Address;
+        public Address Address { get; set; }
 
         /// <summary>
         /// The length of the entire instruction. Some architectures, e.g. M68k, x86, and most
         /// 8-bit microprocessors, have variable length instructions.
         /// </summary>
-        public int Length;
+        public int Length { get; set; }
 
         /// <summary>
         /// The kind of instruction

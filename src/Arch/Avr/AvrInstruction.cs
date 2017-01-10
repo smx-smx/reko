@@ -23,7 +23,7 @@ using Reko.Core.Machine;
 
 namespace Reko.Arch.Avr
 {
-    public class AvrInstruction : MachineInstruction
+    public class AvrInstruction : MachineInstructionImpl
     {
         public Opcode opcode;
         public MachineOperand[] operands;

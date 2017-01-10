@@ -27,7 +27,7 @@ using System.Text;
 
 namespace Reko.Arch.M68k
 {
-    public class M68kInstruction : MachineInstruction
+    public class M68kInstruction : MachineInstructionImpl
     {
         private const InstructionClass Linear = InstructionClass.Linear;
         private const InstructionClass Transfer = InstructionClass.Transfer;

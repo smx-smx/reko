@@ -26,53 +26,38 @@ using System.Collections.Generic;
 using System.Text;
 using Gee.External.Capstone;
 using Gee.External.Capstone.PowerPc;
+using CapInstruction = Gee.External.Capstone.PowerPc.PowerPcInstruction;
 
 namespace Reko.Arch.PowerPC
 {
-    public class PowerPcInstruction : MachineInstruction
+    public class PowerPcInstruction : 
+        Instruction<CapInstruction, PowerPcRegister, PowerPcInstructionGroup, PowerPcInstructionDetail>,
+        MachineInstruction
     {
         private const InstructionClass Transfer = InstructionClass.Transfer;
         private const InstructionClass CondTransfer = InstructionClass.Conditional | InstructionClass.Transfer;
         private const InstructionClass LinkTransfer = InstructionClass.Call | InstructionClass.Transfer;
         private const InstructionClass LinkCondTransfer = InstructionClass.Call | InstructionClass.Transfer | InstructionClass.Conditional;
 
-        private static Dictionary<Opcode, InstructionClass> classOf;
+        private static Dictionary<CapInstruction, InstructionClass> classOf;
 
-        private Opcode opcode;
-        public MachineOperand op1;
-        public MachineOperand op2;
-        public MachineOperand op3;
-        public MachineOperand op4;
-        public MachineOperand op5;
-        public bool setsCR0;
-
-		public PowerPcInstruction(Opcode opcode)
-        {
-            this.opcode = opcode;
+		public PowerPcInstruction()
+        { 
         }
 
-		public PowerPcInstruction(Instruction<Gee.External.Capstone.PowerPc.PowerPcInstruction, PowerPcRegister, PowerPcInstructionGroup, PowerPcInstructionDetail> current) {
-			throw new NotImplementedException();
-		}
+        public new Address Address  { get { return Core.Address.Ptr32((uint)base.Address); } } //$TODO: how to determine if we're 32- or 64- bit?
 
-		public PowerPcInstruction(Opcode opcode, MachineOperand op1, MachineOperand op2, MachineOperand op3, bool setsCR0)
-        {
-            this.opcode = opcode;
-            this.op1 = op1;
-            this.op2 = op2;
-            this.op3 = op3;
-            this.setsCR0 = setsCR0;
-        }
+        int MachineInstruction.Length { get { return base.Bytes.Length; } }
 
-        public override bool IsValid { get { return opcode != Opcode.illegal; } }
+        public bool IsValid { get { return base.Id != CapInstruction.INVALID; } }
 
-        public override int OpcodeAsInteger { get { return (int)opcode; } }
+        public int OpcodeAsInteger { get { return (int)Id; } }
 
-        public override InstructionClass InstructionClass
+        public InstructionClass InstructionClass
         {
             get {
                 InstructionClass cl;
-                if (!classOf.TryGetValue(opcode, out cl))
+                if (!classOf.TryGetValue(Id, out cl))
                     cl = InstructionClass.Linear;
                 return cl; 
             }
@@ -80,42 +65,37 @@ namespace Reko.Arch.PowerPC
 
         public int Operands
         {
-            get
-            {
-                if (op1 == null)
-                    return 0;
-                if (op2 == null)
-                    return 1;
-                if (op3 == null)
-                    return 2;
-                if (op4 == null)
-                    return 3;
-                if (op5 == null)
-                    return 4;
-                return 5;
-            }
+            get { return base.ArchitectureDetail.Operands.Length; }
         }
 	
-        public Opcode Opcode
+        public CapInstruction Opcode
         {
-            get { return opcode; }
+            get { return Id; }
         }
 
-        public override MachineOperand GetOperand(int i)
+        public MachineOperand op1 { get { return GetOperand(0); } }
+        public MachineOperand op2 { get { return GetOperand(1); } }
+        public MachineOperand op3 { get { return GetOperand(2); } }
+        public MachineOperand op4 { get { return GetOperand(3); } }
+        public MachineOperand op5 { get { return GetOperand(4); } }
+
+        public bool Contains(Address addr)
         {
-            switch (i)
-            {
-            case 0: return op1;
-            case 1: return op2;
-            case 2: return op3;
-            case 3: return op4;
-            case 4: return op5;
-            default: return null;
-            }
+            var uAddr = addr.ToLinear();
+            var uThisAddr = addr.ToLinear();
+            return uThisAddr <= uAddr && uAddr < uThisAddr + (uint) Bytes.Length;
         }
 
-        public override void Render(MachineInstructionWriter writer)
+        public MachineOperand GetOperand(int i)
         {
+            //$TODO: how to map from Capstone operands to Reko operands?
+            // The line below will throw
+            return (MachineOperand)(object)ArchitectureDetail.Operands[i];
+        }
+
+        public void Render(MachineInstructionWriter writer)
+        {
+        /* Ye Olde Code. Remove when ready.
             var op = string.Format("{0}{1}", 
                 opcode,
                 setsCR0 ? "." : "");
@@ -145,76 +125,87 @@ namespace Reko.Arch.PowerPC
                     }
                 }
             }
+            */
         }
 
-        public uint DefCc()
+        public override  string ToString()
         {
-            if (setsCR0)
-                return 0xF;
-            return 0;
+            var sr = new StringRenderer();
+            Render(sr);
+            return sr.ToString();
+        }
+
+        public string ToString(IPlatform platform)
+        {
+            var sr = new StringRenderer(platform);
+            Render(sr);
+            return sr.ToString();
         }
 
         static PowerPcInstruction()
         {
-            classOf = new Dictionary<Opcode, InstructionClass>
+            classOf = new Dictionary<CapInstruction, InstructionClass>
             {
-                { Opcode.illegal,   InstructionClass.Invalid },
+                { CapInstruction.INVALID,   InstructionClass.Invalid },
 
-                { Opcode.b,         Transfer },
-                { Opcode.bc,        CondTransfer },
-                { Opcode.bcl,       LinkCondTransfer },
-                { Opcode.bclr,      Transfer },
-                { Opcode.bclrl,     LinkTransfer },
-                { Opcode.bcctr,     CondTransfer },
-                { Opcode.bctrl,     LinkTransfer },
-                { Opcode.bdnz,      CondTransfer },
-                { Opcode.bdnzf,     CondTransfer },
-                { Opcode.bdnzfl,    LinkCondTransfer },
-                { Opcode.bdnzl,     LinkCondTransfer },
-                { Opcode.bdnzt,     CondTransfer },
-                { Opcode.bdnztl,    LinkCondTransfer },
-                { Opcode.bdz,       CondTransfer },
-                { Opcode.bdzf,      CondTransfer },
-                { Opcode.bdzfl,     LinkCondTransfer },
-                { Opcode.bdzl,      CondTransfer },
-                { Opcode.bdzt,      CondTransfer },
-                { Opcode.bdztl,     LinkCondTransfer },
+                { CapInstruction.B,         Transfer },
+                { CapInstruction.BC,        CondTransfer },
+                { CapInstruction.BCL,       LinkCondTransfer },
+                { CapInstruction.BCLR,      Transfer },
+                { CapInstruction.BCLRL,     LinkTransfer },
+                { CapInstruction.BCCTR,     CondTransfer },
+                { CapInstruction.BCTRL,     LinkTransfer },
+                { CapInstruction.BDNZ,      CondTransfer },
+                { CapInstruction.BDNZF,     CondTransfer },
+                { CapInstruction.BDNZFL,    LinkCondTransfer },
+                { CapInstruction.BDNZL,     LinkCondTransfer },
+                { CapInstruction.BDNZT,     CondTransfer },
+                { CapInstruction.BDNZTL,    LinkCondTransfer },
+                { CapInstruction.BDZ,       CondTransfer },
+                { CapInstruction.BDZF,      CondTransfer },
+                { CapInstruction.BDZFL,     LinkCondTransfer },
+                { CapInstruction.BDZL,      CondTransfer },
+                { CapInstruction.BDZT,      CondTransfer },
+                { CapInstruction.BDZTL,     LinkCondTransfer },
 
-                { Opcode.beq,       CondTransfer },
-                { Opcode.beql,      LinkCondTransfer },
-                { Opcode.beqlr,     CondTransfer },
-                { Opcode.beqlrl,    LinkCondTransfer },
-                { Opcode.bge,       CondTransfer },
-                { Opcode.bgel,      LinkCondTransfer },
-                { Opcode.bgelr,     CondTransfer },
-                { Opcode.bgelrl,    LinkCondTransfer },
-                { Opcode.bgt,       CondTransfer },
-                { Opcode.bgtl,      LinkCondTransfer },
-                { Opcode.bgtlr,     CondTransfer },
-                { Opcode.bgtlrl,    LinkCondTransfer },
-                { Opcode.bl,        LinkTransfer },
-                { Opcode.ble,       CondTransfer },
-                { Opcode.blel,      LinkCondTransfer },
-                { Opcode.blelr,     CondTransfer },
-                { Opcode.blelrl,    LinkCondTransfer },
-                { Opcode.blr,       Transfer },
-                { Opcode.blrl,      LinkTransfer },
-                { Opcode.blt,       CondTransfer },
-                { Opcode.bltl,      LinkCondTransfer },
-                { Opcode.bltlr,     CondTransfer },
-                { Opcode.bltlrl,    LinkCondTransfer },
-                { Opcode.bne,       CondTransfer },
-                { Opcode.bnel,      LinkCondTransfer },
-                { Opcode.bnelr,     CondTransfer },
-                { Opcode.bnelrl,    LinkCondTransfer },
-                { Opcode.bns,       CondTransfer },
-                { Opcode.bnsl,      LinkCondTransfer },
-                { Opcode.bnslr,     CondTransfer },
-                { Opcode.bnslrl,    LinkCondTransfer },
-                { Opcode.bso,       CondTransfer },
-                { Opcode.bsol,      LinkCondTransfer },
-                { Opcode.bsolr,     CondTransfer },
-                { Opcode.bsolrl,    LinkCondTransfer },
+                //$REVIEW: smx-smx: remove the comment and find out why this won't work?
+                /*
+                { CapInstruction.BEQ,       CondTransfer },
+                { CapInstruction.BEQL,      LinkCondTransfer },
+                { CapInstruction.BEQLR,     CondTransfer },
+                { CapInstruction.BEQLRL,    LinkCondTransfer },
+                { CapInstruction.BGE,       CondTransfer },
+                { CapInstruction.BGEL,      LinkCondTransfer },
+                { CapInstruction.BGELR,     CondTransfer },
+                { CapInstruction.BGELRL,    LinkCondTransfer },
+                { CapInstruction.BGT,       CondTransfer },
+                { CapInstruction.BGTL,      LinkCondTransfer },
+                { CapInstruction.BGTLR,     CondTransfer },
+                { CapInstruction.BGTLRL,    LinkCondTransfer },
+                { CapInstruction.BL,        LinkTransfer },
+                { CapInstruction.BLE,       CondTransfer },
+                { CapInstruction.BLEL,      LinkCondTransfer },
+                { CapInstruction.BLELR,     CondTransfer },
+                { CapInstruction.BLELRL,    LinkCondTransfer },
+                { CapInstruction.BLR,       Transfer },
+                { CapInstruction.BLRL,      LinkTransfer },
+                { CapInstruction.BLT,       CondTransfer },
+                { CapInstruction.BLTL,      LinkCondTransfer },
+                { CapInstruction.BLTLR,     CondTransfer },
+                { CapInstruction.BLTLRL,    LinkCondTransfer },
+                { CapInstruction.BNE,       CondTransfer },
+                { CapInstruction.BNEL,      LinkCondTransfer },
+                { CapInstruction.BNELR,     CondTransfer },
+                { CapInstruction.BNELRL,    LinkCondTransfer },
+                { CapInstruction.BNS,       CondTransfer },
+                { CapInstruction.BNSL,      LinkCondTransfer },
+                { CapInstruction.BNSLR,     CondTransfer },
+                { CapInstruction.BNSLRL,    LinkCondTransfer },
+                { CapInstruction.BSO,       CondTransfer },
+                { CapInstruction.BSOL,      LinkCondTransfer },
+                { CapInstruction.BSOLR,     CondTransfer },
+                { CapInstruction.BSOLRL,    LinkCondTransfer },
+                */
             };
         }
 	}

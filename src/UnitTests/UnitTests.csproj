@@ -768,10 +768,15 @@
   <ItemGroup>
     <Compile Include="Core\Lib\Bits.Tests.cs" />
   </ItemGroup>
+  <ItemGroup Condition="'$(Configuration)'=='Debug'">
+    <ExternalComponents Include="$(SolutionDir)..\external\capstone\msvc\capstone_dll\bin\Win32\Debug\capstone.dll" />
+    <ExternalComponents Include="$(SolutionDir)..\external\Capstone.NET\Gee.External.Capstone.Proxy\bin\Win32\NativeDebug\Gee.External.Capstone.Proxy.dll" />
+  </ItemGroup>
   <Target Name="BeforeBuild">
     <Message Importance="normal" Text="Copying Decompiler metadata files to $(TargetDir)" />
     <Copy SourceFiles="@(DecompilerMetadata)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(ExternalAssemblies)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    <Message Importance="normal" Text="Copying external components to $(TargetDir)" />
+    <Copy SourceFiles="@(ExternalComponents)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
   </Target>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

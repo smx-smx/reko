@@ -29,7 +29,7 @@ using Opcode = Gee.External.Capstone.Arm.ArmInstruction;
 
 namespace Reko.Arch.Arm
 {
-    public class Arm32Instruction : MachineInstruction 
+    public class Arm32Instruction : MachineInstructionImpl
     {
         private static Dictionary<ArmInstruction, InstructionClass> classOf;
 
