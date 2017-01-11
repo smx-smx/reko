@@ -11,6 +11,7 @@ namespace Reko.Arch.PowerPC
 {
     public class PowerPcDisassembler : DisassemblerBase<PowerPcInstruction>
     {
+        private ImageReader rdr;
         private IEnumerator<Instruction<Gee.External.Capstone.PowerPc.PowerPcInstruction, PowerPcRegister, PowerPcInstructionGroup, PowerPcInstructionDetail>> stream;
 
         public static PowerPcDisassembler Create32(ImageReader rdr)
@@ -25,6 +26,7 @@ namespace Reko.Arch.PowerPC
 
         public PowerPcDisassembler(DisassembleMode mode, ImageReader rdr)
         {
+            this.rdr = rdr;
             var dasm = new InternalDisassembler(mode);
             dasm.EnableDetails = true;
             this.stream = dasm.DisassembleStream(
@@ -51,12 +53,22 @@ namespace Reko.Arch.PowerPC
 
         public override PowerPcInstruction DisassembleInstruction()
         {
+            if (!rdr.IsValid)
+            {
+                // Signal end of strea
+                return null;
+            }
             if (stream.MoveNext())
             {
                 return (PowerPcInstruction)stream.Current;
             }
             else
-                return null;
+            {
+                // Create an empty shell instruction. Since its Id
+                // property is blank and its Operands will be null,
+                // it should be treated as invalid.
+                return new PowerPcInstruction();
+            }
         }
 
         private class InternalDisassembler : CapstonePowerPcDisassembler

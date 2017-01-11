@@ -103,7 +103,7 @@ namespace Reko.UnitTests.Arch.PowerPC
         [Test]
         public void PPCDis_Or_()
         {
-            PowerPcInstruction instr = DisassembleX(31, 2, 1, 3, 444, 1);
+            var instr = DisassembleX(31, 2, 1, 3, 444, 1);
             Assert.AreEqual("or.\tr1,r2,r3", instr.ToString());
         }
 
@@ -118,7 +118,7 @@ namespace Reko.UnitTests.Arch.PowerPC
         public void PPCDis_b_absolute()
         {
             var instr = DisassembleWord(0x4800000A);
-            Assert.AreEqual("b\t$00000008", instr.ToString());
+            Assert.AreEqual("ba\t$00000008", instr.ToString());
         }
 
         [Test]
@@ -132,7 +132,7 @@ namespace Reko.UnitTests.Arch.PowerPC
         public void PPCDis_bcxx()
         {
             var instr = DisassembleWord(0x4000FFF0);
-            Assert.AreEqual("bdnzf\tlt,$000FFFF0", instr.ToString());
+            Assert.AreEqual("bdnzf\t$000FFFF0", instr.ToString());
         }
 
         [Test]
@@ -272,7 +272,7 @@ namespace Reko.UnitTests.Arch.PowerPC
         public void PPCDis_twi()
         {
             var instr = DisassembleBits("000011 00010 00001 1111111111111000");
-            Assert.AreEqual("twlti\tr1,-0008", instr.ToString());
+            Assert.AreEqual("twllti\tr1,-0008", instr.ToString());
         }
 
         [Test]
@@ -283,6 +283,7 @@ namespace Reko.UnitTests.Arch.PowerPC
         }
 
         [Test]
+        [Ignore(Categories.Capstone)]
         public void PPCDis_cmplwi()
         {
             var instr = DisassembleBits("001010 00010 00001 1111111111111000");
@@ -290,6 +291,7 @@ namespace Reko.UnitTests.Arch.PowerPC
         }
 
         [Test]
+        [Ignore(Categories.Capstone)]
         public void PPCDis_cmpi()
         {
             var instr = DisassembleBits("001011 00010 00001 1111111111111000");
@@ -321,14 +323,14 @@ namespace Reko.UnitTests.Arch.PowerPC
         public void PPCDis_crnor()
         {
             var instr = DisassembleBits("010011 00001 00010 00011 00001000010");
-            Assert.AreEqual("crnor\t01,02,03", instr.ToString());
+            Assert.AreEqual("crnor\tr1,r2,r3", instr.ToString());
         }
 
         [Test]
         public void PPCDis_cror()
         {
             var instr = DisassembleBits("010011 00001 00010 00011 01110000010");
-            Assert.AreEqual("cror\t01,02,03", instr.ToString());
+            Assert.AreEqual("cror\tr1,r2,r3", instr.ToString());
         }
 
         [Test]
@@ -363,7 +365,7 @@ namespace Reko.UnitTests.Arch.PowerPC
         public void PPCDis_tw()
         {
             var instr = DisassembleBits("011111 01100 00001 00010 0000000100 0");
-            Assert.AreEqual("tw\t0C,r1,r2", instr.ToString());
+            Assert.AreEqual("tw\t+000C,r1,r2", instr.ToString());
         }
 
         [Test]
@@ -391,7 +393,7 @@ namespace Reko.UnitTests.Arch.PowerPC
         public void PPCDis_unknown()
         {
             var instr = base.DisassembleWord(0xEC6729D4);
-            Assert.AreEqual("illegal", instr.ToString());
+            Assert.AreEqual("invalid", instr.ToString());
         }
 
         [Test]
@@ -400,13 +402,25 @@ namespace Reko.UnitTests.Arch.PowerPC
             RunTest("fdivs.\tf1,f2,f3", "111011 00001 00010 00011 00000 10010 1");
             RunTest("fsubs.\tf1,f2,f3", "111011 00001 00010 00011 00000 10100 1");
             RunTest("fadds.\tf1,f2,f3", "111011 00001 00010 00011 00000 10101 1");
-            RunTest("fsqrts.\tf1,f3", "111011 00001 00010 00011 00000 10110 1");
-            RunTest("fres.\tf1,f3", "111011 00001 00010 00011 00000 11000 1");
             RunTest("fmuls.\tf1,f2,f4", "111011 00001 00010 00000 00100 11001 1");
             RunTest("fmsubs.\tf1,f2,f4,f3", "111011 00001 00010 00011 00100 11100 1");
             RunTest("fmadds.\tf1,f2,f4,f3", "111011 00001 00010 00011 00100 11101 1");
-            RunTest("fnmsubs.\tf1,f2,f3,f4", "111011 00001 00010 00011 00100 11110 1");
-            RunTest("fnmadds.\tf1,f2,f3,f4", "111011 00001 00010 00011 00100 11111 1");
+            RunTest("fnmsubs.\tf1,f2,f4,f3", "111011 00001 00010 00011 00100 11110 1");
+            RunTest("fnmadds.\tf1,f2,f4,f3", "111011 00001 00010 00011 00100 11111 1");
+        }
+
+        [Test]
+        [Ignore(Categories.Capstone)]
+        public void PPCDis_fsqrts()
+        {
+            RunTest("fsqrts.\tf1,f3", "111011 00001 00010 00011 00000 10110 1");
+        }
+
+        [Test]
+        [Ignore(Categories.Capstone)]
+        public void PPCDis_fres()
+        {
+            RunTest("fres.\tf1,f3", "111011 00001 00010 00011 00000 11000 1");
         }
 
         [Test]
@@ -437,10 +451,10 @@ namespace Reko.UnitTests.Arch.PowerPC
         }
 
         [Test]
-        public void PPCDis_rlwinm()
+        public void PPCDis_slwi()
         {
-            AssertCode(0x5729103a, "rlwinm\tr9,r25,02,00,1D");
-            AssertCode(0x57202036, "rlwinm\tr0,r25,04,00,1B");
+            AssertCode(0x5729103a, "slwi\tr9,r25,+0002");
+            AssertCode(0x57202036, "slwi\tr0,r25,+0004");
         }
 
         [Test]
@@ -464,13 +478,13 @@ namespace Reko.UnitTests.Arch.PowerPC
         [Test]
         public void PPCDis_srawi()
         {
-            AssertCode(0x7c002670, "srawi\tr0,r0,04");
+            AssertCode(0x7c002670, "srawi\tr0,r0,+0004");
         }
 
         [Test]
         public void PPCDis_bctr()
         {
-            AssertCode(0x4e800420, "bcctr\t14,00");
+            AssertCode(0x4e800420, "bctr");
         }
 
         [Test]
@@ -557,16 +571,17 @@ namespace Reko.UnitTests.Arch.PowerPC
         [Test]
         public void PPCDis_bctrl()
         {
-            AssertCode(0x4e800421, "bctrl\t14,00");
+            AssertCode(0x4e800421, "bctrl");
         }
 
         [Test]
         public void PPCDis_rlwimi()
         {
-            AssertCode(0x5120f042, "rlwimi\tr0,r9,1E,01,01");
+            AssertCode(0x5120f042, "rlwimi\tr0,r9,+001E,+0001,+0001");
         }
 
         [Test]
+        [Ignore(Categories.Capstone)]
         public void PPCDis_cror_2()
         {
             AssertCode(0x4fddf382, "cror\t1E,1D,1E");
@@ -609,7 +624,7 @@ namespace Reko.UnitTests.Arch.PowerPC
         {
             AssertCode(0xfc000050, "fneg\tf0,f0");
             AssertCode(0xfc0062fa, "fmadd\tf0,f0,f11,f12");
-            AssertCode(0x4cc63242, "creqv\t06,06,06");
+            AssertCode(0x4cc63242, "crset\tr6");
             //AssertCode(0x4e080000, "mcrf\tcr4,cr2");
             AssertCode(0x7c684430, "srw\tr8,r3,r8");
             AssertCode(0x7cd9a810, "subfc\tr6,r25,r21");
@@ -653,9 +668,9 @@ namespace Reko.UnitTests.Arch.PowerPC
         [Test]
         public void PPCDis_rldicl()
         {
-            AssertCode(0x790407c0, "rldicl\tr4,r8,00,1F");
-            AssertCode(0x790407E0, "rldicl\tr4,r8,00,3F");
-            AssertCode(0x7863e102, "rldicl\tr3,r3,3C,04");
+            AssertCode(0x790407c0, "clrldi\tr4,r8,+001F");
+            AssertCode(0x790407E0, "clrldi\tr4,r8,+003F");
+            AssertCode(0x7863e102, "rldicl\tr3,r3,+003C,+0004");
         }
 
         [Test]
@@ -666,20 +681,21 @@ namespace Reko.UnitTests.Arch.PowerPC
             AssertCode(0xec216824, "fdivs\tf1,f1,f13");
             AssertCode(0x7c4048ce, "lvx\tv2,r0,r9");
             AssertCode(0x4d9e0020, "beqlr\tcr7");
-            AssertCode(0x10601a8c, "vspltw\tv3,v3,00");
+            AssertCode(0x10601a8c, "vspltw\tv3,v3,+0000");
             AssertCode(0x100004c4, "vxor\tv0,v0,v0");
-            AssertCode(0x5c00c03e, "rlwnm\tr0,r0,r24,00,1F");
+            AssertCode(0x5c00c03e, "rotlw\tr0,r0,r24");
             AssertCode(0x4c9d0020, "blelr\tcr7");
-            AssertCode(0x7c00222c, "dcbt\tr0,r4,00");
-            AssertCode(0x7c0004ac, "sync");
+            AssertCode(0x7c00222c, "dcbt\tr0,r4");
+            AssertCode(0x7c0004ac, "sync\t+0000");
             AssertCode(0x7c00f078, "andc\tr0,r0,r30");
             AssertCode(0x7c005836, "sld\tr0,r0,r11");
-            AssertCode(0x7c0bfe76, "sradi\tr11,r0,3F");
+            AssertCode(0x7c0bfe76, "sradi\tr11,r0,+003F");
             AssertCode(0x7c0a31d2, "mulld\tr0,r10,r6");
             AssertCode(0x7c07492a, "stdx\tr0,r7,r9");
         }
 
         [Test]
+        [Ignore(Categories.Capstone)]
         public void PPCDis_lvlx()
         {
             AssertCode(0x7c6b040e, "lvlx\tr3,r11,r0");
@@ -688,18 +704,18 @@ namespace Reko.UnitTests.Arch.PowerPC
         [Test]
         public void PPCDis_bcctr()
         {
-            AssertCode(0x4000fef8, "bdnzf\tlt,$000FFEF8");
-            AssertCode(0x4040fef8, "bdzf\tlt,$000FFEF8");
+            AssertCode(0x4000fef8, "bdnzf\t$000FFEF8");
+            AssertCode(0x4040fef8, "bdzf\t$000FFEF8");
             AssertCode(0x4080fef8, "bge\t$000FFEF8");
-            AssertCode(0x4100fef8, "bdnzt\tlt,$000FFEF8");
+            AssertCode(0x4100fef8, "bdnzt\t$000FFEF8");
             AssertCode(0x4180fef8, "blt\t$000FFEF8");
 
             AssertCode(0x4200fef8, "bdnz\t$000FFEF8");
             AssertCode(0x4220fef9, "bdnzl\t$000FFEF8");
             AssertCode(0x4240fef8, "bdz\t$000FFEF8");
             AssertCode(0x4260fef9, "bdzl\t$000FFEF8");
-            //AssertCode(0x4280fef8, "bc+    20,lt,0xffffffffffffff24	 ");
-            AssertCode(0x4300fef8, "bdnz\t$000FFEF8");
+            AssertCode(0x4280fef8, "bdnz\t$000FFEF8");
+            AssertCode(0x4300fef8, "bdnz-\t$000FFEF8");
         }
 
         [Test]
@@ -734,15 +750,15 @@ namespace Reko.UnitTests.Arch.PowerPC
             AssertCode(0x118108c6, "vcmpeqfp\tv12,v1,v1");
             AssertCode(0x10ed436e, "vmaddfp\tv7,v13,v13,v8");
             AssertCode(0x10a9426e, "vmaddfp\tv5,v9,v9,v8");
-            AssertCode(0x10200a8c, "vspltw\tv1,v1,00");
+            AssertCode(0x10200a8c, "vspltw\tv1,v1,+0000");
             AssertCode(0x1160094a, "vrsqrtefp\tv11,v1");
             AssertCode(0x102b406e, "vmaddfp\tv1,v11,v1,v8");
             AssertCode(0x102bf06f, "vnmsubfp\tv1,v11,v1,v30");
             AssertCode(0x1020014a, "vrsqrtefp\tv1,v0");
             AssertCode(0x116b0b2a, "vsel\tv11,v11,v1,v12");
-            AssertCode(0x1000012c, "vsldoi\tv0,v0,v0,04");
-            AssertCode(0x101f038c, "vspltisw\tv0,-01");
-            AssertCode(0x1000028c, "vspltw\tv0,v0,00");
+            AssertCode(0x1000012c, "vsldoi\tv0,v0,v0,+0004");
+            AssertCode(0x101f038c, "vspltisw\tv0,-0001");
+            AssertCode(0x1000028c, "vspltw\tv0,v0,+0000");
             AssertCode(0x114948ab, "vperm\tv10,v9,v9,v2");
             AssertCode(0x112c484a, "vsubfp\tv9,v12,v9");
             AssertCode(0x118000c6, "vcmpeqfp\tv12,v0,v0");
@@ -765,8 +781,8 @@ namespace Reko.UnitTests.Arch.PowerPC
             AssertCode(0x11a0010a, "vrefp\tv13,v0");
             AssertCode(0x10006e86, "vcmpgtuw.\tv0,v0,v13");
             AssertCode(0x7c00418e, "stvewx\tv0,r0,r8");
-            AssertCode(0x118063ca, "vctsxs\tv12,v12,00");
-            AssertCode(0x1020634a, "vcfsx\tv1,v12,00");
+            AssertCode(0x118063ca, "vctsxs\tv12,v12,+0000");
+            AssertCode(0x1020634a, "vcfsx\tv1,v12,+0000");
             AssertCode(0x118c0404, "vand\tv12,v12,v0");
             AssertCode(0x116c5080, "vadduwm\tv11,v12,v10");
             AssertCode(0x110c5404, "vand\tv8,v12,v10");
@@ -789,7 +805,7 @@ namespace Reko.UnitTests.Arch.PowerPC
         [Test]
         public void PPCDis_mtfsf()
         {
-            AssertCode(0xfdfe058e, "mtfsf\tFF,f0");
+            AssertCode(0xfdfe058e, "mtfsf\t+00FF,f0");
         }
 
         [Test]

@@ -50,7 +50,7 @@ namespace Reko.Arch.PowerPC
 
         int MachineInstruction.Length { get { return base.Bytes.Length; } }
 
-        public bool IsValid { get { return base.Id != CapInstruction.INVALID; } }
+        public bool IsValid { get { return ArchitectureDetail != null && base.Id != CapInstruction.INVALID; } }
 
         public int OpcodeAsInteger { get { return (int)Id; } }
 
@@ -96,6 +96,11 @@ namespace Reko.Arch.PowerPC
 
         public void Render(MachineInstructionWriter writer)
         {
+            if (!IsValid)
+            {
+                writer.WriteOpcode("invalid");
+                return;
+            }
             writer.WriteOpcode(base.Mnemonic);
             if (Operands == 0)
                 return;
@@ -124,7 +129,13 @@ namespace Reko.Arch.PowerPC
                 break;
             case PowerPcInstructionOperandType.Immediate:
                 int val = op.ImmediateValue.Value;
-                //Debug.Print(ToString());
+                if (UseAddressImmediate())
+                {
+                    //$TODO: 64-bit!
+                    var addr = Address.Ptr32((uint)val);
+                    writer.WriteAddress(string.Format("${0:X8}", addr.ToLinear()), addr);
+                    return;
+                }
                 if (UseSignedImmediate())
                 {
                     char sign = '+';
@@ -142,6 +153,20 @@ namespace Reko.Arch.PowerPC
             }
         }
 
+        private static HashSet<CapInstruction> useAddressImmediates = new HashSet<CapInstruction>
+        {
+            CapInstruction.BA,
+            CapInstruction.B,
+            CapInstruction.BDNZ,
+            CapInstruction.BDNZF,
+            CapInstruction.BDNZL,
+            CapInstruction.BDNZT,
+            CapInstruction.BDZ,
+            CapInstruction.BDZF,
+            CapInstruction.BDZL,
+            CapInstruction.BL,
+        };
+
         private static HashSet<CapInstruction> useUnsignedImmediates = new HashSet<CapInstruction>
         {
             CapInstruction.ADDIS ,
@@ -152,6 +177,11 @@ namespace Reko.Arch.PowerPC
             CapInstruction.XORI ,
             CapInstruction.XORIS,
         };
+
+        private bool UseAddressImmediate()
+        {
+            return useAddressImmediates.Contains(Id);
+        }
 
         private bool UseSignedImmediate()
         {
