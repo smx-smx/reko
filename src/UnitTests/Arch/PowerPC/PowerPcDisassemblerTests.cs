@@ -272,7 +272,7 @@ namespace Reko.UnitTests.Arch.PowerPC
         public void PPCDis_twi()
         {
             var instr = DisassembleBits("000011 00010 00001 1111111111111000");
-            Assert.AreEqual("twi\t02,r1,-0008", instr.ToString());
+            Assert.AreEqual("twlti\tr1,-0008", instr.ToString());
         }
 
         [Test]
@@ -353,10 +353,10 @@ namespace Reko.UnitTests.Arch.PowerPC
         }
 
         [Test]
-        public void PPCDis_cmp()
+        public void PPCDis_cmpw()
         {
             var instr = DisassembleBits("011111 01100 00001 00010 0000000000 0");
-            Assert.AreEqual("cmp\tcr3,r1,r2", instr.ToString());
+            Assert.AreEqual("cmpw\tcr3,r1,r2", instr.ToString());
         }
 
         [Test]
@@ -518,7 +518,7 @@ namespace Reko.UnitTests.Arch.PowerPC
         [Test]
         public void PPCDis_li()
         {
-            AssertCode(0x38000000, "addi\tr0,r0,+0000");
+            AssertCode(0x38000000, "li\tr0,+0000");
         }
 
         [Test]
@@ -551,7 +551,7 @@ namespace Reko.UnitTests.Arch.PowerPC
         [Test]
         public void PPCDis_mtcrf()
         {
-            AssertCode(0x7d808120, "mtcrf\t08,r12");
+            AssertCode(0x7d808120, "mtcrf\t+0008,r12");
         }
 
         [Test]
@@ -705,7 +705,7 @@ namespace Reko.UnitTests.Arch.PowerPC
         [Test]
         public void PPCDis_mftb()
         {
-            AssertCode(0x7eac42e6, "mftb\tr21,0188");
+            AssertCode(0x7eac42e6, "mftb\tr21,+010C");
         }
 
         [Test]

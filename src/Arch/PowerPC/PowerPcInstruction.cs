@@ -27,6 +27,7 @@ using System.Text;
 using Gee.External.Capstone;
 using Gee.External.Capstone.PowerPc;
 using CapInstruction = Gee.External.Capstone.PowerPc.PowerPcInstruction;
+using System.Diagnostics;
 
 namespace Reko.Arch.PowerPC
 {
@@ -96,45 +97,65 @@ namespace Reko.Arch.PowerPC
         public void Render(MachineInstructionWriter writer)
         {
             writer.WriteOpcode(base.Mnemonic);
+            if (Operands == 0)
+                return;
             writer.Tab();
-            var sep = ",";
+            var sep = "";
             foreach (var op in ArchitectureDetail.Operands)
             {
-                //$TODO smx-smx: the ArchitectureDetail.Operands property is 
-                // null. it needs to be filled in the Capstone.NET project.
-
+                writer.Write(sep);
+                sep = ",";
+                Write(op, writer);
             }
-            /* Ye Olde Code. Remove when ready.
-                var op = string.Format("{0}{1}", 
-                    opcode,
-                    setsCR0 ? "." : "");
-                writer.WriteOpcode(op);
-                if (op1 != null)
+        }
+
+        private void Write(PowerPcInstructionOperand op, MachineInstructionWriter writer)
+        {
+            switch (op.Type)
+            {
+            case PowerPcInstructionOperandType.Register:
+                writer.Write(op.RegisterValue.Value.ToString().ToLower());
+                break;
+            case PowerPcInstructionOperandType.Memory:
+                writer.Write(op.MemoryValue.Displacement.ToString());
+                writer.Write('(');
+                writer.Write(op.MemoryValue.BaseRegister.ToString().ToLower());
+                writer.Write(')');
+                break;
+            case PowerPcInstructionOperandType.Immediate:
+                int val = op.ImmediateValue.Value;
+                //Debug.Print(ToString());
+                if (UseSignedImmediate())
                 {
-                    writer.Tab();
-                    op1.Write(true, writer);
-                    if (op2 != null)
+                    char sign = '+';
+                    if (val < 0)
                     {
-                        writer.Write(',');
-                        op2.Write(true, writer);
-                        if (op3 != null)
-                        {
-                            writer.Write(',');
-                            op3.Write(true, writer);
-                            if (op4 != null)
-                            {
-                                writer.Write(",");
-                                op4.Write(true, writer);
-                                if (op5 != null)
-                                {
-                                    writer.Write(",");
-                                    op5.Write(true, writer);
-                                }
-                            }
-                        }
+                        sign = '-';
+                        val = -val;
                     }
+                    writer.Write(sign);
                 }
-                */
+                writer.Write("{0:X4}", val);
+                break;
+            default:
+                throw new NotImplementedException(string.Format("{0}", op.Type));
+            }
+        }
+
+        private static HashSet<CapInstruction> useUnsignedImmediates = new HashSet<CapInstruction>
+        {
+            CapInstruction.ADDIS ,
+            CapInstruction.ANDI ,
+            CapInstruction.ANDIS,
+            CapInstruction.ORI ,
+            CapInstruction.ORIS,
+            CapInstruction.XORI ,
+            CapInstruction.XORIS,
+        };
+
+        private bool UseSignedImmediate()
+        {
+            return !useUnsignedImmediates.Contains(Id);
         }
 
         public override string ToString()
