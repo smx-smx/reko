@@ -33,12 +33,12 @@ namespace Reko.Arch.PowerPC
     public abstract class InternalPowerPcDisassembler : DisassemblerBase<PowerPcInstruction>
     {
         private PowerPcArchitecture arch;
-        private ImageReader rdr;
+        private EndianImageReader rdr;
         private PrimitiveType defaultWordWidth;
         private PowerPcInstruction instrCur;
         private Address addr;
 
-        public InternalPowerPcDisassembler(PowerPcArchitecture arch, ImageReader rdr, PrimitiveType defaultWordWidth)
+        public InternalPowerPcDisassembler(PowerPcArchitecture arch, EndianImageReader rdr, PrimitiveType defaultWordWidth)
         {
             this.arch = arch;
             this.rdr = rdr;

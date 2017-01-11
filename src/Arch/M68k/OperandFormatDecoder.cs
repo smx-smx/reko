@@ -45,7 +45,7 @@ namespace Reko.Arch.M68k
             this.i = i;
         }
 
-        public MachineOperand GetOperand(ImageReader rdr, string args, PrimitiveType dataWidth)
+        public MachineOperand GetOperand(EndianImageReader rdr, string args, PrimitiveType dataWidth)
         {
             if (i >= args.Length)
                 return null;
@@ -131,7 +131,7 @@ namespace Reko.Arch.M68k
             }
         }
 
-        private static M68kImmediateOperand GetImmediate(ImageReader rdr, PrimitiveType type)
+        private static M68kImmediateOperand GetImmediate(EndianImageReader rdr, PrimitiveType type)
         {
             if (type.Size == 1)
             {
@@ -140,7 +140,7 @@ namespace Reko.Arch.M68k
             return new M68kImmediateOperand(rdr.ReadBe(type));
         }
 
-        public MachineOperand ParseOperand(ushort opcode, int bitOffset, PrimitiveType dataWidth, ImageReader rdr)
+        public MachineOperand ParseOperand(ushort opcode, int bitOffset, PrimitiveType dataWidth, EndianImageReader rdr)
         {
             opcode >>= bitOffset;
             byte operandBits = (byte) (opcode & 7);
@@ -148,7 +148,7 @@ namespace Reko.Arch.M68k
             return ParseOperandInner(addressMode, operandBits, dataWidth, rdr);
         }
 
-        private MachineOperand ParseSwappedOperand(ushort opcode, int bitOffset, PrimitiveType dataWidth, ImageReader rdr)
+        private MachineOperand ParseSwappedOperand(ushort opcode, int bitOffset, PrimitiveType dataWidth, EndianImageReader rdr)
         {
             opcode >>= bitOffset;
             byte addressMode = (byte) (opcode & 7);
@@ -179,7 +179,7 @@ namespace Reko.Arch.M68k
             }
         }
 
-        private MachineOperand ParseOperandInner(byte addressMode, byte operandBits, PrimitiveType dataWidth, ImageReader rdr)
+        private MachineOperand ParseOperandInner(byte addressMode, byte operandBits, PrimitiveType dataWidth, EndianImageReader rdr)
         {
             Constant offset;
             switch (addressMode)
@@ -276,7 +276,7 @@ namespace Reko.Arch.M68k
             }
         }
 
-        private MachineOperand AddressRegisterIndirectWithIndex(PrimitiveType dataWidth, ImageReader rdr)
+        private MachineOperand AddressRegisterIndirectWithIndex(PrimitiveType dataWidth, EndianImageReader rdr)
         {
             ushort extension = rdr.ReadBeUInt16();
             if (EXT_FULL(extension))

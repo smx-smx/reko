@@ -51,7 +51,7 @@ namespace Reko.Arch.PowerPC
             this.dasm = instrs.GetEnumerator();
         }
 
-        public PowerPcRewriter(PowerPcArchitecture arch, ImageReader rdr, Frame frame, IRewriterHost host)
+        public PowerPcRewriter(PowerPcArchitecture arch, EndianImageReader rdr, Frame frame, IRewriterHost host)
         {
             this.arch = arch;
             //this.state = ppcState;
