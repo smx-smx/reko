@@ -48,7 +48,7 @@ namespace Reko.Arch.PowerPC
 
         public new Address Address  { get { return Core.Address.Ptr32((uint)base.Address); } } //$TODO: how to determine if we're 32- or 64- bit?
 
-        int MachineInstruction.Length { get { return base.Bytes.Length; } }
+        int MachineInstruction.Length { get { return 4; } }
 
         public bool IsValid { get { return ArchitectureDetail != null && base.Id != CapInstruction.INVALID; } }
 
@@ -66,7 +66,11 @@ namespace Reko.Arch.PowerPC
 
         public int Operands
         {
-            get { return base.ArchitectureDetail.Operands.Length; }
+            get {
+                return base.ArchitectureDetail != null
+                  ? ArchitectureDetail.Operands.Length
+                  : 0; 
+            }
         }
 	
         public CapInstruction Opcode
@@ -74,11 +78,11 @@ namespace Reko.Arch.PowerPC
             get { return Id; }
         }
 
-        public MachineOperand op1 { get { return GetOperand(0); } }
-        public MachineOperand op2 { get { return GetOperand(1); } }
-        public MachineOperand op3 { get { return GetOperand(2); } }
-        public MachineOperand op4 { get { return GetOperand(3); } }
-        public MachineOperand op5 { get { return GetOperand(4); } }
+        public PowerPcInstructionOperand op1 { get { return ArchitectureDetail.Operands[0]; } }
+        public PowerPcInstructionOperand op2 { get { return ArchitectureDetail.Operands[1]; } }
+        public PowerPcInstructionOperand op3 { get { return ArchitectureDetail.Operands[2]; } }
+        public PowerPcInstructionOperand op4 { get { return ArchitectureDetail.Operands[3]; } }
+        public PowerPcInstructionOperand op5 { get { return ArchitectureDetail.Operands[4]; } }
 
         public bool Contains(Address addr)
         {
@@ -149,7 +153,9 @@ namespace Reko.Arch.PowerPC
                 writer.Write("{0:X4}", val);
                 break;
             default:
-                throw new NotImplementedException(string.Format("{0}", op.Type));
+                throw new AddressCorrelatedException(
+                    this.Address,
+                    string.Format("PowerPC operand type '{0}' has not been implemented.", op.Type));
             }
         }
 
@@ -178,12 +184,12 @@ namespace Reko.Arch.PowerPC
             CapInstruction.XORIS,
         };
 
-        private bool UseAddressImmediate()
+        internal bool UseAddressImmediate()
         {
             return useAddressImmediates.Contains(Id);
         }
 
-        private bool UseSignedImmediate()
+        internal bool UseSignedImmediate()
         {
             return !useUnsignedImmediates.Contains(Id);
         }

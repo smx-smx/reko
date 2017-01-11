@@ -18,6 +18,7 @@
  */
 #endregion
 
+using Gee.External.Capstone.PowerPc;
 using Reko.Core;
 using Reko.Core.Expressions;
 using Reko.Core.Machine;
@@ -33,10 +34,90 @@ namespace Reko.Arch.PowerPC
 {
     public partial class PowerPcRewriter
     {
-        private void RewriteB()
+        private void RewriteBranch(
+            bool updateLinkRegister, 
+            bool toLinkRegister, 
+            bool toCtrRegister,
+            PowerPcBranchCondition pcc)
         {
-            var dst = RewriteOperand(instr.op1);
-            emitter.Goto(dst);
+            ConditionCode cc = ConditionCode.None;
+            switch (pcc)
+            {
+            case PowerPcBranchCondition.LessThan: cc = ConditionCode.LT; break;
+            case PowerPcBranchCondition.LessOrEqual: cc = ConditionCode.LE; break;
+            case PowerPcBranchCondition.Equal: cc = ConditionCode.EQ; break;
+            case PowerPcBranchCondition.GreaterOrEqual: cc = ConditionCode.GE; break;
+            case PowerPcBranchCondition.GreaterThan: cc = ConditionCode.GT; break;
+            case PowerPcBranchCondition.NotEqual: cc = ConditionCode.NE; break;
+            //$TODO: needs new Reko condition codes
+            case PowerPcBranchCondition.Unordered:
+            case PowerPcBranchCondition.NotUnordered:
+                throw new AddressCorrelatedException(instr.Address, "PowerOC branch condition '{0}' not implemented.", pcc);
+            case PowerPcBranchCondition.Invalid:
+                cluster.Class = RtlClass.Transfer;
+                if (updateLinkRegister)
+                {
+                    if (toLinkRegister)
+                    {
+                        emitter.Call(frame.EnsureRegister(arch.lr), 0);
+                    }
+                    else if (toCtrRegister)
+                    {
+                        emitter.Call(frame.EnsureRegister(arch.ctr), 0);
+                    }
+                    else
+                    {
+                        var addrDst = (Address)RewriteOperand(instr.op1);
+                        if (addrDst != null && instr.Address.ToLinear() + 4 == addrDst.ToLinear())
+                        {
+                            // PowerPC idiom to get the current instruction pointer in the lr register
+                            emitter.Assign(frame.EnsureRegister(arch.lr), addrDst);
+                        }
+                        else
+                        {
+                            emitter.Call(addrDst, 0);
+                        }
+                    }
+                }
+                else
+                {
+                    if (toLinkRegister)
+                    {
+                        emitter.Return(0, 0);
+                    }
+                    else if (toCtrRegister)
+                    {
+                        emitter.Goto(frame.EnsureRegister(arch.ctr));
+                    }
+                    else
+                    {
+                        emitter.Goto(RewriteOperand(instr.op1));
+                    }
+                }
+                return;
+            }
+            cluster.Class = RtlClass.ConditionalTransfer;
+            var cr = RewriteOperand(instr.op1);
+            var dst = toLinkRegister 
+                ? frame.EnsureRegister(arch.lr)
+                : RewriteOperand(instr.op2);
+            var test = emitter.Test(cc, cr);
+            if (updateLinkRegister)
+            {
+                emitter.If(test, new RtlCall(dst, 0, RtlClass.ConditionalTransfer));
+            }
+            else if (toLinkRegister)
+            {
+                emitter.If(test, new RtlReturn(0, 0, RtlClass.Transfer));
+            }
+            else if (toCtrRegister)
+            {
+                throw new AddressCorrelatedException(instr.Address, "PowerPC instruction '{0}' not supported yet.", instr);
+            }
+            else
+            {
+                emitter.Branch(test, (Address)dst, RtlClass.ConditionalTransfer);
+            }
         }
 
         private void RewriteBc(bool linkRegister)
@@ -46,7 +127,7 @@ namespace Reko.Arch.PowerPC
 
         private void RewriteBcctr(bool linkRegister)
         {
-            RewriteBranch(linkRegister, frame.EnsureRegister(arch.ctr));
+            RewriteCtrBranch(linkRegister, frame.EnsureRegister(arch.ctr));
         }
 
         private void RewriteBl()
@@ -71,12 +152,12 @@ namespace Reko.Arch.PowerPC
             emitter.Return(0, 0);
         }
 
-        private void RewriteBranch(bool updateLinkregister, bool toLinkRegister, ConditionCode cc)
+        private void RewriteBranchZ(bool updateLinkregister, bool toLinkRegister, ConditionCode cc)
         {
             cluster.Class = RtlClass.ConditionalTransfer;
-            var ccrOp = instr.op1 as RegisterOperand;
             Expression cr;
-            if (ccrOp != null)
+            bool firstArgRegister = (instr.op1.Type == PowerPcInstructionOperandType.Register);
+            if (firstArgRegister)
             {
                 cr = RewriteOperand(instr.op1);
             }
@@ -98,7 +179,7 @@ namespace Reko.Arch.PowerPC
             }
             else
             {
-                var dst = RewriteOperand(ccrOp != null ? instr.op2 : instr.op1);
+                var dst = RewriteOperand(firstArgRegister ? instr.op2 : instr.op1);
                 if (updateLinkregister)
                 {
                     emitter.If(emitter.Test(cc, cr), new RtlCall(dst, 0, RtlClass.ConditionalTransfer));
@@ -110,28 +191,29 @@ namespace Reko.Arch.PowerPC
             }
         }
 
-        private ConditionCode CcFromOperand(ConditionOperand ccOp)
+        private ConditionCode CcFromOperand(PowerPcInstructionConditionalRegisterOperandValue ccOp)
         {
-            switch (ccOp.condition & 3)
+            switch (ccOp.BranchCondition)
             {
-            case 0: return ConditionCode.LT;
-            case 1: return ConditionCode.GT;
-            case 2: return ConditionCode.EQ;
-            case 3: return ConditionCode.OV;
-            default: throw new NotImplementedException();
+            case PowerPcBranchCondition.LessThan: return ConditionCode.LT;
+            case PowerPcBranchCondition.GreaterThan: return ConditionCode.GT;
+            case PowerPcBranchCondition.Equal: return ConditionCode.EQ;
+            default: throw new AddressCorrelatedException(instr.Address, "PowerPC branch condition '{0}' not implemented.", ccOp.BranchCondition);
             }
         }
 
-        private RegisterStorage CrFromOperand(ConditionOperand ccOp)
+        private RegisterStorage CrFromOperand(PowerPcInstructionConditionalRegisterOperandValue ccOp)
         {
-            return arch.CrRegisters[(int)ccOp.condition >> 2];
+            return arch.RegisterByCapstoneID[ccOp.Register];
         }
         
         private void RewriteCtrBranch(bool updateLinkRegister, bool toLinkRegister, Func<Expression,Expression,Expression> decOp, bool ifSet)
         {
             cluster.Class = RtlClass.ConditionalTransfer;
             var ctr = frame.EnsureRegister(arch.ctr);
-            var ccOp = instr.op1 as ConditionOperand;
+            var ccOp = instr.op1.Type == PowerPcInstructionOperandType.ConditionalRegister
+                ? instr.op1.ConditionalRegisterValue
+                : null;
             Expression dest;
 
             Expression cond = decOp(ctr, Constant.Zero(ctr.DataType));
@@ -150,7 +232,7 @@ namespace Reko.Arch.PowerPC
             {
                 dest = RewriteOperand(instr.op1);
             }
-            
+
             emitter.Assign(ctr, emitter.ISub(ctr, 1));
             if (updateLinkRegister)
             {
@@ -167,7 +249,7 @@ namespace Reko.Arch.PowerPC
             }
         }
 
-        private void RewriteBranch(bool linkRegister, Expression destination)
+        private void RewriteCtrBranch(bool linkRegister, Expression destination)
         {
             cluster.Class = RtlClass.ConditionalTransfer;
             var ctr = frame.EnsureRegister(arch.ctr);

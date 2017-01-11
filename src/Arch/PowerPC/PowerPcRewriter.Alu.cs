@@ -38,7 +38,6 @@ namespace Reko.Arch.PowerPC
             emitter.Assign(cr0, emitter.Cond(e));
         }
 
-
         private void RewriteAdd()
         {
             var opL = RewriteOperand(instr.op2);
@@ -106,6 +105,13 @@ namespace Reko.Arch.PowerPC
             var opR = Shift16(dasm.Current.op3);
             var opD = RewriteOperand(instr.op1);
             RewriteAdd(opD, opL, opR);
+        }
+
+        public void RewriteLis()
+        {
+            var opS = Shift16(dasm.Current.op2);
+            var opD = RewriteOperand(instr.op1);
+            emitter.Assign(opD, opS);
         }
 
         private void RewriteAddze()
@@ -301,6 +307,12 @@ namespace Reko.Arch.PowerPC
                     tmp));
             MaybeEmitCr0(opD);
         }
+        private void RewriteLi()
+        {
+            var opD = RewriteOperand(instr.op1);
+            var opS = RewriteOperand(instr.op2);
+            emitter.Assign(opD, opS);
+        }
 
         private void RewriteMcrf()
         {
@@ -392,7 +404,6 @@ namespace Reko.Arch.PowerPC
             emitter.Assign(opD, emitter.Neg(opE));
             MaybeEmitCr0(opD);
         }
-
 
         private void RewriteOr(bool negate)
         {

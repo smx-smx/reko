@@ -103,8 +103,6 @@ namespace Reko.Environments.Ps3
         {
             var dasm = PowerPcDisassembler.Create64(rdr);
             PowerPcInstruction instr;
-            ImmediateOperand immOp;
-            MemoryOperand memOp;
 
             //addi r12,r0,0000
             instr = dasm.DisassembleInstruction();
@@ -115,15 +113,13 @@ namespace Reko.Environments.Ps3
             instr = dasm.DisassembleInstruction();
             if (instr.Opcode != Opcode.ORIS)
                 return null;
-            immOp = (ImmediateOperand) instr.op3;
-            uint aFuncDesc = immOp.Value.ToUInt32() << 16;
+            uint aFuncDesc = (uint)instr.op3.ImmediateValue.Value << 16;
 
             //lwz r12,nnnn(r12)
             instr = dasm.DisassembleInstruction();
             if (instr.Opcode != Opcode.LWZ)
                 return null;
-            memOp = (MemoryOperand)instr.op2;
-            int offset = memOp.Offset.ToInt32();
+            int offset = instr.op2.MemoryValue.Displacement;
             aFuncDesc = (uint)(aFuncDesc + offset);
 
             //std r2,40(r1)

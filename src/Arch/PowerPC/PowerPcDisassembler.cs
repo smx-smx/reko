@@ -55,11 +55,14 @@ namespace Reko.Arch.PowerPC
         {
             if (!rdr.IsValid)
             {
-                // Signal end of strea
+                // Signal end of stream
                 return null;
             }
             if (stream.MoveNext())
             {
+                // Capstone doesn't actually use the imageReader, but apparently
+                // Reko components peek at the reader, so we have to simulate motion.
+                rdr.Offset += stream.Current.Bytes.Length;
                 return (PowerPcInstruction)stream.Current;
             }
             else
