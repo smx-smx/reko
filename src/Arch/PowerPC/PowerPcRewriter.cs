@@ -30,6 +30,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Opcode = Gee.External.Capstone.PowerPc.PowerPcInstruction;
+using Gee.External.Capstone.PowerPc;
 
 namespace Reko.Arch.PowerPC
 {
@@ -68,12 +69,13 @@ namespace Reko.Arch.PowerPC
                 this.cluster = new RtlInstructionCluster(instr.Address, 4);
                 this.cluster.Class = RtlClass.Linear;
                 this.emitter = new RtlEmitter(cluster.Instructions);
-                switch (dasm.Current.Opcode)
+                switch (this.instr.Id)
                 {
                 default: throw new AddressCorrelatedException(
                     instr.Address,
-                    "PowerPC instruction '{0}' is not supported yet.",
-                    instr);
+                    "PowerPC instruction '{0}' ({1}) is not supported yet.",
+                    instr,
+                    instr.Id);
                 case Opcode.ADDI: RewriteAddi(); break;
                 case Opcode.ADDC: RewriteAddc(); break;
                 case Opcode.ADDIC: RewriteAddic(); break;
@@ -86,10 +88,11 @@ namespace Reko.Arch.PowerPC
                 case Opcode.ANDC: RewriteAndc(); break;
                 case Opcode.ANDI: RewriteAnd(false); break;
                 case Opcode.ANDIS: RewriteAndis(); break;
-                case Opcode.B: RewriteB(); break;
+                case Opcode.B: RewriteBranch(false, false, false, instr.ArchitectureDetail.BranchCode); break;
                 case Opcode.BC: RewriteBc(false); break;
+                case Opcode.BCTR: RewriteBranch(false, false, true, instr.ArchitectureDetail.BranchCode); break;
                 case Opcode.BCCTR: RewriteBcctr(false); break;
-                case Opcode.BCTRL: RewriteBcctr(true); break;
+                case Opcode.BCTRL: RewriteBranch(true, false, true, instr.ArchitectureDetail.BranchCode); break;
                 case Opcode.BDNZ: RewriteCtrBranch(false, false, emitter.Ne, false); break;
                 case Opcode.BDNZF: RewriteCtrBranch(false, false, emitter.Ne, false); break;
                 case Opcode.BDNZL: RewriteCtrBranch(true, false, emitter.Ne, false); break;
@@ -97,15 +100,17 @@ namespace Reko.Arch.PowerPC
                 case Opcode.BDZ: RewriteCtrBranch(false, false, emitter.Eq, false); break;
                 case Opcode.BDZF: RewriteCtrBranch(false, false, emitter.Eq, false); break;
                 case Opcode.BDZL: RewriteCtrBranch(true, false, emitter.Eq, false); break;
-                    //$REVIEW: Capstone has no constants for these instructions? Wut?
+                case Opcode.BL: RewriteBranch(true, false, false, instr.ArchitectureDetail.BranchCode); break;
+                case Opcode.BLR: RewriteBranch(false, true, false, instr.ArchitectureDetail.BranchCode); break;
+                //$REVIEW: Capstone has no constants for these instructions? Wut?
                 //case Opcode.BEQ: RewriteBranch(false, false,ConditionCode.EQ); break;
                 //case Opcode.BEQL: RewriteBranch(true, false, ConditionCode.EQ); break;
                 //case Opcode.BEQLR: RewriteBranch(false, true, ConditionCode.EQ); break;
                 //case Opcode.BEQLRl: RewriteBranch(true, true, ConditionCode.EQ); break;
-                //case Opcode.bge: RewriteBranch(false, false,ConditionCode.GE); break;
-                //case Opcode.bgel: RewriteBranch(true, false,ConditionCode.GE); break;
-                //case Opcode.bgt: RewriteBranch(false, false,ConditionCode.GT); break;
-                //case Opcode.bgtl: RewriteBranch(true, false,ConditionCode.GT); break;
+                //case Opcode.BGE: RewriteBranch(false, false,ConditionCode.GE); break;
+                //case Opcode.BGEL: RewriteBranch(true, false,ConditionCode.GE); break;
+                //case Opcode.BGT: RewriteBranch(false, false,ConditionCode.GT); break;
+                //case Opcode.BGTL: RewriteBranch(true, false,ConditionCode.GT); break;
                 //case Opcode.BL: RewriteBl(); break;
                 //case Opcode.BLR: RewriteBlr(); break;
                 //case Opcode.BLE: RewriteBranch(false, false, ConditionCode.LE); break;
@@ -172,6 +177,8 @@ namespace Reko.Arch.PowerPC
                 case Opcode.LHZ: RewriteLz(PrimitiveType.Word16); break;
                 case Opcode.LHZU: RewriteLzu(PrimitiveType.Word16); break;
                 case Opcode.LHZX: RewriteLzx(PrimitiveType.Word16); break;
+                case Opcode.LI: RewriteLi(); break;
+                case Opcode.LIS: RewriteLis(); break;
                 case Opcode.LVEWX: RewriteLvewx(); break;
                 //case Opcode.LVLX: RewriteLvlx(); break;
                 case Opcode.LVSL: RewriteLvsl(); break;
@@ -272,31 +279,35 @@ namespace Reko.Arch.PowerPC
             }
         }
 
-        private Expression Shift16(MachineOperand machineOperand)
+        private Expression Shift16(PowerPcInstructionOperand op)
         {
-            var imm = (ImmediateOperand)machineOperand;
-            return Constant.Word32(imm.Value.ToInt32() << 16);
+            var imm = op.ImmediateValue.Value;
+            return Constant.Word32(imm << 16);
         }
 
-        private Expression RewriteOperand(MachineOperand op, bool maybe0 = false)
+        private Expression RewriteOperand(PowerPcInstructionOperand op, bool maybe0 = false)
         {
-            var rOp = op as RegisterOperand;
-            if (rOp != null)
+            switch (op.Type)
             {
-                if (maybe0 && rOp.Register.Number == 0)
-                    return Constant.Zero(rOp.Register.DataType);
-                return frame.EnsureRegister(rOp.Register);
+            case PowerPcInstructionOperandType.Register:
+                if (maybe0 && op.RegisterValue.Value == PowerPcRegister.R0)
+                    return Constant.Zero(arch.WordWidth);
+                return EnsureRegister(op.RegisterValue.Value);
+            case PowerPcInstructionOperandType.Immediate:
+                if (instr.UseAddressImmediate())
+                {
+                    return arch.MakeAddressFromLinear(op.ImmediateValue.Value);
+                }
+                else if (instr.UseSignedImmediate())
+                {
+                    // Sign-extend the bastard.
+                    return SignExtend(op.ImmediateValue.Value, Domain.SignedInt);
+                }
+                else
+                {
+                    return SignExtend(op.ImmediateValue.Value, Domain.UnsignedInt);
+                }
             }
-            var iOp = op as ImmediateOperand;
-            if (iOp != null)
-            {
-                // Sign-extend the bastard.
-                return SignExtend(iOp.Value);
-            }
-            var aOp = op as AddressOperand;
-            if (aOp != null)
-                return aOp.Address;
-
             throw new NotImplementedException(
                 string.Format("RewriteOperand:{0} ({1}}}", op, op.GetType()));
         }
@@ -306,43 +317,47 @@ namespace Reko.Arch.PowerPC
             return GetEnumerator();
         }
 
-        private Expression EffectiveAddress(MachineOperand operand, RtlEmitter emitter)
+        private Identifier EnsureRegister(PowerPcRegister ppcReg)
         {
-            var mop = (MemoryOperand) operand;
-            var reg = frame.EnsureRegister(mop.BaseRegister);
-            var offset = mop.Offset;
-            return emitter.IAdd(reg, offset);
+            return frame.EnsureRegister(arch.RegisterByCapstoneID[ppcReg]);
         }
 
-        private Expression EffectiveAddress_r0(MachineOperand operand, RtlEmitter emitter)
+        private Expression EffectiveAddress(PowerPcInstructionOperand mop, RtlEmitter emitter)
         {
-            var mop = (MemoryOperand) operand;
-            if (mop.BaseRegister.Number == 0)
+            var reg = EnsureRegister(mop.MemoryValue.BaseRegister);
+            var offset = mop.MemoryValue.Displacement;
+            return emitter.IAdd(
+                reg,
+                Constant.Create(
+                    PrimitiveType.Create(Domain.SignedInt, reg.DataType.Size),
+                    offset));
+        }
+
+        private Expression EffectiveAddress_r0(PowerPcInstructionOperand mop, RtlEmitter emitter)
+        {
+            if (mop.MemoryValue.BaseRegister == PowerPcRegister.R0)
             {
-                return Constant.Word32((int) mop.Offset.ToInt16());
+                return Constant.Word32((int)mop.MemoryValue.Displacement);
             }
             else
             {
-                var reg = frame.EnsureRegister(mop.BaseRegister);
-                var offset = mop.Offset;
-                return emitter.IAdd(reg, offset);
+                return EffectiveAddress(mop, emitter);
             }
         }
 
-        private Expression SignExtend(Constant value)
+        private Expression SignExtend(long value, Domain dom)
         {
-            PrimitiveType iType = (PrimitiveType)value.DataType;
             if (arch.WordWidth.BitSize == 64)
             {
-                return (iType.Domain == Domain.SignedInt)
-                    ? Constant.Int64(value.ToInt64())
-                    : Constant.Word64(value.ToUInt64());
+                return (dom == Domain.SignedInt)
+                    ? Constant.Int64(value)
+                    : Constant.Word64(value);
             }
             else
             {
-                return (iType.Domain == Domain.SignedInt)
-                    ? Constant.Int32(value.ToInt32())
-                    : Constant.Word32(value.ToUInt32());
+                return (dom == Domain.SignedInt)
+                    ? Constant.Int32((int)value)
+                    : Constant.Word32((int)value);
             }
         }
 

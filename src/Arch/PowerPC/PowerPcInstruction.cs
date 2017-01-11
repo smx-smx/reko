@@ -27,6 +27,7 @@ using System.Text;
 using Gee.External.Capstone;
 using Gee.External.Capstone.PowerPc;
 using CapInstruction = Gee.External.Capstone.PowerPc.PowerPcInstruction;
+using System.Diagnostics;
 
 namespace Reko.Arch.PowerPC
 {
@@ -47,9 +48,9 @@ namespace Reko.Arch.PowerPC
 
         public new Address Address  { get { return Core.Address.Ptr32((uint)base.Address); } } //$TODO: how to determine if we're 32- or 64- bit?
 
-        int MachineInstruction.Length { get { return base.Bytes.Length; } }
+        int MachineInstruction.Length { get { return 4; } }
 
-        public bool IsValid { get { return base.Id != CapInstruction.INVALID; } }
+        public bool IsValid { get { return ArchitectureDetail != null && base.Id != CapInstruction.INVALID; } }
 
         public int OpcodeAsInteger { get { return (int)Id; } }
 
@@ -65,7 +66,11 @@ namespace Reko.Arch.PowerPC
 
         public int Operands
         {
-            get { return base.ArchitectureDetail.Operands.Length; }
+            get {
+                return base.ArchitectureDetail != null
+                  ? ArchitectureDetail.Operands.Length
+                  : 0; 
+            }
         }
 	
         public CapInstruction Opcode
@@ -73,11 +78,11 @@ namespace Reko.Arch.PowerPC
             get { return Id; }
         }
 
-        public MachineOperand op1 { get { return GetOperand(0); } }
-        public MachineOperand op2 { get { return GetOperand(1); } }
-        public MachineOperand op3 { get { return GetOperand(2); } }
-        public MachineOperand op4 { get { return GetOperand(3); } }
-        public MachineOperand op5 { get { return GetOperand(4); } }
+        public PowerPcInstructionOperand op1 { get { return ArchitectureDetail.Operands[0]; } }
+        public PowerPcInstructionOperand op2 { get { return ArchitectureDetail.Operands[1]; } }
+        public PowerPcInstructionOperand op3 { get { return ArchitectureDetail.Operands[2]; } }
+        public PowerPcInstructionOperand op4 { get { return ArchitectureDetail.Operands[3]; } }
+        public PowerPcInstructionOperand op5 { get { return ArchitectureDetail.Operands[4]; } }
 
         public bool Contains(Address addr)
         {
@@ -95,46 +100,98 @@ namespace Reko.Arch.PowerPC
 
         public void Render(MachineInstructionWriter writer)
         {
+            if (!IsValid)
+            {
+                writer.WriteOpcode("invalid");
+                return;
+            }
             writer.WriteOpcode(base.Mnemonic);
+            if (Operands == 0)
+                return;
             writer.Tab();
-            var sep = ",";
+            var sep = "";
             foreach (var op in ArchitectureDetail.Operands)
             {
-                //$TODO smx-smx: the ArchitectureDetail.Operands property is 
-                // null. it needs to be filled in the Capstone.NET project.
-
+                writer.Write(sep);
+                sep = ",";
+                Write(op, writer);
             }
-            /* Ye Olde Code. Remove when ready.
-                var op = string.Format("{0}{1}", 
-                    opcode,
-                    setsCR0 ? "." : "");
-                writer.WriteOpcode(op);
-                if (op1 != null)
+        }
+
+        private void Write(PowerPcInstructionOperand op, MachineInstructionWriter writer)
+        {
+            switch (op.Type)
+            {
+            case PowerPcInstructionOperandType.Register:
+                writer.Write(op.RegisterValue.Value.ToString().ToLower());
+                break;
+            case PowerPcInstructionOperandType.Memory:
+                writer.Write(op.MemoryValue.Displacement.ToString());
+                writer.Write('(');
+                writer.Write(op.MemoryValue.BaseRegister.ToString().ToLower());
+                writer.Write(')');
+                break;
+            case PowerPcInstructionOperandType.Immediate:
+                int val = op.ImmediateValue.Value;
+                if (UseAddressImmediate())
                 {
-                    writer.Tab();
-                    op1.Write(true, writer);
-                    if (op2 != null)
-                    {
-                        writer.Write(',');
-                        op2.Write(true, writer);
-                        if (op3 != null)
-                        {
-                            writer.Write(',');
-                            op3.Write(true, writer);
-                            if (op4 != null)
-                            {
-                                writer.Write(",");
-                                op4.Write(true, writer);
-                                if (op5 != null)
-                                {
-                                    writer.Write(",");
-                                    op5.Write(true, writer);
-                                }
-                            }
-                        }
-                    }
+                    //$TODO: 64-bit!
+                    var addr = Address.Ptr32((uint)val);
+                    writer.WriteAddress(string.Format("${0:X8}", addr.ToLinear()), addr);
+                    return;
                 }
-                */
+                if (UseSignedImmediate())
+                {
+                    char sign = '+';
+                    if (val < 0)
+                    {
+                        sign = '-';
+                        val = -val;
+                    }
+                    writer.Write(sign);
+                }
+                writer.Write("{0:X4}", val);
+                break;
+            default:
+                throw new AddressCorrelatedException(
+                    this.Address,
+                    string.Format("PowerPC operand type '{0}' has not been implemented.", op.Type));
+            }
+        }
+
+        private static HashSet<CapInstruction> useAddressImmediates = new HashSet<CapInstruction>
+        {
+            CapInstruction.BA,
+            CapInstruction.B,
+            CapInstruction.BDNZ,
+            CapInstruction.BDNZF,
+            CapInstruction.BDNZL,
+            CapInstruction.BDNZT,
+            CapInstruction.BDZ,
+            CapInstruction.BDZF,
+            CapInstruction.BDZL,
+            CapInstruction.BL,
+        };
+
+        private static HashSet<CapInstruction> useUnsignedImmediates = new HashSet<CapInstruction>
+        {
+            CapInstruction.ADDIS ,
+            CapInstruction.ANDI ,
+            CapInstruction.ANDIS,
+            CapInstruction.ORI ,
+            CapInstruction.ORIS,
+            CapInstruction.XORI ,
+            CapInstruction.XORIS,
+        };
+
+        internal bool UseAddressImmediate()
+        {
+            return useAddressImmediates.Contains(Id);
+        }
+
+        internal bool UseSignedImmediate()
+        {
+            return !useUnsignedImmediates.Contains(Id);
         }
 
         public override string ToString()

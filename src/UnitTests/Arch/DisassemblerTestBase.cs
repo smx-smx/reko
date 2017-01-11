@@ -25,6 +25,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Diagnostics;
 
 namespace Reko.UnitTests.Arch
 {
@@ -50,6 +51,7 @@ namespace Reko.UnitTests.Arch
         {
             var img = new MemoryArea(LoadAddress, new byte[256]);
             uint instr = ParseBitPattern(bitPattern);
+            Debug.Print("{0:X8}", instr);
             CreateImageWriter(img.Bytes).WriteUInt32(0, instr);
             return Disassemble(img);
         }

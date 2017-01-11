@@ -32,6 +32,7 @@ using System.Linq;
 using System.Text;
 using Opcode = Gee.External.Capstone.PowerPc.PowerPcInstruction;
 using DisassembleMode = Gee.External.Capstone.DisassembleMode;
+using Gee.External.Capstone.PowerPc;
 
 namespace Reko.Arch.PowerPC
 {
@@ -67,6 +68,7 @@ namespace Reko.Arch.PowerPC
 
             this.cr = new FlagRegister("cr", 0x80, wordWidth);
 
+            const int CrStart = 0x60;
             regs = new ReadOnlyCollection<RegisterStorage>(
                 Enumerable.Range(0, 0x20)
                     .Select(n => new RegisterStorage("r" + n, n, 0, wordWidth))
@@ -75,7 +77,7 @@ namespace Reko.Arch.PowerPC
                 .Concat(Enumerable.Range(0, 0x20)
                     .Select(n => new RegisterStorage("v" + n, n + 0x40, 0, PrimitiveType.Word128)))
                 .Concat(Enumerable.Range(0, 8)
-                    .Select(n => new RegisterStorage("cr" + n, n + 0x60, 0, PrimitiveType.Byte)))
+                    .Select(n => new RegisterStorage("cr" + n, n + CrStart, 0, PrimitiveType.Byte)))
                 .Concat(new[] { lr, ctr, xer })
                 .ToList());
 
@@ -91,6 +93,84 @@ namespace Reko.Arch.PowerPC
             //$REVIEW: using R1 as the stack register is a _convention_. It 
             // should be platform-specific at the very least.
             StackRegister = regs[1];
+
+            RegisterByCapstoneID = new Dictionary<PowerPcRegister, RegisterStorage>
+            {
+                { PowerPcRegister.R0, regs[0] },
+                { PowerPcRegister.R1, regs[1] },
+                { PowerPcRegister.R2, regs[2] },
+                { PowerPcRegister.R3, regs[3] },
+                { PowerPcRegister.R4, regs[4] },
+                { PowerPcRegister.R5, regs[5] },
+                { PowerPcRegister.R6, regs[6] },
+                { PowerPcRegister.R7, regs[7] },
+                { PowerPcRegister.R8, regs[8] },
+                { PowerPcRegister.R9, regs[9] },
+                { PowerPcRegister.R10, regs[10] },
+                { PowerPcRegister.R11, regs[11] },
+                { PowerPcRegister.R12, regs[12] },
+                { PowerPcRegister.R13, regs[13] },
+                { PowerPcRegister.R14, regs[14] },
+                { PowerPcRegister.R15, regs[15] },
+                { PowerPcRegister.R16, regs[16] },
+                { PowerPcRegister.R17, regs[17] },
+                { PowerPcRegister.R18, regs[18] },
+                { PowerPcRegister.R19, regs[19] },
+                { PowerPcRegister.R20, regs[20] },
+                { PowerPcRegister.R21, regs[21] },
+                { PowerPcRegister.R22, regs[22] },
+                { PowerPcRegister.R23, regs[23] },
+                { PowerPcRegister.R24, regs[24] },
+                { PowerPcRegister.R25, regs[25] },
+                { PowerPcRegister.R26, regs[26] },
+                { PowerPcRegister.R27, regs[27] },
+                { PowerPcRegister.R28, regs[28] },
+                { PowerPcRegister.R29, regs[29] },
+                { PowerPcRegister.R30, regs[30] },
+                { PowerPcRegister.R31, regs[31] },
+
+                { PowerPcRegister.F0, fpregs[0] },
+                { PowerPcRegister.F1, fpregs[1] },
+                { PowerPcRegister.F2, fpregs[2] },
+                { PowerPcRegister.F3, fpregs[3] },
+                { PowerPcRegister.F4, fpregs[4] },
+                { PowerPcRegister.F5, fpregs[5] },
+                { PowerPcRegister.F6, fpregs[6] },
+                { PowerPcRegister.F7, fpregs[7] },
+                { PowerPcRegister.F8, fpregs[8] },
+                { PowerPcRegister.F9, fpregs[9] },
+                { PowerPcRegister.F10, fpregs[10] },
+                { PowerPcRegister.F11, fpregs[11] },
+                { PowerPcRegister.F12, fpregs[12] },
+                { PowerPcRegister.F13, fpregs[13] },
+                { PowerPcRegister.F14, fpregs[14] },
+                { PowerPcRegister.F15, fpregs[15] },
+                { PowerPcRegister.F16, fpregs[16] },
+                { PowerPcRegister.F17, fpregs[17] },
+                { PowerPcRegister.F18, fpregs[18] },
+                { PowerPcRegister.F19, fpregs[19] },
+                { PowerPcRegister.F20, fpregs[20] },
+                { PowerPcRegister.F21, fpregs[21] },
+                { PowerPcRegister.F22, fpregs[22] },
+                { PowerPcRegister.F23, fpregs[23] },
+                { PowerPcRegister.F24, fpregs[24] },
+                { PowerPcRegister.F25, fpregs[25] },
+                { PowerPcRegister.F26, fpregs[26] },
+                { PowerPcRegister.F27, fpregs[27] },
+                { PowerPcRegister.F28, fpregs[28] },
+                { PowerPcRegister.F29, fpregs[29] },
+                { PowerPcRegister.F30, fpregs[30] },
+                { PowerPcRegister.F31, fpregs[31] },
+
+                { PowerPcRegister.CR0, cregs[0] },
+                { PowerPcRegister.CR1, cregs[1] },
+                { PowerPcRegister.CR2, cregs[2] },
+                { PowerPcRegister.CR3, cregs[3] },
+                { PowerPcRegister.CR4, cregs[4] },
+                { PowerPcRegister.CR5, cregs[5] },
+                { PowerPcRegister.CR6, cregs[6] },
+                { PowerPcRegister.CR7, cregs[7] },
+            };
         }
 
         public ReadOnlyCollection<RegisterStorage> Registers
@@ -112,9 +192,12 @@ namespace Reko.Arch.PowerPC
             get { return cregs; }
         }
 
+        public readonly Dictionary<PowerPcRegister, RegisterStorage> RegisterByCapstoneID;
+
+
         #region IProcessorArchitecture Members
 
-		public PowerPcDisassembler CreateInternalDisassemblerImpl(EndianImageReader rdr)
+        public PowerPcDisassembler CreateInternalDisassemblerImpl(EndianImageReader rdr)
         {
             var mode = WordWidth.Size == 64
                 ? DisassembleMode.BigEndian | DisassembleMode.Bit64
@@ -163,9 +246,9 @@ namespace Reko.Arch.PowerPC
         }
 
         public override abstract IEnumerable<Address> CreatePointerScanner(
-            SegmentMap map, 
+            SegmentMap map,
             EndianImageReader rdr,
-            IEnumerable<Address> addrs, 
+            IEnumerable<Address> addrs,
             PointerScannerFlags flags);
 
         //public override ProcedureBase GetTrampolineDestination(EndianImageReader rdr, IRewriterHost host)
@@ -196,25 +279,25 @@ namespace Reko.Arch.PowerPC
         {
             var e = rdr.GetEnumerator();
 
-            if (!e.MoveNext() || (e.Current.Opcode != Opcode.ADDIS && e.Current.Opcode != Opcode.ORIS))
+            //$TODO: verify that both ORIS and ADDIS map to LIS
+            if (!e.MoveNext() || (e.Current.Opcode != Opcode.LIS))
                 return null;
             var addrInstr = e.Current.Address;
-            var reg = ((RegisterOperand)e.Current.op1).Register;
-            var uAddr = ((ImmediateOperand)e.Current.op3).Value.ToUInt32() << 16;
+            var reg = e.Current.op1.RegisterValue.Value;
+            var uAddr = (uint)e.Current.op3.ImmediateValue.Value << 16;
 
             if (!e.MoveNext() || e.Current.Opcode != Opcode.LWZ)
                 return null;
-            var mem = e.Current.op2 as MemoryOperand;
-            if (mem == null)
+            if (e.Current.op2.Type != PowerPcInstructionOperandType.Memory)
                 return null;
-            if (mem.BaseRegister != reg)
+            if (e.Current.op2.MemoryValue.BaseRegister != reg)
                 return null;
-            uAddr = (uint)((int)uAddr + mem.Offset.ToInt32());
-            reg = ((RegisterOperand)e.Current.op1).Register;
+            uAddr = (uint)((int)uAddr + e.Current.op2.MemoryValue.Displacement);
+            reg = e.Current.op1.RegisterValue.Value;
 
             if (!e.MoveNext() || e.Current.Opcode != Opcode.MTCTR)
                 return null;
-            if (((RegisterOperand)e.Current.op1).Register != reg)
+            if (e.Current.op1.RegisterValue!= reg)
                 return null;
 
             if (!e.MoveNext() || e.Current.Opcode != Opcode.BCCTR)
@@ -309,6 +392,8 @@ namespace Reko.Arch.PowerPC
 
         public override abstract Address MakeAddressFromConstant(Constant c);
 
+        public abstract Address MakeAddressFromLinear(long value);
+
         public override Address ReadCodeAddress(int size, EndianImageReader rdr, ProcessorState state)
         {
             throw new NotImplementedException();
@@ -328,13 +413,14 @@ namespace Reko.Arch.PowerPC
             : base(PrimitiveType.Word32)
         { }
 
-		public override IEnumerable<MachineInstruction> CreateDisassembler(EndianImageReader imageReader) {
-			return new PowerPcDisassembler(this, imageReader);
-		}
+        public override IEnumerable<MachineInstruction> CreateDisassembler(EndianImageReader imageReader)
+        {
+            return new PowerPcDisassembler(this, imageReader);
+        }
 
-		public override IEnumerable<Address> CreatePointerScanner(
-            SegmentMap map, 
-            EndianImageReader rdr, 
+        public override IEnumerable<Address> CreatePointerScanner(
+            SegmentMap map,
+            EndianImageReader rdr,
             IEnumerable<Address> knownAddresses,
             PointerScannerFlags flags)
         {
@@ -349,6 +435,11 @@ namespace Reko.Arch.PowerPC
         {
             return Address.Ptr32(c.ToUInt32());
         }
+
+        public override Address MakeAddressFromLinear(long value)
+        {
+            return Address.Ptr32((uint)value);
+        }
     }
 
     public class PowerPcArchitecture64 : PowerPcArchitecture
@@ -357,11 +448,12 @@ namespace Reko.Arch.PowerPC
             : base(PrimitiveType.Word64)
         { }
 
-		public override IEnumerable<MachineInstruction> CreateDisassembler(EndianImageReader imageReader) {
-			return new PowerPcDisassembler(this, imageReader);
-		}
+        public override IEnumerable<MachineInstruction> CreateDisassembler(EndianImageReader imageReader)
+        {
+            return new PowerPcDisassembler(this, imageReader);
+        }
 
-		public override IEnumerable<Address> CreatePointerScanner(
+        public override IEnumerable<Address> CreatePointerScanner(
             SegmentMap map,
             EndianImageReader rdr,
             IEnumerable<Address> knownAddresses,
@@ -377,6 +469,11 @@ namespace Reko.Arch.PowerPC
         public override Address MakeAddressFromConstant(Constant c)
         {
             return Address.Ptr64(c.ToUInt64());
+        }
+
+        public override Address MakeAddressFromLinear(long value)
+        {
+            return Address.Ptr64((ulong)value);
         }
     }
 }
