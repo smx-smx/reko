@@ -7,52 +7,57 @@ using Gee.External.Capstone;
 using Gee.External.Capstone.PowerPc;
 using Reko.Core;
 
-namespace Reko.Arch.PowerPC {
+namespace Reko.Arch.PowerPC
+{
     public class PowerPcDisassembler : DisassemblerBase<PowerPcInstruction>
     {
         private IEnumerator<Instruction<Gee.External.Capstone.PowerPc.PowerPcInstruction, PowerPcRegister, PowerPcInstructionGroup, PowerPcInstructionDetail>> stream;
 
-        public static PowerPcDisassembler Create32(EndianImageReader rdr)
+        public static PowerPcDisassembler Create32(ImageReader rdr)
         {
-            //$sxm: todo!
-            throw new NotImplementedException();
+            return new PowerPcDisassembler(DisassembleMode.BigEndian | DisassembleMode.Bit32, rdr);
         }
 
-        public static PowerPcDisassembler Create64(EndianImageReader rdr)
+        public static PowerPcDisassembler Create64(ImageReader rdr)
         {
-            //$sxm: todo!
-            throw new NotImplementedException();
+            return new PowerPcDisassembler(DisassembleMode.BigEndian | DisassembleMode.Bit64, rdr);
         }
 
-        public PowerPcDisassembler(DisassembleMode mode, EndianImageReader rdr) {
-			var dasm = new InternalDisassembler(mode);
-			dasm.EnableDetails = true;
-			this.stream = dasm.DisassembleStream(
-				rdr.Bytes,
-				(int)rdr.Offset,
-				(long)rdr.Address.ToLinear() - rdr.Offset)
-				.GetEnumerator();
-		}
+        public PowerPcDisassembler(DisassembleMode mode, ImageReader rdr)
+        {
+            var dasm = new InternalDisassembler(mode);
+            dasm.EnableDetails = true;
+            this.stream = dasm.DisassembleStream(
+                rdr.Bytes,
+                (int)rdr.Offset,
+                (long)rdr.Address.ToLinear() - rdr.Offset)
+                .GetEnumerator();
+        }
 
-		public PowerPcDisassembler(PowerPcArchitecture32 arch, EndianImageReader rdr)
-			: this(DisassembleMode.Bit32 | DisassembleMode.BigEndian, rdr) { }
+        public PowerPcDisassembler(PowerPcArchitecture32 arch, ImageReader rdr)
+            : this(DisassembleMode.Bit32 | DisassembleMode.BigEndian, rdr) { }
 
-		public PowerPcDisassembler(PowerPcArchitecture64 arch, EndianImageReader rdr)
-			: this(DisassembleMode.Bit64 | DisassembleMode.BigEndian, rdr) { }
+        public PowerPcDisassembler(PowerPcArchitecture64 arch, ImageReader rdr)
+            : this(DisassembleMode.Bit64 | DisassembleMode.BigEndian, rdr) { }
 
-		protected override void Dispose(bool disposing) {
-			if (disposing) {
-				stream.Dispose();
-			}
-			base.Dispose(disposing);
-		}
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                stream.Dispose();
+            }
+            base.Dispose(disposing);
+        }
 
-		public override PowerPcInstruction DisassembleInstruction() {
-			if (stream.MoveNext()) {
-				return (PowerPcInstruction) stream.Current;
-			} else
-				return null;
-		}
+        public override PowerPcInstruction DisassembleInstruction()
+        {
+            if (stream.MoveNext())
+            {
+                return (PowerPcInstruction)stream.Current;
+            }
+            else
+                return null;
+        }
 
         private class InternalDisassembler : CapstonePowerPcDisassembler
         {
@@ -65,5 +70,5 @@ namespace Reko.Arch.PowerPC {
                 return new PowerPcInstruction();
             }
         }
-	}
+    }
 }

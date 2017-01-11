@@ -31,6 +31,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text;
 using Opcode = Gee.External.Capstone.PowerPc.PowerPcInstruction;
+using DisassembleMode = Gee.External.Capstone.DisassembleMode;
 
 namespace Reko.Arch.PowerPC
 {
@@ -115,14 +116,15 @@ namespace Reko.Arch.PowerPC
 
 		public PowerPcDisassembler CreateInternalDisassemblerImpl(EndianImageReader rdr)
         {
-            throw new NotImplementedException();        //$ sxm-sxm: for you to do!
-            //return new PowerPcDisassembler(this, rdr, WordWidth);
+            var mode = WordWidth.Size == 64
+                ? DisassembleMode.BigEndian | DisassembleMode.Bit64
+                : DisassembleMode.BigEndian | DisassembleMode.Bit32;
+            return new PowerPcDisassembler(mode, rdr);
         }
 
         public IEnumerable<MachineInstruction> CreateInternalDisassembler(EndianImageReader rdr)
         {
-            throw new NotImplementedException();        //$ sxm-sxm: for you to do!
-            //return new InternalPowerPcDisassembler(this, rdr, WordWidth);
+            return CreateInternalDisassemblerImpl(rdr);
         }
 
         public override EndianImageReader CreateImageReader(MemoryArea image, Address addr)
