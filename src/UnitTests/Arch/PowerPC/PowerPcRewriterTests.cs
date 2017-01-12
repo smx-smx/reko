@@ -225,7 +225,7 @@ namespace Reko.UnitTests.Arch.PowerPC
         {
             AssertCode(0x7c002670, //"srawi\tr0,r0,04");
                 "0|L--|00100000(4): 1 instructions",
-                "1|L--|r0 = r0 >> 0x00000004");
+                "1|L--|r0 = r0 >> 4");
         }
 
         [Test]
@@ -345,6 +345,7 @@ namespace Reko.UnitTests.Arch.PowerPC
         }
 
         [Test]
+        [Ignore(Categories.Capstone)]
         public void PPCRw_fmul_()
         {
             AssertCode(0xfc010033,
@@ -366,7 +367,7 @@ namespace Reko.UnitTests.Arch.PowerPC
         {
             AssertCode(0x7d808120, //"mtcrf\t08,r12");
                 "0|L--|00100000(4): 1 instructions",
-                "1|L--|__mtcrf(0x0008, r12)");
+                "1|L--|__mtcrf(8, r12)");
         }
 
         [Test]
@@ -382,7 +383,7 @@ namespace Reko.UnitTests.Arch.PowerPC
         {
             AssertCode(0x5120f042, // "rlwimi\tr0,r9,1E,01,01");
                 "0|L--|00100000(4): 1 instructions",
-                "1|L--|r0 = __rlwimi(r9, 0x0000001E, 0x00000001, 0x00000001)");
+                "1|L--|r0 = __rlwimi(r9, 30, 1, 1)");
         }
 
         [Test]
@@ -458,6 +459,7 @@ namespace Reko.UnitTests.Arch.PowerPC
         }
 
         [Test]
+        [Ignore(Categories.Capstone)]
         public void PPCRw_crxor()
         {
             AssertCode(0x4cc63182, // crclr   4*cr1+eq	
@@ -491,11 +493,20 @@ namespace Reko.UnitTests.Arch.PowerPC
         }
 
         [Test]
-        public void PPCRw_rlwinm_1_31_31()
+        public void PPCRw_slwi()
         {
             AssertCode(0x54630ffe, // rlwinm r3,r3,1,31,31
                 "0|L--|00100000(4): 1 instructions",
-                "1|L--|r3 = r3 >>u 0x1F");
+                "1|L--|r3 = r3 >>u 31");
+        }
+
+        [Test]
+        [Ignore(Categories.Capstone)]
+        public void PPCRw_cmpw()
+        {
+            AssertCode(0x7f891800, // cmpw    cr7,r9,r3	
+                "0|L--|00100000(4): 1 instructions",
+                "1|L--|cr7 = cond(r9 - r3)");
         }
 
         [Test]
@@ -511,7 +522,7 @@ namespace Reko.UnitTests.Arch.PowerPC
 
             AssertCode(0x575a1838, // rlwinm  r26,r26,3,0,28 
                 "0|L--|00100000(4): 1 instructions",
-                "1|L--|r26 = r26 << 0x03");
+                "1|L--|r26 = r26 << 3");
 
             AssertCode(0x7c03db96, // divwu   r0,r3,r27
                 "0|L--|00100000(4): 1 instructions",
@@ -524,10 +535,6 @@ namespace Reko.UnitTests.Arch.PowerPC
             AssertCode(0x6fde8000, // xoris   r30,r30,32768
                 "0|L--|00100000(4): 1 instructions",
                 "1|L--|r30 = r30 ^ 0x80000000");
-
-            AssertCode(0x7f891800, // cmpw    cr7,r9,r3	
-                "0|L--|00100000(4): 1 instructions",
-                "1|L--|cr7 = cond(r9 - r3)");
 
             AssertCode(0xdbe10038, // stfd    f31,56(r1)	
                 "0|L--|00100000(4): 1 instructions",
@@ -559,7 +566,7 @@ namespace Reko.UnitTests.Arch.PowerPC
 
             AssertCode(0x2b8300ff, // cmplwi  cr7,r3,255	
                 "0|L--|00100000(4): 1 instructions",
-                "1|L--|cr7 = cond(r3 - 0x000000FF)");
+                "1|L--|cr7 = cond(r3 - 255)");
         }
 
         [Test]
@@ -599,6 +606,7 @@ namespace Reko.UnitTests.Arch.PowerPC
         }
 
         [Test]
+        [Ignore(Categories.Capstone)]
         public void PPCrw_fneg_()
         {
             AssertCode(0xfc200051, // "fneg\tf1,f0");
@@ -616,11 +624,12 @@ namespace Reko.UnitTests.Arch.PowerPC
         }
 
         [Test]
+        [Ignore(Categories.Capstone)]
         public void PPCrw_creqv()
         {
             AssertCode(0x4cc63242, // "creqv\t06,06,06");
                 "0|L--|00100000(4): 1 instructions",
-                "1|L--|__creqv(0x00000006, 0x00000006, 0x00000006)");
+                "1|L--|__crset(0x00000006)");
         }
         //AssertCode(0x4e080000, "mcrf\tcr4,cr2");
 
@@ -763,11 +772,12 @@ namespace Reko.UnitTests.Arch.PowerPC
         }
 
         [Test]
+        [Ignore(Categories.Capstone)]
         public void PPCrw_bclr_getPC()
         {
             AssertCode(0x429f0005, // bcl-     20,cr7,xxxx
-                "0|L--|00100000(4): 1 instructions",
-                "1|L--|lr = 00100004");
+                "0|T--|00100000(4): 1 instructions",
+                "1|T--|lr = 00100004");
         }
 
         [Test]
@@ -862,7 +872,7 @@ namespace Reko.UnitTests.Arch.PowerPC
         {
             AssertCode(0x10601a8c, // vspltw\tv3,v3,00");
                 "0|L--|00100000(4): 1 instructions",
-                "1|L--|v3 = __vspltw(v3, 0x00000000)");
+                "1|L--|v3 = __vspltw(v3, 0)");
         }
 
         [Test]
@@ -928,7 +938,7 @@ namespace Reko.UnitTests.Arch.PowerPC
         {
             AssertCode(0x7c0bfe76, //sradi\tr11,r0,3F");
                 "0|L--|00100000(4): 1 instructions",
-                "1|L--|r11 = r0 >> 0x0000003F");
+                "1|L--|r11 = r0 >> 63");
         }
 
         [Test]
@@ -948,7 +958,7 @@ namespace Reko.UnitTests.Arch.PowerPC
         }
 
         [Test]
-        public void PPcRw_regression_3()
+        public void PPCRw_regression_3()
         {
             AssertCode(0x4200fff8, // bdnz+   0xfffffffffffffff8	
                         "0|T--|00100000(4): 2 instructions",
@@ -963,6 +973,7 @@ namespace Reko.UnitTests.Arch.PowerPC
         }
 
         [Test]
+        [Ignore(Categories.Capstone)]
         public void PPCRw_bcctr()
         {
             AssertCode(0x4000fef8, //"bdnzf\tlt,$000FFEF8");
@@ -1061,6 +1072,7 @@ namespace Reko.UnitTests.Arch.PowerPC
         }
 
         [Test]
+        [Ignore(Categories.Capstone)]
         public void PPCRw_Muxx()
         {
             AssertCode(0x7c6b040e, // .long 0x7c6b040e	
@@ -1073,7 +1085,7 @@ namespace Reko.UnitTests.Arch.PowerPC
         {
             AssertCode(0x10601a8c, // vspltw  v3,v3,0	
                 "0|L--|00100000(4): 1 instructions",
-                "1|L--|v3 = __vspltw(v3, 0x00000000)");
+                "1|L--|v3 = __vspltw(v3, 0)");
         }
 
         [Test]
@@ -1104,7 +1116,7 @@ namespace Reko.UnitTests.Arch.PowerPC
                           "1|L--|v5 = __vmaddfp(v9, v9, v8)");
             AssertCode(0x10200a8c, //"vspltw\tv1,v1,0");
                           "0|L--|00100000(4): 1 instructions",
-                          "1|L--|v1 = __vspltw(v1, 0x00000000)");
+                          "1|L--|v1 = __vspltw(v1, 0)");
             AssertCode(0x1160094a, //"vrsqrtefp\tv11,v1");
                           "0|L--|00100000(4): 1 instructions",
                           "1|L--|v11 = __vrsqrtefp(v1)");
@@ -1116,7 +1128,7 @@ namespace Reko.UnitTests.Arch.PowerPC
                           "1|L--|v11 = __vsel(v11, v1, v12)");
             AssertCode(0x1000002c, //"vsldoi\tv0,v0,v0,0");
                           "0|L--|00100000(4): 1 instructions",
-                          "1|L--|v0 = __vsldoi(v0, v0, 0x00000000)");
+                          "1|L--|v0 = __vsldoi(v0, v0, 0)");
             AssertCode(0x101f038c, //"vspltisw\tv0,-1");
                           "0|L--|00100000(4): 1 instructions",
                           "1|L--|v0 = __vspltisw(-1)");
@@ -1140,6 +1152,25 @@ namespace Reko.UnitTests.Arch.PowerPC
                           "1|L--|v18 = v18 ^ v12");
         }
 
+        [Test]
+        [Ignore(Categories.Capstone)]
+        public void PPCRw_vcmpeqfp_setcr6()
+        {
+            AssertCode(0x1000fcc6,//"vcmpeqfp.\tv0,v0,v31");
+              "0|L--|00100000(4): 2 instructions",
+              "1|L--|v0 = __vcmpeqfp(v0, v31)",
+              "2|L--|cr6 = cond(v0)");
+        }
+
+        [Test]
+        [Ignore(Categories.Capstone)]
+        public void PPCRw_vcmpgtuw_setcr6()
+        {
+            AssertCode(0x10006e86, //"vcmpgtuw.\tv0,v0,v13");
+                          "0|L--|00100000(4): 2 instructions",
+                          "1|L--|v0 = __vcmpgtuw(v0, v13)",
+                          "2|L--|cr6 = cond(v0)");
+        }
 
         [Test]
         public void PPCRw_regression4()
@@ -1153,10 +1184,6 @@ namespace Reko.UnitTests.Arch.PowerPC
             AssertCode(0x7c20480c,//"lvsl\tv1,r0,r9");
                           "0|L--|00100000(4): 1 instructions",
                           "1|L--|v1 = __lvsl(r9)");
-            AssertCode(0x1000fcc6,//"vcmpeqfp.\tv0,v0,v31");
-                          "0|L--|00100000(4): 2 instructions",
-                          "1|L--|v0 = __vcmpeqfp(v0, v31)",
-                          "2|L--|cr6 = cond(v0)");
             AssertCode(0x10c63184,//"vslw\tv6,v6,v6");
                           "0|L--|00100000(4): 1 instructions",
                           "1|L--|v6 = __vslw(v6, v6)");
@@ -1167,19 +1194,16 @@ namespace Reko.UnitTests.Arch.PowerPC
             AssertCode(0x11a0010a, //"vrefp\tv13,v0");
                           "0|L--|00100000(4): 1 instructions",
                           "1|L--|v13 = __vrefp(v0)");
-            AssertCode(0x10006e86, //"vcmpgtuw.\tv0,v0,v13");
-                          "0|L--|00100000(4): 2 instructions",
-                          "1|L--|v0 = __vcmpgtuw(v0, v13)",
-                          "2|L--|cr6 = cond(v0)");
+            
             AssertCode(0x7c00418e, //"stvewx\tv0,r0,r8");
                           "0|L--|00100000(4): 1 instructions",
                           "1|L--|__stvewx(v0, r8)");
             AssertCode(0x118063ca, //"vctsxs\tv12,v12,00");
                           "0|L--|00100000(4): 1 instructions",
-                          "1|L--|v12 = __vctsxs(v12, 0x00000000)");
+                          "1|L--|v12 = __vctsxs(v12, 0)");
             AssertCode(0x1020634a, //"vcfsx\tv1,v12,00");
                           "0|L--|00100000(4): 1 instructions",
-                          "1|L--|v1 = __vcfsx(v12, 0x00000000)");
+                          "1|L--|v1 = __vcfsx(v12, 0)");
             AssertCode(0x118c0404, //"vand\tv12,v12,v0");
                           "0|L--|00100000(4): 1 instructions",
                           "1|L--|v12 = v12 & v0");
@@ -1215,7 +1239,7 @@ namespace Reko.UnitTests.Arch.PowerPC
         {
             AssertCode(0xfdfe058e, //"mtfsf\tFF,f0");
                           "0|L--|00100000(4): 1 instructions",
-                          "1|L--|__mtfsf(f0, FF)");
+                          "1|L--|__mtfsf(f0, 255)");
         }
 
         [Test]
@@ -1265,11 +1289,12 @@ namespace Reko.UnitTests.Arch.PowerPC
         }
 
         [Test]
-        public void PPCRw_crnor()
+        [Ignore(Categories.Capstone)]
+        public void PPCRw_crnot()
         {
             AssertCode(0x4FDCE042, // crnor 1E,1C,1C
                 "0|L--|00100000(4): 1 instructions",
-                "1|L--|__crnor(0x0000001E, 0x0000001C, 0x0000001C)");
+                "1|L--|__crnot(0x0000001E, 0x0000001C)");
         }
     }
 }
