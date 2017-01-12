@@ -253,36 +253,23 @@ namespace Reko.Arch.PowerPC
             emitter.SideEffect(host.PseudoProcedure("__sync", VoidType.Instance));
         }
 
-        private void RewriteTw()
+        private void RewriteTw(Func<Expression, Expression, Expression> fn)
         {
-            var c = (Constant) RewriteOperand(instr.op1);
-            var ra = RewriteOperand(instr.op2);
-            var rb = RewriteOperand(instr.op3);
-            Func<Expression,Expression,Expression> op = null;
-            switch (c.ToInt32())
-            {
-            case 0x01: op = emitter.Ugt; break;
-            case 0x02: op = emitter.Ult; break;
-            case 0x04: op = emitter.Eq; break;
-            case 0x05: op = emitter.Uge; break;
-            case 0x06: op = emitter.Ule; break;
-            case 0x08: op = emitter.Gt; break;
-            case 0x0C: op = emitter.Ge; break;
-            case 0x10: op = emitter.Lt; break;
-            case 0x14: op = emitter.Le; break;
-            case 0x18: op = emitter.Ne; break;
-            default: throw new AddressCorrelatedException(
-                instr.Address,
-                string.Format("Unsupported trap operand {0:X2}.", c.ToInt32()));
-            }
-            cluster.Class = RtlClass.Linear;
-            emitter.If(
-                op(ra, rb),
-                new RtlSideEffect(
+            var ra = RewriteOperand(instr.op1);
+            var rb = RewriteOperand(instr.op2);
+            var trap = new RtlSideEffect(
                     host.PseudoProcedure(
                         "__trap",
-                        VoidType.Instance)));
-
+                        VoidType.Instance));
+            cluster.Class = RtlClass.Linear;
+            if (fn != null)
+            {
+                emitter.If(fn(ra, rb), trap);
+            }
+            else
+            {
+                emitter.Emit(trap);
+            }
         }
     }
 }

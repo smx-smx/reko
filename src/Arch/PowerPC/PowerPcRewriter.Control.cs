@@ -97,7 +97,9 @@ namespace Reko.Arch.PowerPC
                 return;
             }
             cluster.Class = RtlClass.ConditionalTransfer;
-            var cr = RewriteOperand(instr.op1);
+            Expression cr = (instr.Operands > 0)
+                ? RewriteOperand(instr.op1)
+                : EnsureRegister(PowerPcRegister.CR0);
             var dst = toLinkRegister 
                 ? frame.EnsureRegister(arch.lr)
                 : RewriteOperand(instr.op2);

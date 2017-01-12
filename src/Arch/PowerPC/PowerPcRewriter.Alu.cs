@@ -46,6 +46,13 @@ namespace Reko.Arch.PowerPC
             RewriteAdd(opD, opL, opR);
         }
 
+        private void RewriteMr()
+        {
+            var opD = RewriteOperand(instr.op1);
+            var opS = RewriteOperand(instr.op2);
+            emitter.Assign(opD, opS);
+        }
+
         public void RewriteAddc()
         {
             var opL = RewriteOperand(instr.op2, true);
@@ -244,6 +251,12 @@ namespace Reko.Arch.PowerPC
             emitter.Assign(dst, host.PseudoProcedure(name, PrimitiveType.UInt32, src));
         }
 
+        private void RewriteCrclr()
+        {
+            var cr = RewriteOperand(instr.op1);
+            emitter.SideEffect(host.PseudoProcedure("__crclr", VoidType.Instance, cr));
+        }
+
         private void RewriteCreqv()
         {
             var cr = RewriteOperand(instr.op1);
@@ -260,6 +273,13 @@ namespace Reko.Arch.PowerPC
             emitter.SideEffect(host.PseudoProcedure("__crnor", VoidType.Instance, cr, r, i));
         }
 
+        private void RewriteCrnot()
+        {
+            var cr = RewriteOperand(instr.op1);
+            var r = RewriteOperand(instr.op2);
+            emitter.SideEffect(host.PseudoProcedure("__crnot", VoidType.Instance, cr, r));
+        }
+
         private void RewriteCror()
         {
             var cr = RewriteOperand(instr.op1);
@@ -267,6 +287,13 @@ namespace Reko.Arch.PowerPC
             var i = RewriteOperand(instr.op3);
             emitter.SideEffect(host.PseudoProcedure("__cror", VoidType.Instance, cr, r, i));
         }
+
+        private void RewriteCrset()
+        {
+            var cr = RewriteOperand(instr.op1);
+            emitter.SideEffect(host.PseudoProcedure("__crset", VoidType.Instance, cr));
+        }
+
 
         private void RewriteCrxor()
         {
@@ -454,6 +481,15 @@ namespace Reko.Arch.PowerPC
                     RewriteOperand(instr.op4),
                     RewriteOperand(instr.op5))
                 );
+        }
+
+        void RewriteClrldi()
+        {
+            var rd = RewriteOperand(instr.op1);
+            var rs = RewriteOperand(instr.op2);
+            byte mb = ((Constant)RewriteOperand(instr.op3)).ToByte();
+            ulong maskBegin = (ulong)(1ul << (64 - mb)) - 1;
+            emitter.Assign(rd, emitter.And(rs, Constant.Word64(maskBegin)));
         }
 
         void RewriteRldicl()
@@ -674,6 +710,15 @@ namespace Reko.Arch.PowerPC
             }
             var mask = (1u << (32-mb)) - (1u << (31-me));
             emitter.Assign(rd, emitter.And(rol, Constant.UInt32(mask)));
+        }
+
+        private void RewriteRotlw()
+        {
+            var rd = RewriteOperand(instr.op1);
+            var rs = RewriteOperand(instr.op2);
+            var sh = RewriteOperand(instr.op3);
+            var rol = host.PseudoProcedure(PseudoProcedure.Rol, rd.DataType, rs, sh );
+            emitter.Assign(rd, rol);
         }
 
         public void RewriteSl(PrimitiveType dt)
