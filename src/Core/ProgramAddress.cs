@@ -25,6 +25,13 @@ using System.Text;
 
 namespace Reko.Core
 {
+    public enum AddressType
+    {
+        Code = 0,
+        Data,
+        String
+    }
+
     /// <summary>
     /// An address combined with the program in which it lives.
     /// </summary>
@@ -33,7 +40,7 @@ namespace Reko.Core
         public readonly Program Program;
         public readonly Address Address;
 
-        public ProgramAddress(Program program, Address addr)
+        public ProgramAddress(Program program, Address addr, AddressType type = AddressType.Code)
         {
             this.Program = program;
             this.Address = addr;

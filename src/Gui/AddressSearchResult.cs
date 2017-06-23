@@ -114,7 +114,7 @@ namespace Reko.Gui
             switch (details)
             {
             case AddressSearchDetails.Code: sData = RenderCode(hit); break;
-            case AddressSearchDetails.Strings: sData = RenderString(hit); break;
+            case AddressSearchDetails.Strings: sData = RenderString(hit as ProgramStringAddress); break;
             case AddressSearchDetails.Data: sData = RenderData(hit); break;
             }
 
@@ -144,20 +144,9 @@ namespace Reko.Gui
             }
         }
 
-        public string RenderString(ProgramAddress hit)
+        public string RenderString(ProgramStringAddress hit)
         {
-            var rdr = hit.Program.CreateImageReader(hit.Address);
-            var sb = new StringBuilder();
-            while (rdr.IsValid)
-            {
-                var ch = rdr.ReadByte();
-                if (ch == 0 || sb.Length > 80)
-                    break;
-                sb.Append(0x20 <= ch && ch < 0x7F
-                    ? (char)ch
-                    : '.');
-            }
-            return sb.ToString();
+            return hit.StringData;
         }
 
         public string RenderData(ProgramAddress hit)

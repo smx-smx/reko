@@ -9,6 +9,7 @@ namespace Reko.Scanning.StringFormats
         IsPrintable = 1 << 0,
         MinimumLength = 1 << 1,
         MaximumLength = 1 << 2,
+        //$TODO: Broken (do we need these?)
         StrictEncoding = 1 << 3,
         MatchEncoding = 1 << 4
     }

@@ -51,16 +51,21 @@ namespace Reko.Scanning
                 var rdr = program.Architecture.CreateImageReader(segment.MemoryArea, segment.Address);
                 Address addrStartRun = null;
 
-                CStringDecoder decoder = new CStringDecoder(rdr);
-                decoder.Settings.Flags |= StringScannerFlags.MinimumLength;
-                decoder.Settings.MinimumLength = minLength;
+                //$TODO: How do we choose the decoder to use?
+                //CStringDecoder decoder = new CStringDecoder(rdr);
+                UnicodeStringDecoder decoder = new UnicodeStringDecoder(rdr, new StringScannerSettings {
+                    Encoding = StringEncoding.Unicode,
+                    Flags = StringScannerFlags.IsPrintable |
+                            StringScannerFlags.MinimumLength,
+                    MinimumLength = minLength
+                });
 
                 while (rdr.Address < segEnd)
                 {
                     string str;
                     addrStartRun = rdr.Address;
                     if (decoder.TryDecodeString(out str) && str.Length > minLength) {
-                        yield return new ProgramAddress(program, addrStartRun);
+                        yield return new ProgramStringAddress(program, addrStartRun, str);
                     }
                 }
             }

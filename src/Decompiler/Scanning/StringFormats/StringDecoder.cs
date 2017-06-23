@@ -37,8 +37,11 @@ namespace Reko.Scanning.StringFormats
         public StringDecoder(ImageReader rdr, StringScannerSettings settings = null)
         {
             Reader = rdr;
-            if (settings == null)
+            if (settings == null) {
                 DefaultStringScannerSettings();
+            } else {
+                Settings = settings;
+            }
         }
 
         public StringDecoder(byte[] data, StringScannerSettings settings = null) : this(new ImageReader(data), settings)
