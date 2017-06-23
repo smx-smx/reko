@@ -303,6 +303,9 @@
     <Compile Include="Scanning\ScanResults.cs" />
     <Compile Include="Scanning\ShingledScanner.cs" />
     <Compile Include="Scanning\StringFinder.cs" />
+    <Compile Include="Scanning\StringFormats\CStringDecoder.cs" />
+    <Compile Include="Scanning\StringFormats\StringDecoder.cs" />
+    <Compile Include="Scanning\StringFormats\StringScannerSettings.cs" />
     <Compile Include="Scanning\StringSearch.cs" />
     <Compile Include="Scanning\KmpStringSearch.cs" />
     <Compile Include="Scanning\ProcedureWorkItem.cs" />

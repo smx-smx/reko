@@ -24,6 +24,7 @@ using System.Linq;
 using System.Text;
 using Reko.Core;
 using Reko.Core.Types;
+using Reko.Scanning.StringFormats;
 
 namespace Reko.Scanning
 {
@@ -49,24 +50,16 @@ namespace Reko.Scanning
                     segment.MemoryArea.BaseAddress + segment.MemoryArea.Bytes.Length);
                 var rdr = program.Architecture.CreateImageReader(segment.MemoryArea, segment.Address);
                 Address addrStartRun = null;
-                int cValid = 0;
+
+                CStringDecoder decoder = new CStringDecoder(rdr);
+                decoder.Settings.MinimumLength = minLength;
+
                 while (rdr.Address < segEnd)
                 {
-                    byte ch = rdr.ReadByte();
-                    if (!IsValid((char)ch))
-                    {
-                        if (ch == 0 && cValid >= minLength)
-                        {
-                            yield return new ProgramAddress(program, addrStartRun);
-                        }
-                        addrStartRun = null;
-                        cValid = 0;
-                    }
-                    else
-                    {
-                        if (addrStartRun == null)
-                            addrStartRun = rdr.Address - 1;
-                        ++cValid;
+                    string str;
+                    addrStartRun = rdr.Address;
+                    if (decoder.TryDecodeString(out str) && str.Length > minLength) {
+                        yield return new ProgramAddress(program, addrStartRun);
                     }
                 }
             }
