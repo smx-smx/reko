@@ -52,6 +52,7 @@ namespace Reko.Scanning
                 Address addrStartRun = null;
 
                 CStringDecoder decoder = new CStringDecoder(rdr);
+                decoder.Settings.Flags |= StringScannerFlags.MinimumLength;
                 decoder.Settings.MinimumLength = minLength;
 
                 while (rdr.Address < segEnd)

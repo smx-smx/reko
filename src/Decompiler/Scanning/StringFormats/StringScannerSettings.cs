@@ -8,8 +8,9 @@ namespace Reko.Scanning.StringFormats
     {
         IsPrintable = 1 << 0,
         MinimumLength = 1 << 1,
-        StrictEncoding = 1 << 2,
-        MatchEncoding = 1 << 3
+        MaximumLength = 1 << 2,
+        StrictEncoding = 1 << 3,
+        MatchEncoding = 1 << 4
     }
 
     public enum StringEncoding
@@ -30,6 +31,7 @@ namespace Reko.Scanning.StringFormats
         public StringScannerFlags Flags;
         public StringEncoding Encoding;
         public int MinimumLength;
+        public int MaximumLength;
 
         public Encoding GetEncoding()
         {

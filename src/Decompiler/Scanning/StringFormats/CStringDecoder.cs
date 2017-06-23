@@ -38,6 +38,9 @@ namespace Reko.Scanning.StringFormats
             if (Settings.Flags.HasFlag(StringScannerFlags.MinimumLength) && result.Length < Settings.MinimumLength)
                 return null;
 
+            if (Settings.Flags.HasFlag(StringScannerFlags.MaximumLength) && result.Length > Settings.MaximumLength)
+                return null;
+
             return result;
         }
     }
