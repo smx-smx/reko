@@ -26,14 +26,11 @@ namespace Reko.Scanning.StringFormats
             byte[] data = bytes.ToArray();
             string result;
 
-            if (Settings.Flags.HasFlag(StringScannerFlags.StrictEncoding)) {
-                Encoding e = Settings.GetEncoding();
-                result = e.GetString(data);
-                if (Settings.Flags.HasFlag(StringScannerFlags.MatchEncoding) && !BytesMatchEncoding(data, e))
-                    return null;
-            } else {
-                result = Encoding.Default.GetString(data);
-            }
+
+            Encoding e = Settings.Encoding;
+            result = e.GetString(data);
+            if (Settings.Flags.HasFlag(StringScannerFlags.StrictEncoding) && !BytesMatchEncoding(data, e))
+                return null;
 
             if (Settings.Flags.HasFlag(StringScannerFlags.MinimumLength) && result.Length < Settings.MinimumLength)
                 return null;

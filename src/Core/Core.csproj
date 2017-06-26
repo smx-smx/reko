@@ -674,6 +674,8 @@
     </Compile>
     <Compile Include="Types\ReferenceTo.cs" />
     <Compile Include="Types\StringType.cs" />
+    <Compile Include="Types\StringTypes\AsciiStringType.cs" />
+    <Compile Include="Types\StringTypes\UnicodeStringType.cs" />
     <Compile Include="Types\StructureField.cs">
       <SubType>Code</SubType>
     </Compile>

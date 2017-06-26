@@ -25,6 +25,7 @@ using System.Text;
 using Reko.Core;
 using Reko.Core.Types;
 using Reko.Scanning.StringFormats;
+using Reko.Core.Types.StringTypes;
 
 namespace Reko.Scanning
 {
@@ -51,14 +52,19 @@ namespace Reko.Scanning
                 var rdr = program.Architecture.CreateImageReader(segment.MemoryArea, segment.Address);
                 Address addrStartRun = null;
 
-                //$TODO: How do we choose the decoder to use?
-                //CStringDecoder decoder = new CStringDecoder(rdr);
-                UnicodeStringDecoder decoder = new UnicodeStringDecoder(rdr, new StringScannerSettings {
-                    Encoding = StringEncoding.Unicode,
-                    Flags = StringScannerFlags.IsPrintable |
-                            StringScannerFlags.MinimumLength,
-                    MinimumLength = minLength
-                });
+                //$TODO: CreateDecoder() in stringType?
+                Type decoderType;
+                if(stringType is UnicodeStringType) {
+                    decoderType = typeof(UnicodeStringDecoder);
+                } else {
+                    decoderType = typeof(CStringDecoder);
+                }
+
+                StringDecoder decoder = Activator.CreateInstance(decoderType, new object[]{rdr, new StringScannerSettings(
+                    stringType.Encoding,
+                    StringScannerFlags.IsPrintable | StringScannerFlags.StrictEncoding | StringScannerFlags.MinimumLength,
+                    minLength
+                )}) as StringDecoder;
 
                 while (rdr.Address < segEnd)
                 {

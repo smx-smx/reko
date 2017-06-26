@@ -24,24 +24,10 @@ namespace Reko.Scanning.StringFormats
             return (' ' <= ch && ch < 0x7F);
         }
 
-        private void DefaultStringScannerSettings()
-        {
-            if(Settings == null) {
-                Settings = new StringScannerSettings {
-                    Encoding = StringEncoding.ASCII,
-                    Flags = StringScannerFlags.IsPrintable | StringScannerFlags.StrictEncoding | StringScannerFlags.MatchEncoding
-                };
-            }
-        }
-
         public StringDecoder(ImageReader rdr, StringScannerSettings settings = null)
         {
-            Reader = rdr;
-            if (settings == null) {
-                DefaultStringScannerSettings();
-            } else {
-                Settings = settings;
-            }
+            this.Reader = rdr;
+            this.Settings = (settings == null) ? new StringScannerSettings() : settings;
         }
 
         public StringDecoder(byte[] data, StringScannerSettings settings = null) : this(new ImageReader(data), settings)

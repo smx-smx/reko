@@ -33,8 +33,6 @@ namespace Reko.Scanning.StringFormats
                         return null;
                     if (chCount % 2 != 0 || ++zeroCount >= 2)
                         break;
-                    // Skip zero characters
-                    continue;
                 // It's not a zero, but was it preceded by one?
                 } else if(chCount > 1 && zeroCount < 1){
                     return null;
@@ -42,7 +40,7 @@ namespace Reko.Scanning.StringFormats
                     zeroCount = 0;
                 }
 
-                if (Settings.Flags.HasFlag(StringScannerFlags.IsPrintable) && !IsPrintableCharacter((char)ch))
+                if (zeroCount < 1 && Settings.Flags.HasFlag(StringScannerFlags.IsPrintable) && !IsPrintableCharacter((char)ch))
                     return null;
 
                 bytes.Add(ch);
@@ -51,14 +49,10 @@ namespace Reko.Scanning.StringFormats
             byte[] data = bytes.ToArray();
             string result;
 
-            if (Settings.Flags.HasFlag(StringScannerFlags.StrictEncoding)) {
-                Encoding e = Settings.GetEncoding();
-                result = e.GetString(data);
-                if (Settings.Flags.HasFlag(StringScannerFlags.MatchEncoding) && !BytesMatchEncoding(data, e))
-                    return null;
-            } else {
-                result = Encoding.Default.GetString(data);
-            }
+            Encoding e = Settings.Encoding;
+            result = e.GetString(data);
+            if (Settings.Flags.HasFlag(StringScannerFlags.StrictEncoding) && !BytesMatchEncoding(data, e))
+                return null;
 
             if (Settings.Flags.HasFlag(StringScannerFlags.MinimumLength) && result.Length < Settings.MinimumLength)
                 return null;

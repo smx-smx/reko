@@ -9,9 +9,7 @@ namespace Reko.Scanning.StringFormats
         IsPrintable = 1 << 0,
         MinimumLength = 1 << 1,
         MaximumLength = 1 << 2,
-        //$TODO: Broken (do we need these?)
-        StrictEncoding = 1 << 3,
-        MatchEncoding = 1 << 4
+        StrictEncoding = 1 << 3
     }
 
     public enum StringEncoding
@@ -29,24 +27,21 @@ namespace Reko.Scanning.StringFormats
 
     public class StringScannerSettings
     {
-        public StringScannerFlags Flags;
-        public StringEncoding Encoding;
-        public int MinimumLength;
-        public int MaximumLength;
+        public StringScannerFlags Flags { get; private set; }
+        public Encoding Encoding { get; private set; }
+        public int MinimumLength { get; private set; }
+        public int MaximumLength { get; private set; }
 
-        public Encoding GetEncoding()
-        {
-            string encodingName = Enum.GetName(this.Encoding.GetType(), this.Encoding);
-            switch (encodingName) {
-                case "ASCII":
-                    return System.Text.Encoding.ASCII;
-                case "UTF8":
-                    return System.Text.Encoding.UTF8;
-                case "Unicode":
-                    return System.Text.Encoding.Unicode;
-                default:
-                    throw new NotSupportedException(string.Format("Encoding {0} not supported yet", encodingName));
-            }
+        public StringScannerSettings(
+            Encoding encoding = null,
+            StringScannerFlags flags = StringScannerFlags.IsPrintable,
+            int minimumLength = 0,
+            int maximumLength = 0
+        ){
+            this.Encoding = (encoding == null) ? Encoding.Default : encoding;
+            this.Flags = flags;
+            this.MinimumLength = minimumLength;
+            this.MaximumLength = maximumLength;
         }
     }
 }

@@ -19,14 +19,9 @@
 #endregion
 
 using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
-using System.Linq;
-using System.Text;
 using System.Windows.Forms;
 using Reko.Core.Types;
+using Reko.Core.Types.StringTypes;
 
 namespace Reko.Gui.Windows.Forms
 {
@@ -46,16 +41,35 @@ namespace Reko.Gui.Windows.Forms
 
         public StringType GetStringType ()
         {
-            var charType = ddlCharSize.SelectedIndex > 0
-                ? PrimitiveType.WChar
-                : PrimitiveType.Char;
-            switch (ddlStringKind.SelectedIndex)
-            {
-            default: return StringType.NullTerminated(charType);
-            case 1: return StringType.LengthPrefixedStringType(charType, PrimitiveType.Byte);
-            case 2: return StringType.LengthPrefixedStringType(charType, PrimitiveType.UInt16);
-            case 3: return StringType.LengthPrefixedStringType(charType, PrimitiveType.UInt32);
+            Type type;
+            switch (ddlCharSize.SelectedIndex) {
+                default:
+                    type = typeof(AsciiStringType);
+                    break;
+                case 1:
+                    type = typeof(UnicodeStringType);
+                    break;
             }
+
+            PrimitiveType prefixType = null;
+            //$TODO: Should this be user selectable?
+            int prefixOffset = 0;
+
+            switch (ddlStringKind.SelectedIndex) {
+                case 1:
+                    prefixType = PrimitiveType.Byte;
+                    break;
+                case 2:
+                    prefixType = PrimitiveType.UInt16;
+                    break;
+                case 3:
+                    prefixType = PrimitiveType.UInt32;
+                    break;
+            }
+
+            return Activator.CreateInstance(type, new object[]{
+                prefixType, prefixOffset
+            }) as StringType;
         }
     }
 }
