@@ -2,7 +2,6 @@
 using Reko.Gui;
 using System;
 using System.Collections.Generic;
-using System.Windows.Forms;
 using Reko.Gui.Controls;
 
 namespace Reko.WindowsItp
@@ -106,7 +105,7 @@ namespace Reko.WindowsItp
 
         }
 
-        public void UpdateControlStyle(string list, Control ctrl)
+        public void UpdateControlStyle(string list, object oCtrl)
         {
             throw new NotImplementedException();
         }

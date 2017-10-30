@@ -35,6 +35,7 @@ using System.ComponentModel.Design;
 using System.IO;
 using System.Linq;
 using System.Windows.Forms;
+using Reko.UserInterfaces.WindowsForms;
 
 namespace Reko.WindowsItp
 {

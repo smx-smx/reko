@@ -312,6 +312,7 @@
     <Compile Include="ToolStripButtonWrapper.cs" />
     <Compile Include="ToolStripItemAdapter.cs" />
     <Compile Include="ToolStripTextBoxWrapper.cs" />
+    <Compile Include="UiPreferencesService.cs" />
     <Compile Include="ViewImportsControl.cs">
       <SubType>UserControl</SubType>
     </Compile>
