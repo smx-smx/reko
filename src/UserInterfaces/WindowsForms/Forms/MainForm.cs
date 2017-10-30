@@ -107,7 +107,13 @@ namespace Reko.UserInterfaces.WindowsForms.Forms
             set { Text = value; }
         }
 
-        public void AddToolbar(ToolStrip toolBar)
+	    public Gui.Forms.FormWindowState WindowState
+		{
+		    get { return (Gui.Forms.FormWindowState) base.WindowState; }
+		    set { base.WindowState = (System.Windows.Forms.FormWindowState) value; }
+	    }
+
+	    public void AddToolbar(ToolStrip toolBar)
         {
             this.Controls.Add(toolBar);
             this.toolBar = toolBar;

@@ -49,26 +49,6 @@ namespace Reko.Gui.Electron.Adapter
 
 	    private ServiceContainer services;
 
-		public async Task<object> Hello2(dynamic foo) {
-            System.Windows.Forms.MessageBox.Show("Reko2");
-		    secret = "foo";
-		    return "Hello World2";
-		}
-
-	    public async Task<object> Hello3(dynamic foo) {
-            System.Windows.Forms.MessageBox.Show("Reko3");
-		    return secret;
-	    }
-
-		public async Task<object> Hello(object foo)
-        {
-            System.Windows.Forms.MessageBox.Show("Hello, i'm Reko");
-	        return new {
-		        Reko2 = (Func<object, Task<object>>)Hello2,
-		        Reko3 = (Func<object, Task<object>>)Hello3
-	        };
-        }
-
 	    public async Task<object> CreateReko(dynamic input) {
 		    appConfigPath = input.appConfig;
 		    fileNamePath = input.fileName;

@@ -168,13 +168,13 @@ namespace Reko.UnitTests.Gui.Windows.Forms
         private void Expect_MainForm_SizeSet()
         {
             form.Expect(f => f.Size = new Size(1000, 700));
-            form.Expect(f => f.WindowState = FormWindowState.Normal);
+            form.Expect(f => f.WindowState = Reko.Gui.Forms.FormWindowState.Normal);
         }
 
         private void Expect_UiPreferences_Loaded()
         {
             uiPrefs.Expect(u => u.Load());
-            uiPrefs.Stub(u => u.WindowState).Return(FormWindowState.Normal);
+            uiPrefs.Stub(u => u.WindowState).Return(Reko.Gui.Forms.FormWindowState.Normal);
             uiPrefs.Stub(u => u.WindowSize).Return(new Size(1000, 700));
         }
 
@@ -448,8 +448,8 @@ namespace Reko.UnitTests.Gui.Windows.Forms
         {
             uiPrefs.Stub(u => u.Load());
             uiPrefs.Stub(u => u.WindowSize).Return(new Size());
-            uiPrefs.Stub(u => u.WindowState).Return(FormWindowState.Normal);
-            form.Stub(f => f.WindowState = FormWindowState.Normal);
+            uiPrefs.Stub(u => u.WindowState).Return(Reko.Gui.Forms.FormWindowState.Normal);
+            form.Stub(f => f.WindowState = Reko.Gui.Forms.FormWindowState.Normal);
         }
 
         private void Given_SavePrompt(bool answer)
@@ -610,9 +610,9 @@ namespace Reko.UnitTests.Gui.Windows.Forms
             var size = new Size(800, 600);
             uiPrefs.Stub(u => u.Load());
             uiPrefs.Stub(u => u.WindowSize).Return(size);
-            uiPrefs.Stub(u => u.WindowState).Return(FormWindowState.Normal);
+            uiPrefs.Stub(u => u.WindowState).Return(Reko.Gui.Forms.FormWindowState.Normal);
             form.Stub(f => f.Size = size);
-            form.Stub(f => f.WindowState = FormWindowState.Normal);
+            form.Stub(f => f.WindowState = Reko.Gui.Forms.FormWindowState.Normal);
         }
 
         private void When_CreateMainFormInteractor()
