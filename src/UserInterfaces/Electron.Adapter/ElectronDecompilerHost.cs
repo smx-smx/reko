@@ -11,7 +11,7 @@ using System.IO;
 
 namespace Reko.Gui.Electron.Adapter
 {
-    public class ElectronDecompilerHost : DecompilerHost
+    public class ElectronDecompilerHost : Reko.DecompilerHost
     {
         public IConfigurationService Configuration
         {

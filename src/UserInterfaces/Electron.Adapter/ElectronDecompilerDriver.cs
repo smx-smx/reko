@@ -34,6 +34,8 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Reko.Gui.Electron.Adapter.Forms;
+using Reko.Gui.Forms;
 
 namespace Reko.Gui.Electron.Adapter
 {
@@ -41,13 +43,40 @@ namespace Reko.Gui.Electron.Adapter
     {
         private Project project;
 
-	    private string secret = null;
-
 	    private string appConfigPath;
 	    private string fileNamePath;
-	    private ElectronDiagnosticsService diagService;
 
+		private ElectronDiagnosticsService diagService;
 	    private ServiceContainer services;
+
+	    private ElectronMainForm mainForm;
+
+	    public async Task<object> CreateRekoServices(dynamic input) {
+			if(input.debug)
+				Debugger.Launch();
+
+			appConfigPath = input.appConfig;
+		    fileNamePath = input.fileName;
+		    this.diagService = new ElectronDiagnosticsService((Func<object, Task<object>>)input.notify);
+
+			var config = RekoConfigurationService.Load(this.appConfigPath);
+		    var listener = new ElectronEventListener(this.diagService);
+
+			this.services = new ServiceContainer();
+		    services.AddService<DecompilerEventListener>(listener);
+		    services.AddService<IConfigurationService>(config);
+		    services.AddService<ITypeLibraryLoaderService>(new TypeLibraryLoaderServiceImpl(services));
+		    services.AddService<IDiagnosticsService>(this.diagService);
+		    services.AddService<IFileSystemService>(new FileSystemServiceImpl());
+			services.AddService<DecompilerHost>(new ElectronDecompilerHost());
+		    services.AddService<ISettingsService>(new ElectronSettingsService(services));
+
+			mainForm = new ElectronMainForm(input.mainForm);
+			mainForm.Attach(input.shellUi, services);
+
+			services.RequireService<IDecompilerShellUiService>().ShowMessage("Hello World");
+			return true;
+	    }
 
 	    public async Task<object> CreateReko(dynamic input) {
 		    appConfigPath = input.appConfig;
@@ -64,7 +93,7 @@ namespace Reko.Gui.Electron.Adapter
 		    services.AddService<ITypeLibraryLoaderService>(new TypeLibraryLoaderServiceImpl(services));
 		    services.AddService<IDiagnosticsService>(this.diagService);
 		    services.AddService<IFileSystemService>(new FileSystemServiceImpl());
-		    services.AddService<DecompilerHost>(new ElectronDecompilerHost());
+			services.AddService<Reko.DecompilerHost>(new ElectronDecompilerHost());
 
 
 			return new {
@@ -83,7 +112,7 @@ namespace Reko.Gui.Electron.Adapter
 		public async Task<object> Decompile(dynamic input)
         {
             var ldr = new Loader(services);
-            var decompiler = new DecompilerDriver(ldr, services);
+            var decompiler = new Reko.DecompilerDriver(ldr, services);
             decompiler.Decompile(this.fileNamePath);
             //$REVIEW: Ew. using a global variable to keep this alive unti the next call.
             // How do we reason about instances?

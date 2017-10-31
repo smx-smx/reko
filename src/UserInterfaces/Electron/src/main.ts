@@ -3,6 +3,9 @@ import {app, dialog, Menu, BrowserWindow, ipcMain} from 'electron';
 
 import SharpAssembly from "./SharpAssembly";
 
+import MainForm from "./Reko/MainForm";
+import ShellUiService from "./Reko/ShellUiService";
+
 var util = require('util');
 
 var mainWindow: Electron.BrowserWindow;
@@ -76,8 +79,27 @@ ipcMain.on("getSearchResults", (event:any, args:any) => {
 
 function afterInit(){
 	var resolve = require('path').resolve;
-	var createReko = rekoUi.getFunction(rootType, "CreateReko");
+	var createReko = rekoUi.getFunction(rootType, "CreateRekoServices");
 	
+	SharpAssembly.InvokeAsync(createReko, {
+		debug: false,
+		appConfig: resolve("generated/assemblies/reko.config"),
+		fileName: "E:/dec/Aberaham.exe",
+		//fileName: "C:/dev/uxmal/reko/zoo/users/smxsmx/abheram/Aberaham.exe",
+		notify: function (data:any, callback:any) {
+			//console.log(JSON.stringify(data));
+			mainWindow.webContents.send("reko-message", data);
+			callback(null, true);
+		},
+		mainForm: new MainForm().GetClassAsJSON(),
+		shellUi: new ShellUiService().GetClassAsJSON()
+	});
+}
+	
+function afterInit2(){
+	var resolve = require('path').resolve;
+	var createReko = rekoUi.getFunction(rootType, "CreateReko");
+
 	console.log("$$$ About to decompile");
 	SharpAssembly.InvokeAsync(createReko, {
 		appConfig: resolve("generated/assemblies/reko.config"),
@@ -87,7 +109,9 @@ function afterInit(){
 			//console.log(JSON.stringify(data));
 			mainWindow.webContents.send("reko-message", data);
 			callback(null, true);
-		}
+		},
+		mainForm: new MainForm().GetClassAsJSON(),
+		shellUi: new ShellUiService().GetClassAsJSON()
 	}).then((result) => {
 		console.log("$$$ i'm this far");
 		reko = result;

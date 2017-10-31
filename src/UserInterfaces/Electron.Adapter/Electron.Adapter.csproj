@@ -35,6 +35,8 @@
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="Microsoft.CSharp" />
@@ -45,10 +47,13 @@
   <ItemGroup>
     <Compile Include="ElectronDecompilerDriver.cs" />
     <Compile Include="ElectronDecompilerHost.cs" />
+    <Compile Include="ElectronDecompilerShellUiService.cs" />
     <Compile Include="ElectronDiagnosticsService.cs" />
     <Compile Include="ElectronEventListener.cs" />
+    <Compile Include="ElectronSettingsService.cs" />
     <Compile Include="ElectronSearchResultService.cs" />
     <Compile Include="ElectronServiceFactory.cs" />
+    <Compile Include="Forms\ElectronMainForm.cs" />
     <Compile Include="JsCodeLocation.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
