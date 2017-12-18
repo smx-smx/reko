@@ -27,6 +27,7 @@ using Reko.Core.Types;
 using System;
 using System.Collections.Generic;
 using System.IO;
+
 namespace Reko.Evaluation
 {
     public class SymbolicEvaluationContext : EvaluationContext
@@ -34,15 +35,20 @@ namespace Reko.Evaluation
         private IProcessorArchitecture arch;
         private StorageValueSetter setter;
 
-        public SymbolicEvaluationContext(IProcessorArchitecture arch, Frame frame)
-        {
-            this.arch = arch;
-            this.Frame = frame;
-            this.RegisterState = new Dictionary<Storage, Expression>();
-            this.StackState = new SortedList<int, Expression>();
-            this.TemporaryState = new Dictionary<Storage, Expression>();
-            this.setter = new StorageValueSetter(this);
-        }
+		public SymbolicEvaluationContext(IProcessorArchitecture arch, Frame frame)
+		{
+			this.arch = arch;
+			this.Frame = frame;
+			this.RegisterState = new Dictionary<Storage, Expression>();
+			this.StackState = new SortedList<int, Expression>();
+			this.TemporaryState = new Dictionary<Storage, Expression>();
+			this.setter = new StorageValueSetter(this);
+
+			foreach (RegisterStorage reg in arch.GetRegisters())
+			{
+				this.RegisterState.Add(reg, Constant.Invalid);
+			}
+		}
 
         private SymbolicEvaluationContext(SymbolicEvaluationContext old)
         {
