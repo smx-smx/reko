@@ -251,6 +251,7 @@
     <Compile Include="IRFormat\IRProcedureBuilder.cs" />
     <Compile Include="IRFormat\IRToken.cs" />
     <Compile Include="IStorageBinder.cs" />
+    <Compile Include="ISymbolSource.cs" />
     <Compile Include="Lib\ArticulationPointFinder.cs" />
     <Compile Include="Lib\Dijkstra.cs" />
     <Compile Include="Lib\FibonacciHeap.cs" />

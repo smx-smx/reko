@@ -1,0 +1,81 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{468DEDC3-EDE1-498E-8EA4-33F1C6598D59}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>Reko.Arch.NativeArchitecture</RootNamespace>
+    <AssemblyName>Reko.Arch.NativeArchitecture</AssemblyName>
+    <TargetFrameworkVersion>v4.7</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="NativeProcessorArchitecture.cs" />
+    <Compile Include="NativeInstructionComparer.cs" />
+    <Compile Include="NativeInterface\ArchitectureType.cs" />
+    <Compile Include="NativeInterface\OperandType.cs" />
+    <Compile Include="NativeMachineInstruction.cs" />
+    <Compile Include="NativeProcessorState.cs" />
+    <Compile Include="NativeRewriterHost.cs" />
+    <Compile Include="NativeDisassembler.cs" />
+    <Compile Include="NativeInstruction.cs" />
+    <Compile Include="NativeInterface\BaseType.cs" />
+    <Compile Include="NativeInterface\CustomAnsiStringMarshaler.cs" />
+    <Compile Include="NativeInterface\ILibraryLoader.cs" />
+    <Compile Include="NativeInterface\INativeArchitecture.cs" />
+    <Compile Include="NativeInterface\INativeDisassembler.cs" />
+    <Compile Include="NativeInterface\INativeInstruction.cs" />
+    <Compile Include="NativeInterface\INativeInstructionWriter.cs" />
+    <Compile Include="NativeInterface\INativeRewriter.cs" />
+    <Compile Include="NativeInterface\INativeTypeFactory.cs" />
+    <Compile Include="NativeInterface\Interfaces\INativeSymbolSource.cs" />
+    <Compile Include="NativeInterface\Interfaces\NativeProcessorArchitectureProvider.cs" />
+    <Compile Include="NativeInterface\Interfaces\NativeSymbolSourceProvider.cs" />
+    <Compile Include="NativeInterface\Interop.cs" />
+    <Compile Include="NativeInterface\IRtlNativeEmitter.cs" />
+    <Compile Include="NativeSymbolSource.cs" />
+    <Compile Include="NativeTypeFactory.cs" />
+    <Compile Include="NativeInterface\PosixLibraryLoader.cs" />
+    <Compile Include="NativeInterface\RtlNativeEmitter.cs" />
+    <Compile Include="NativeInterface\WindowsLibraryLoader.cs" />
+    <Compile Include="NativeRewriter.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\Core.csproj">
+      <Project>{5c315c78-1f97-4b16-81aa-917284969dfe}</Project>
+      <Name>Core</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>

@@ -69,6 +69,9 @@ namespace Reko.Core.Configuration
 
         [XmlAttribute("Type")]
         public string Type;
+
+        [XmlAttribute("IsNative"), DefaultValue(false)]
+        public bool IsNative;
     }
 
     [Serializable]

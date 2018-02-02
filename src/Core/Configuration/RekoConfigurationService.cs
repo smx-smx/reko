@@ -115,7 +115,8 @@ namespace Reko.Core.Configuration
             {
                 Description = sArch.Description,
                 Name = sArch.Name,
-                TypeName = sArch.Type
+                TypeName = sArch.Type,
+                IsNative = sArch.IsNative
             };
         }
 
@@ -299,7 +300,18 @@ namespace Reko.Core.Configuration
             Type t = Type.GetType(elem.TypeName, true);
             if (t == null)
                 return null;
-            var arch = (IProcessorArchitecture)t.GetConstructor(Type.EmptyTypes).Invoke(null);
+
+            IProcessorArchitecture arch;
+            if (elem.IsNative)
+            {
+                arch = (IProcessorArchitecture)t.GetConstructor(new[] { typeof(Architecture) }).Invoke(new[] { elem });
+
+            }
+            else
+            {
+                arch = (IProcessorArchitecture)t.GetConstructor(Type.EmptyTypes).Invoke(null);
+            }
+
             arch.Name = elem.Name;
             arch.Description = elem.Description;
             return arch;
