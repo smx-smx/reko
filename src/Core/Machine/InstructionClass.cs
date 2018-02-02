@@ -29,7 +29,7 @@ namespace Reko.Core.Machine
     /// Classifies a machine instruction according to its behavior.
     /// </summary>
     [Flags]
-    public enum InstructionClass
+    public enum InstructionClass : uint
     {
         None,
         Linear  = 1,            // ALU instruction, computational (like ADD, SHR, or MOVE)

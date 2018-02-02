@@ -115,7 +115,8 @@ namespace Reko.Core.Configuration
             {
                 Description = sArch.Description,
                 Name = sArch.Name,
-                TypeName = sArch.Type
+                TypeName = sArch.Type,
+                IsNative = sArch.IsNative
             };
         }
 
