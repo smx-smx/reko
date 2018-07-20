@@ -127,6 +127,9 @@ namespace Reko.ImageLoaders.Elf.Relocators
                 return;
             var symSection = loader.Sections[(int)symbol.SectionIndex];
 
+            if (referringSection == null)
+                return;
+
             var addr = referringSection.Address + rel.Offset;
             var S = symbol.Value;
             uint P = (uint)addr.ToLinear();

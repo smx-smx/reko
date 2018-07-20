@@ -72,6 +72,9 @@ namespace Reko.ImageLoaders.Elf.Relocators
                 return;
             if (sym.SectionIndex == 0)
                 return;
+            if (referringSection == null)
+                return;
+
             var symSection = loader.Sections[(int)sym.SectionIndex];
             uint S = (uint)sym.Value + symSection.Address.ToUInt32();
             int A = 0;
