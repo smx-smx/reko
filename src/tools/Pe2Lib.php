@@ -143,16 +143,17 @@ if(count($unparsed) < 1 || ($argc < 3 && !file_exists($argv[1]))){
 	return 1;
 }
 
-$inDll = $unparsed[0];
+$inDll = realpath($unparsed[0]);
 $dlPdb = isset($opts["s"]);
 
 $info = pathinfo($inDll);
 
-if(!is_dir($info['basename'])){
-	mkdir($info['basename']);
+$dir = $info['filename'] . ".lib";
+if(!is_dir($dir)){
+	mkdir($dir);
 }
-chdir($info['basename']);
-ifcopy($inDll, getcwd() . "/{$info['basename']}");
+chdir($dir);
+ifcopy($inDll, getcwd() . "/{$dir}");
 
 if($dlPdb){
 	$pdbName = getPdbName($inDll);
@@ -223,8 +224,8 @@ while(!feof($def)){
 		}
 
 		if(
-			!seems_hex($lineData["hint"]) ||
-			strpos($lineData["hint"], "0") === 0
+			!seems_hex($lineData["hint"])
+			/* || strpos($lineData["hint"], "0") === 0 */
 		){
 			$lineData = array_insert_null($lineData, "hint");
 		}
@@ -261,7 +262,7 @@ while(!feof($def)){
 		{
 			$noname = ($hasNoName) ? " NONAME" : "";
 			$comment = (is_null($mangledName)) ? "" : " ; {$mangledName}";
-			fwrite($newdef, "{$lineData['name']} @ {$lineData['ordinal']}{$noname}{$comment}\r\n");
+			fwrite($newdef, "{$lineData['name']} @{$lineData['ordinal']}{$noname}{$comment}\r\n");
 		}
 	}
 }
