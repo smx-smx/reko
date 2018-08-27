@@ -14,7 +14,19 @@ namespace LLVMTestsConverter
 		Invalid,
 		Run,
 		Check,
-		Encoding
+		Encoding,
+	}
+
+	public enum CommentSubType
+	{
+		Invalid,
+		Sha,
+		PPCEmbedded,
+		PPCServer,
+		PPCBigEndian,
+		PPCLittleEndian,
+		IntelEncoding,
+		SparcNoCasa
 	}
 
 	public enum LineType
@@ -28,13 +40,14 @@ namespace LLVMTestsConverter
 	{
 		Invalid,
 		OneLine,
-		TwoLines
+		TwoLines,
+		TwoLinesAsm
 	}
 
 	public class LLVMTestConverter
 	{
 		private static readonly string[] commentTokens = new string[] {
-			"//", ";", "#", "!"
+			"//", ";", "#", "!", "@"
 		};
 
 		private StreamReader rdr;
@@ -45,8 +58,6 @@ namespace LLVMTestsConverter
 		private bool stopHandling = false;
 
 		private bool runVerified = false;
-
-		private bool encodingTypoPresent = false;
 
 		private string Check;
 		private string Encoding;
@@ -90,7 +101,7 @@ namespace LLVMTestsConverter
 			fileCommentStyle = CommentStyle.Invalid;
 
 			long pos = rdr.BaseStream.Position;
-			rdr.BaseStream.Seek(0, SeekOrigin.Begin);
+			Seek(0, SeekOrigin.Begin);
 
 			string line;
 			while ((line = ReadLine(out LineType lineType)) != null) {
@@ -106,7 +117,7 @@ namespace LLVMTestsConverter
 					}
 				}
 
-				DetectCommment(RemoveCommentToken(line), out CommentType commentType);
+				string lineInner = DetectCommment(RemoveCommentToken(line), out CommentType commentType, out CommentSubType commentSubType);
 				if (commentType != CommentType.Check)
 					continue;
 
@@ -122,11 +133,20 @@ namespace LLVMTestsConverter
 							goto end_ret;
 						}
 						if(line2Type != LineType.Comment) {
+							string line1CommentInner = DetectCommment(
+								lineInner,
+								out CommentType line1CommentInnerType,
+								out CommentSubType line1CommentInnerSubType
+							);
+							if(line2Type == LineType.Assembly && line1CommentInnerType == CommentType.Encoding) {
+								fileCommentStyle = CommentStyle.TwoLinesAsm;
+								goto end_ret;
+							}
 							continue;
 						}
-						line2 = DetectCommment(RemoveCommentToken(line2), out CommentType comment2Type);
+						line2 = DetectCommment(RemoveCommentToken(line2), out CommentType comment2Type, out CommentSubType comment2SubType);
 						if (comment2Type == CommentType.Check) {
-							DetectCommment(line2, out comment2Type);
+							DetectCommment(line2, out comment2Type, out comment2SubType);
 							if(comment2Type == CommentType.Encoding) {
 								fileCommentStyle = CommentStyle.TwoLines;
 							} else {
@@ -156,8 +176,7 @@ namespace LLVMTestsConverter
 			}
 
 			end_ret:
-			rdr.BaseStream.Seek(pos, SeekOrigin.Begin);
-			rdr.DiscardBufferedData();
+			Seek(pos, SeekOrigin.Begin);
 			return fileCommentToken;
 		}
 
@@ -167,7 +186,7 @@ namespace LLVMTestsConverter
 		/// <param name="check"></param>
 		/// <param name="encoding"></param>
 		/// <returns></returns>
-		private bool Parse_CheckEncoding(string check, string encoding) {
+		private bool Parse_CheckEncoding(string check, string encoding, CommentSubType checkSubType) {
 			//interestingly, there's at least 1 broken LLVM test 
 			//arm64-aliases.S -> ; CHECK: tlbi alle1                 ; encoding: [0x9f,0x87,0x0c,0xd5
 			//someone forgot to add a closing "]"
@@ -175,7 +194,7 @@ namespace LLVMTestsConverter
 				throw new InvalidDataException($"Invalid syntax for encoding => '{encoding}'");
 			}
 			if (!encoding.EndsWith("]")) {
-				encodingTypoPresent = true;
+				//encodingTypoPresent = true;
 			}
 			encoding = encoding.Substring(1, encoding.Length - 2);
 			if(encoding == string.Empty)
@@ -194,7 +213,7 @@ namespace LLVMTestsConverter
 		/// </summary>
 		/// <param name="currentLine"></param>
 		/// <returns></returns>
-		private bool HandleComment(string currentLine) {
+		private bool HandleComment(string currentLine, out CommentSubType modifier) {
 			/*
 			 * We want to have the following layout
 			 * lines[0] -> CHECK
@@ -203,8 +222,9 @@ namespace LLVMTestsConverter
 			 * If the comment style is TwoLines, we read and process the next line
 			 */
 			List<string> lines = new List<string>() { currentLine };
+			modifier = CommentSubType.Invalid;
 
-			string commentData = DetectCommment(RemoveCommentToken(currentLine), out CommentType commentType);
+			string commentData = DetectCommment(RemoveCommentToken(currentLine), out CommentType commentType, out CommentSubType commentSubType);
 			if (!runVerified) {
 				if (commentType == CommentType.Run) {
 					if (!commentData.Contains("-show-encoding")) {
@@ -215,59 +235,96 @@ namespace LLVMTestsConverter
 				runVerified = true;
 			}
 
-			if (fileCommentStyle == CommentStyle.TwoLines) {
-				string line2 = ReadLine(out LineType lineType);
-				if(lineType != LineType.Comment) {
-					commentType = CommentType.Invalid;
+			commentType = CommentType.Invalid;
+
+			string line0, line1;
+			LineType line1Type;
+			CommentType commentType0, commentType1;
+			CommentSubType commentSubType0, commentSubType1;
+
+			CommentSubType checkSubType = CommentSubType.Invalid;
+			switch (fileCommentStyle) {
+				case CommentStyle.Invalid:
 					return false;
-				}
-				line2 = DetectCommment(RemoveCommentToken(line2), out CommentType line2Comment);
-				if(line2Comment != CommentType.Check) {
-					commentType = CommentType.Invalid;
-					return false;
-				}
-				line2 = DetectCommment(line2, out line2Comment);
-				if(line2Comment != CommentType.Encoding) {
-					commentType = CommentType.Invalid;
-					return false;
-				}
+				case CommentStyle.OneLine:
+					line0 = lines[0];
+					string[] parts = line0.Split(new string[] { fileCommentToken }, StringSplitOptions.RemoveEmptyEntries);
 
-				string line = lines[0];
-				line = DetectCommment(RemoveCommentToken(line), out CommentType lineComment);
-				if(lineComment != CommentType.Check) {
-					throw new InvalidDataException("This was supposed to be a CHECK comment");
-				}
+					if (parts.Length < 2) {
+						return false;
+					}
 
-				lines[0] = line;
-				lines.Add(line2);
-			} else {
-				string line = lines[0];
-				string[] parts = line.Split(new string[] { fileCommentToken }, StringSplitOptions.RemoveEmptyEntries);
+					string check = parts[0].Trim();
+					string encoding = parts[1].Trim();
 
-				if(parts.Length < 2) {
-					commentType = CommentType.Invalid;
-					return false;
-				}
+					check = DetectCommment(check, out CommentType checkType, out checkSubType);
+					encoding = DetectCommment(encoding, out CommentType encodingType, out CommentSubType encodingSubType);
+					if (checkType != CommentType.Check || encodingType != CommentType.Encoding) {
+						return false;
+					}
 
-				string check = parts[0].Trim();
-				string encoding = parts[1].Trim();
+					lines[0] = check;
+					lines.Add(encoding);
+					break;
+				case CommentStyle.TwoLines:
+					line1 = ReadLine(out line1Type);
+					if (line1Type != LineType.Comment) {
+						return false;
+					}
+					line1 = DetectCommment(RemoveCommentToken(line1), out commentType1, out commentSubType1);
+					if (commentType1 != CommentType.Check) {
+						return false;
+					}
+					line1 = DetectCommment(line1, out commentType1, out commentSubType1);
+					if (commentType1 != CommentType.Encoding) {
+						return false;
+					}
 
-				check = DetectCommment(check, out CommentType checkType);
-				encoding = DetectCommment(encoding, out CommentType encodingType);
-				if (checkType != CommentType.Check || encodingType != CommentType.Encoding) {
-					commentType = CommentType.Invalid;
-					return false;
-				}
+					line0 = lines[0];
+					line0 = DetectCommment(RemoveCommentToken(line0), out commentType0, out commentSubType0);
+					switch (commentType0) {
+						case CommentType.Check:
+							break;
+						default:
+							throw new InvalidDataException("This was supposed to be a CHECK comment");
+					}
+					checkSubType = commentSubType0;
 
-				lines[0] = check;
-				lines.Add(encoding);
+					lines[0] = line0;
+					lines.Add(line1);
+					break;
+				case CommentStyle.TwoLinesAsm:
+					line1 = ReadLine(out line1Type);
+					if(line1Type != LineType.Assembly) {
+						return false;
+					}
+
+					line0 = lines[0];
+					lines[0] = DetectCommment(RemoveCommentToken(line0), out commentType0, out commentSubType0);
+					if (commentType0 != CommentType.Check) {
+						return false;
+					}
+					checkSubType = commentSubType0;
+					lines.Add(line1);
+
+					// invert
+					string tmp = lines[0];
+					lines[0] = lines[1];
+					lines[1] = tmp;
+
+					lines[1] = DetectCommment(lines[1], out commentType1, out commentSubType1);
+					if (commentType1 != CommentType.Encoding) {
+						return false;
+					}
+					break;
 			}
 
 			/*
 			Console.WriteLine($"Check => {lines[0]}");
 			Console.WriteLine($"Encoding => {lines[1]}");
 			*/
-			return Parse_CheckEncoding(lines[0], lines[1]);
+			modifier = checkSubType;
+			return Parse_CheckEncoding(lines[0], lines[1], checkSubType);
 		}
 
 		/// <summary>
@@ -276,8 +333,14 @@ namespace LLVMTestsConverter
 		/// <param name="line"></param>
 		/// <param name="type"></param>
 		/// <returns>The remaining part of the comment, without the leading tag (e.g CHECK)</returns>
-		private string DetectCommment(string line, out CommentType type) {
+		private string DetectCommment(
+			string line,
+			out CommentType type,
+			out CommentSubType subType
+		) {
 			string[] parts = line.Split(':');
+
+			subType = CommentSubType.Invalid;
 
 			if(parts.Length <= 1) {
 				type = CommentType.Invalid;
@@ -293,9 +356,35 @@ namespace LLVMTestsConverter
 					type = CommentType.Run;
 					break;
 				case "CHECK":
+					type = CommentType.Check;
+					break;
 				case "CHECK-SHA":
+					type = CommentType.Check;
+					subType = CommentSubType.Sha;
+					break;
+				case "SERVER":
+					type = CommentType.Check;
+					subType = CommentSubType.PPCServer;
+					break;
 				case "EMBEDDED":
 					type = CommentType.Check;
+					subType = CommentSubType.PPCEmbedded;
+					break;
+				case "CHECK-BE":
+					type = CommentType.Check;
+					subType = CommentSubType.PPCBigEndian;
+					break;
+				case "CHECK-LE":
+					type = CommentType.Check;
+					subType = CommentSubType.PPCLittleEndian;
+					break;
+				case "INTEL":
+					type = CommentType.Check;
+					subType = CommentSubType.IntelEncoding;
+					break;
+				case "CHECK_NO_CASA":
+					type = CommentType.Check;
+					subType = CommentSubType.SparcNoCasa;
 					break;
 				case "encoding":
 					type = CommentType.Encoding;
@@ -308,12 +397,13 @@ namespace LLVMTestsConverter
 			return line;
 		}
 
+		private void Seek(long position, SeekOrigin origin) {
+			rdr.BaseStream.Seek(position, origin);
+			rdr.DiscardBufferedData();
+		}
+
 		public LLVMTestConverter(StreamReader rdr, PrintUnitTestDelegate unitTestPrinter, out bool success) {
 			this.rdr = rdr;
-
-			rdr.BaseStream.Seek(0, SeekOrigin.Begin);
-			rdr.DiscardBufferedData();
-
 			DetectCommentStyle();
 
 			while (!stopHandling) {
@@ -321,10 +411,17 @@ namespace LLVMTestsConverter
 				if (line == null)
 					break;
 
+				if (line == string.Empty)
+					continue;
+
+				long pos = rdr.GetActualPosition();
+
 				switch (type) {
 					case LineType.Comment:
-						if (HandleComment(line)) {
-							unitTestPrinter.Invoke(Check, Encoding);
+						if (HandleComment(line, out CommentSubType modifier)) {
+							unitTestPrinter.Invoke(Check, Encoding, modifier);
+						} else {
+							Seek(pos, SeekOrigin.Begin);
 						}
 						break;
 					case LineType.Assembly:
