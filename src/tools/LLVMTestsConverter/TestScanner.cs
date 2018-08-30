@@ -58,6 +58,8 @@ namespace LLVMTestsConverter
 
 		private static bool writeFiles = true;
 
+		private static HashSet<String> knownTestNames = new HashSet<string>();
+
 		private static void PrintAArch64UnitTest(string assembly, string encoding, CommentSubType modifier) {
 			StringBuilder sb = new StringBuilder();
 
@@ -71,7 +73,10 @@ namespace LLVMTestsConverter
 		Expect_Code(""{2}"");
 	}}";
 			string unitTest = string.Format(template, valueLe, valueBe, assembly);
-			WriteUnitTest(Architecture.AArch64, unitTest);
+			WriteUnitTest(
+				Convert.ToString(valueBe),
+				Architecture.AArch64, unitTest
+			);
 		}
 
 		private static void PrintArmUnitTest(string assembly, string encoding, CommentSubType modifier) {
@@ -80,13 +85,17 @@ namespace LLVMTestsConverter
 		var instr = Disassemble32(0x{2:X8});
 		Assert.AreEqual(""{1}"", instr.ToString());
 	}}";
-			
+
+			string testName = ConvertTestName(assembly);
 			string unitTest = string.Format(template,
-				ConvertTestName(assembly),
+				testName,
 				assembly,
 				ToValueBe(encoding)
 			);
-			WriteUnitTest(Architecture.Arm, unitTest);
+			WriteUnitTest(
+				testName,
+				Architecture.Arm, unitTest
+			);
 		}
 
 		private static void PrintPowerPcUnitTest(string assembly, string encoding, CommentSubType modifier) {
@@ -97,10 +106,20 @@ namespace LLVMTestsConverter
 	}}";
 
 			string testName = string.Format("{0:X8}", ToValueBe(encoding));
-			if(modifier == CommentSubType.PPCBigEndian) {
-				testName += "_be";
-			} else if(modifier == CommentSubType.PPCLittleEndian) {
-				testName += "_le";
+
+			switch (modifier) {
+				case CommentSubType.PPCServer:
+					testName += "_server";
+					break;
+				case CommentSubType.PPCEmbedded:
+					testName += "_embedded";
+					break;
+				case CommentSubType.PPCBigEndian:
+					testName += "_be";
+					break;
+				case CommentSubType.PPCLittleEndian:
+					testName += "_le";
+					break;
 			}
 
 			string unitTest = string.Format(template,
@@ -108,7 +127,10 @@ namespace LLVMTestsConverter
 				assembly,
 				ToValueBe(encoding)
 			);
-			WriteUnitTest(Architecture.PowerPc, unitTest);
+			WriteUnitTest(
+				testName,
+				Architecture.PowerPc, unitTest
+			);
 		}
 
 		private static void PrintMipsUnitTest(string assembly, string encoding, CommentSubType modifier) {
@@ -117,12 +139,16 @@ namespace LLVMTestsConverter
 		AssertCode(""{1}"", 0x{2:X8});
 	}}";
 
+			string testName = ConvertTestName(assembly);
 			string unitTest = string.Format(template,
-				ConvertTestName(assembly),
+				testName,
 				assembly,
 				ToValueBe(encoding)
 			);
-			WriteUnitTest(Architecture.Mips, unitTest);
+			WriteUnitTest(
+				testName,
+				Architecture.Mips, unitTest
+			);
 		}
 
 		private static void PrintSparcUnitTest(string assembly, string encoding, CommentSubType modifier) {
@@ -139,7 +165,10 @@ namespace LLVMTestsConverter
 				assembly,
 				ToValueBe(encoding)
 			);
-			WriteUnitTest(Architecture.Sparc, unitTest);
+			WriteUnitTest(
+				testName,
+				Architecture.Sparc, unitTest
+			);
 		}
 
 		private static void PrintX86UnitTest(string assembly, string encoding, CommentSubType modifier) {
@@ -151,11 +180,18 @@ namespace LLVMTestsConverter
 			string testName = ConvertTestName(assembly);
 
 			string unitTest = string.Format(template, testName, encoding, assembly);
-			WriteUnitTest(Architecture.x86, unitTest);
+			WriteUnitTest(
+				testName,
+				Architecture.x86, unitTest
+			);
 			
 		}
 
-		private static void WriteUnitTest(Architecture arch, string unitTest) {
+		private static void WriteUnitTest(string testName, Architecture arch, string unitTest) {
+			if (knownTestNames.Contains(testName))
+				return;
+			knownTestNames.Add(testName);
+
 			if (!writeFiles) {
 				Console.WriteLine(unitTest);
 				return;
