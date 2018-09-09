@@ -46,14 +46,59 @@ namespace LLVMTestsConverter
 		private static readonly char[] testName_trim = new char[]{
 			'(', ')',
 			'{', '}',
-			'$',
+			'$', '!',
 			','
 		};
 
+        private const string MEM_REGEX = @"\[(.*?)\]";
+        private static readonly Dictionary<string, string> testName_repl = new Dictionary<string, string>()
+        {
+            { @"(\s+|\:|\.)+", "_" },
+            { "%", "_reg_" },
+            { "#", "_const_" },
+            { @"\+", "_plus_" },
+            { "-", "_minus_" },
+            { MEM_REGEX, "_mem_" },
+        };
+
 		private static string ConvertTestName(string assembly) {
-			var chars = Regex.Replace(assembly, @"(\s|-|%|#)+", "_")
-				.Where(c => !testName_trim.Contains(c));
-			return string.Concat(chars);
+            string testName = string.Concat(
+                assembly.Where(c => !testName_trim.Contains(c))
+            );
+            foreach(var pair in testName_repl)
+            {
+                MatchCollection mem = null;
+                if (pair.Key == MEM_REGEX)
+                {
+                    mem = Regex.Matches(testName, MEM_REGEX);
+
+                    string[] chunks = new string[mem.Count];
+                    // replace chunks from the end (so that other parts don't shift to the right)
+                    for (int i = mem.Count - 1; i >=0; i--)
+                    {
+                        var textChunk = mem[i].Groups[0];
+                        var match = mem[i].Groups[1];
+
+                        testName = 
+                                    testName.Substring(0, textChunk.Index) +
+                                    "_mem_" + 
+                                    ConvertTestName(match.Value) +
+                                    testName.Substring(textChunk.Index + textChunk.Length);
+                    }
+                }
+
+                testName = Regex.Replace(testName, pair.Key, pair.Value);
+
+            }
+
+            testName = Regex.Replace(testName, @"_+", "_");
+
+            return testName;
+			/*
+                var chars = Regex.Replace(assembly, @"(\s|-|%|#|\[|\])+", "_")
+				    .Where(c => !testName_trim.Contains(c));
+			    return string.Concat(chars);
+            */
 		}
 
 		private static bool writeFiles = true;
