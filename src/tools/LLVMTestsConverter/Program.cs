@@ -5,17 +5,19 @@ using System;
 
 namespace LLVMTestsConverter
 {
-	class Program
-	{
-		static void Main(string[] args) {
-			if(args.Length < 1) {
-				Console.Error.WriteLine("Usage: [llvm/test/MC]");
-				Environment.Exit(1);
-			}
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            if (args.Length < 1)
+            {
+                Console.Error.WriteLine("Usage: [llvm/test/MC]");
+                Environment.Exit(1);
+            }
 
-			new TestScanner(args[0]).Work();
-			Console.WriteLine("Press enter to continue...");
-			Console.ReadLine();
-		}
-	}
+            new TestScanner(args[0]).Work();
+            Console.WriteLine("Press enter to continue...");
+            Console.ReadLine();
+        }
+    }
 }
