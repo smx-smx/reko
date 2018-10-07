@@ -134,13 +134,13 @@ namespace Reko.Scanning
                 frame,
                 stackStorage.StackOffset,
                 stackStorage.DataType);
-            var c = GetValue(stackAccess) as Constant;
-            if (c == null || !c.IsValid)
+            var addr = GetValue(stackAccess) as Address;
+            if (addr == null)
             {
                 WarnUnableToDetermineFormatString(addrInstr, callee);
                 return null;
             }
-            return ReadCString(c);
+            return ReadCString(addr);
         }
 
         private void WarnUnableToDetermineFormatString(Address addrInstr, Expression callee)

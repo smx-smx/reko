@@ -25,6 +25,16 @@
       <varargs>Reko.Libraries.Libc.PrintfFormatParser,Reko.Libraries.Libc</varargs>
     </characteristics>
   </entry>
+  <entry name="sprintf">
+    <characteristics>
+      <varargs>Reko.Libraries.Libc.PrintfFormatParser,Reko.Libraries.Libc</varargs>
+    </characteristics>
+  </entry>
+  <entry name="asprintf">
+    <characteristics>
+      <varargs>Reko.Libraries.Libc.PrintfFormatParser,Reko.Libraries.Libc</varargs>
+    </characteristics>
+  </entry>
   <entry name="fprintf">
     <characteristics>
       <varargs>Reko.Libraries.Libc.PrintfFormatParser,Reko.Libraries.Libc</varargs>
