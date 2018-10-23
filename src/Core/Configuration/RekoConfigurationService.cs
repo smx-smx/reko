@@ -1,6 +1,6 @@
 #region License
 /* 
- * Copyright (C) 1999-2018 John Källén.
+ * Copyright (C) 1999-2018 John KÃ¤llÃ©n.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -288,7 +288,14 @@ namespace Reko.Core.Configuration
 
             using (var stm = File.Open(configFileName, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
-                var ser = new XmlSerializer(typeof(RekoConfiguration_v1));
+                XmlSerializer ser = null;
+                try
+                {
+                    ser = new XmlSerializer(typeof(RekoConfiguration_v1));
+                } catch (FileNotFoundException)
+                {
+                    return null;
+                }
                 var sConfig = (RekoConfiguration_v1)ser.Deserialize(stm);
                 return new RekoConfigurationService(sConfig);
             }
