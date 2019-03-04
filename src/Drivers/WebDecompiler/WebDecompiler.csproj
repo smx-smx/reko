@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <Import Project="$(SolutionDir)Drivers\Common.items" />
+  <PropertyGroup>
+    <TargetFramework>netcoreapp2.1</TargetFramework>
+    <AssemblyName>Reko.Drivers.WebDecompiler</AssemblyName>
+    <RootNamespace>Reko.Drivers.WebDecompiler</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.AspNetCore.Razor.Design" Version="2.1.2" PrivateAssets="All" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\Core.csproj" />
+    <ProjectReference Include="..\..\Decompiler\Decompiler.csproj" />
+  </ItemGroup>
+  <Import Project="$(SolutionDir)Drivers\PreBuild.targets" />
+
+
+  <Target Name="TestStuff" AfterTargets="PrepareForBuild">
+    <Message Importance="High" Text="!@!@!@ HELLO321 @(Architectures)" />
+    <Message Importance="high" Text="Copying Decompiler metadata files to $(TargetDir)" />
+    <Copy SourceFiles="@(DecompilerMetadata)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    <Message Importance="high" Text="Copying ImageLoaders to $(TargetDir)" />
+    <Copy SourceFiles="@(ImageLoaders)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    <Message Importance="high" Text="Copying Architectures to $(TargetDir)" />
+    <Copy SourceFiles="@(Architectures)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    <Message Importance="high" Text="Copying Assemblers to $(TargetDir)" />
+    <Copy SourceFiles="@(Assemblers)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    <Message Importance="high" Text="Copying Environments to $(TargetDir)" />
+    <Copy SourceFiles="@(Environments)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    <Message Importance="high" Text="Copying Libraries to $(TargetDir)" />
+    <Copy SourceFiles="@(Libraries)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    <Message Importance="high" Text="Copying Odbg scripts to $(TargetDir)" />
+    <Copy SourceFiles="@(OdbgScripts)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    <Message Importance="high" Text="Copying external binaries to $(TargetDir)" />
+    <Copy SourceFiles="@(ExternalComponents)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    <Message Importance="high" Text="Copying configuration files @(ConfigurationFiles) to $(TargetDir)" />
+    <Copy SourceFiles="@(ConfigurationFiles)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+  </Target>
+  <!--<Target Name="TestStuff" AfterTargets="PrepareForBuild">
+    <Message Importance="High" Text="!@!@!@ HELLO123 @(Architectures)" />
+  </Target>-->
+</Project>
