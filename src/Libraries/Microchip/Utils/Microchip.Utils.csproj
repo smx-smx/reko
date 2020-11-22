@@ -10,7 +10,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\Core\Core.csproj" />
     <Content Include="$(SolutionDir)tools\genPICdb\picdb.zip">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
   <Target Name="BeforeBuild" BeforeTargets="CoreBuild">
