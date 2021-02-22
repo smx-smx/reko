@@ -1,11 +1,15 @@
 version: 0.9.2.{build}
+clone_depth: 1
 
 init: 
   - git config --global core.autocrlf true 
  # The commented out line below displays RDP details for debugging on an AppVeyor VM
  # - ps: iex ((new-object net.webclient).DownloadString('https://raw.githubusercontent.com/appveyor/ci/master/scripts/enable-rdp.ps1'))
 
-image: Visual Studio 2019
+image:
+  - Visual Studio 2019
+  - Ubuntu
+  - macos
 platform: x64
 
 configuration: Release
@@ -19,17 +23,32 @@ environment:
   artifacts_dir: bin
 
 build_script:
-  - cmd: dotnet msbuild -p:Platform=%PLATFORM% -p:Configuration=%CONFIGURATION% -v:m -t:build_solution -m ./src/BuildTargets/BuildTargets.csproj
+  - ps: dotnet msbuild -p:Platform=$env:PLATFORM -p:Configuration=$env:CONFIGURATION -v:m -t:build_solution -m ./src/BuildTargets/BuildTargets.csproj
 
 after_build:
-  - cmd: dotnet msbuild -p:Platform=%PLATFORM% -p:Configuration=%CONFIGURATION% -v:m -t:create_runtime_nupkg -m ./src/BuildTargets/BuildTargets.csproj
-  - cmd: dotnet msbuild -p:Platform=%PLATFORM% -p:Configuration=%CONFIGURATION% -v:m -t:create_msi_wix -m ./src/BuildTargets/BuildTargets.csproj
-  - cmd: dotnet msbuild -p:Platform=%PLATFORM% -p:Configuration=%CONFIGURATION% -v:m -t:create_release -m ./src/BuildTargets/BuildTargets.csproj
+  - ps: dotnet msbuild -p:Platform=$env:PLATFORM -p:Configuration=$env:CONFIGURATION -v:m -t:create_runtime_nupkg -m ./src/BuildTargets/BuildTargets.csproj
+  - ps: dotnet msbuild -p:Platform=$env:PLATFORM -p:Configuration=$env:CONFIGURATION -v:m -t:create_msi_wix -m ./src/BuildTargets/BuildTargets.csproj
+  - ps: dotnet msbuild -p:Platform=$env:PLATFORM -p:Configuration=$env:CONFIGURATION -v:m -t:create_release -m ./src/BuildTargets/BuildTargets.csproj
 
 test_script:
-  - cmd: dotnet msbuild -p:Platform=%PLATFORM% -p:Configuration=%CONFIGURATION% -v:m -t:run_unit_tests -m ./src/BuildTargets/BuildTargets.csproj
-  - cmd: dotnet msbuild -p:Platform=%PLATFORM% -p:Configuration=%CONFIGURATION% -v:m -t:run_regressions -m ./src/BuildTargets/BuildTargets.csproj
+  - ps: dotnet msbuild -p:Platform=$env:PLATFORM -p:Configuration=$env:CONFIGURATION -v:m -t:run_unit_tests -m ./src/BuildTargets/BuildTargets.csproj
+  - ps: dotnet msbuild -p:Platform=$env:PLATFORM -p:Configuration=$env:CONFIGURATION -v:m -t:run_regressions -m ./src/BuildTargets/BuildTargets.csproj
 
+for:
+  -
+    matrix:
+      only:
+        - image: Ubuntu
+    install:
+      - sudo apt-get update -qq
+      - sudo apt-get install -y libcapstone-dev
+  -
+    matrix:
+      only:
+        - image: macos
+    install:
+      - brew install capstone
+  
 artifacts:
   - path: bin/*.msi
     name: Reko installer
