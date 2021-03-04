@@ -46,3 +46,21 @@ darwin_x64_task:
     - dotnet msbuild -p:Platform=x64 -p:Configuration=Release -t:create_runtime_nupkg -m ./src/BuildTargets/BuildTargets.csproj
   release_script:
     - dotnet msbuild -p:Platform=x64 -p:Configuration=Release -t:create_release -m ./src/BuildTargets/BuildTargets.csproj
+
+windows_x64_task:
+  windows_container:
+    image: cirrusci/windowsservercore:cmake
+    os_version: 2019
+
+  prepare_script:
+    - dotnet nuget locals all --clear
+  build_script:
+    - dotnet msbuild -p:Platform=x64 -p:Configuration=Release -t:build_solution -m ./src/BuildTargets/BuildTargets.csproj
+  test_script:
+    - dotnet msbuild -p:Platform=x64 -p:Configuration=Release -t:run_unit_tests -m ./src/BuildTargets/BuildTargets.csproj
+  regressions_script:
+    - dotnet msbuild -p:Platform=x64 -p:Configuration=Release -t:run_regressions -m ./src/BuildTargets/BuildTargets.csproj
+  nupkg_script:
+    - dotnet msbuild -p:Platform=x64 -p:Configuration=Release -t:create_runtime_nupkg -m ./src/BuildTargets/BuildTargets.csproj
+  release_script:
+    - dotnet msbuild -p:Platform=x64 -p:Configuration=Release -t:create_release -m ./src/BuildTargets/BuildTargets.csproj
