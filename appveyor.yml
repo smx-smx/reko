@@ -12,22 +12,23 @@ build:
   verbosity: minimal
 
 platform: x64
+configuration: Release
 
 environment:
   artifacts_dir: bin
   matrix:
     - job_name: ubuntu
       appveyor_build_worker_image: Ubuntu
-      configuration: UnixRelease
+      BUILD_CONFIGURATION: UnixRelease
     - job_name: macos
       appveyor_build_worker_image: macos
-      configuration: UnixRelease
+      BUILD_CONFIGURATION: UnixRelease
     - job_name: windows
       appveyor_build_worker_image: Visual Studio 2019
-      configuration: Release
+      BUILD_CONFIGURATION: Release
 
 build_script:
-  - ps: dotnet msbuild -p:Platform=$env:PLATFORM -p:Configuration=$env:CONFIGURATION -v:m -t:build_solution -m ./src/BuildTargets/BuildTargets.csproj
+  - ps: dotnet msbuild -p:Platform=$env:PLATFORM -p:Configuration=$env:BUILD_CONFIGURATION -v:m -t:build_solution -m ./src/BuildTargets/BuildTargets.csproj
 
 after_build:
   - ps: dotnet msbuild -p:Platform=$env:PLATFORM -p:Configuration=$env:CONFIGURATION -v:m -t:create_runtime_nupkg -m ./src/BuildTargets/BuildTargets.csproj
@@ -45,13 +46,13 @@ for:
         - job_name: ubuntu
     install:
       - sudo apt-get update -qq
-      - sudo apt-get install -y libcapstone-dev
+      - sudo apt-get install -y libcapstone-dev pkg-config p7zip-full
   -
     matrix:
       only:
         - job_name: macos
     install:
-      - brew install capstone
+      - brew install pkg-config capstone p7zip
   -
     matrix:
       only:
