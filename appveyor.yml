@@ -6,21 +6,25 @@ init:
  # The commented out line below displays RDP details for debugging on an AppVeyor VM
  # - ps: iex ((new-object net.webclient).DownloadString('https://raw.githubusercontent.com/appveyor/ci/master/scripts/enable-rdp.ps1'))
 
-image:
-  - Visual Studio 2019
-  - Ubuntu
-  - macos
-platform: x64
-
-configuration: Release
-
 # If you want more build spew, change the verbosity below
 build:
   project: src/Reko-decompiler.sln
   verbosity: minimal
 
+platform: x64
+
 environment:
   artifacts_dir: bin
+  matrix:
+    - job_name: ubuntu
+      appveyor_build_worker_image: Ubuntu
+      configuration: UnixRelease
+    - job_name: macos
+      appveyor_build_worker_image: macos
+      configuration: UnixRelease
+    - job_name: windows
+      appveyor_build_worker_image: Visual Studio 2019
+      configuration: Release
 
 build_script:
   - ps: dotnet msbuild -p:Platform=$env:PLATFORM -p:Configuration=$env:CONFIGURATION -v:m -t:build_solution -m ./src/BuildTargets/BuildTargets.csproj
@@ -38,16 +42,20 @@ for:
   -
     matrix:
       only:
-        - image: Ubuntu
+        - job_name: ubuntu
     install:
       - sudo apt-get update -qq
       - sudo apt-get install -y libcapstone-dev
   -
     matrix:
       only:
-        - image: macos
+        - job_name: macos
     install:
       - brew install capstone
+  -
+    matrix:
+      only:
+        - job_name: windows
   
 artifacts:
   - path: bin/*.msi
