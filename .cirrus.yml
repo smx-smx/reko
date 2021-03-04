@@ -23,3 +23,26 @@ linux_x64_task:
     - dotnet msbuild -p:Platform=x64 -p:Configuration=Release -t:create_runtime_nupkg -m ./src/BuildTargets/BuildTargets.csproj
   release_script:
     - dotnet msbuild -p:Platform=x64 -p:Configuration=Release -t:create_release -m ./src/BuildTargets/BuildTargets.csproj
+
+darwin_x64_task:
+  macos_instance:
+    image: big-sur-xcode-12.4
+
+  install_script:
+    - brew install pkg-config cmake capstone p7zip
+    - brew install --cask dotnet-sdk
+    - brew tap isen-ng/dotnet-sdk-versions
+    - brew install --cask dotnet-sdk3-1-400
+
+  prepare_script:
+    - dotnet nuget locals all --clear
+  build_script:
+    - dotnet msbuild -p:Platform=x64 -p:Configuration=UnixRelease -t:build_solution -m ./src/BuildTargets/BuildTargets.csproj
+  test_script:
+    - dotnet msbuild -p:Platform=x64 -p:Configuration=Release -t:run_unit_tests -m ./src/BuildTargets/BuildTargets.csproj
+  regressions_script:
+    - dotnet msbuild -p:Platform=x64 -p:Configuration=Release -t:run_regressions -m ./src/BuildTargets/BuildTargets.csproj
+  nupkg_script:
+    - dotnet msbuild -p:Platform=x64 -p:Configuration=Release -t:create_runtime_nupkg -m ./src/BuildTargets/BuildTargets.csproj
+  release_script:
+    - dotnet msbuild -p:Platform=x64 -p:Configuration=Release -t:create_release -m ./src/BuildTargets/BuildTargets.csproj
