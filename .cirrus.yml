@@ -49,7 +49,7 @@ darwin_x64_task:
 
 windows_x64_task:
   windows_container:
-    image: cirrusci/windowsservercore:cmake
+    image: smxdev4/reko:1.0
     os_version: 2019
 
   prepare_script:
