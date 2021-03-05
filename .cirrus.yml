@@ -24,6 +24,9 @@ linux_x64_task:
   release_script:
     - dotnet msbuild -p:Platform=x64 -p:Configuration=Release -t:create_release -m ./src/BuildTargets/BuildTargets.csproj
 
+  binaries_artifacts:
+    path: "bin/*"
+
 darwin_x64_task:
   macos_instance:
     image: big-sur-xcode-12.4
@@ -46,6 +49,9 @@ darwin_x64_task:
     - dotnet msbuild -p:Platform=x64 -p:Configuration=Release -t:create_runtime_nupkg -m ./src/BuildTargets/BuildTargets.csproj
   release_script:
     - dotnet msbuild -p:Platform=x64 -p:Configuration=Release -t:create_release -m ./src/BuildTargets/BuildTargets.csproj
+
+  binaries_artifacts:
+    path: "bin/*"
 
 windows_x64_task:
   windows_container:
@@ -79,3 +85,6 @@ windows_x64_task:
     - dotnet msbuild -p:Platform=x64 -p:Configuration=Release -v:m -t:create_msi_wix -m ./src/BuildTargets/BuildTargets.csproj
   release_script:
     - dotnet msbuild -p:Platform=x64 -p:Configuration=Release -v:m -t:create_release -m ./src/BuildTargets/BuildTargets.csproj
+
+  binaries_artifacts:
+    path: "bin/*"
