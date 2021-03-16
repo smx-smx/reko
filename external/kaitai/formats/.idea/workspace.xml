@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ChangeListManager">
+    <list default="true" id="e77bc362-908a-4ef3-916e-07da2d0f7693" name="Default Changelist" comment="">
+      <change afterPath="$PROJECT_DIR$/ksc-target/Bmp.js" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ksc-target/CoreldrawCdr.js" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ksc-target/src/Bmp.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/image/coreldraw_cdr.ksy" beforeDir="false" afterPath="$PROJECT_DIR$/image/coreldraw_cdr.ksy" afterDir="false" />
+    </list>
+    <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="ProjectId" id="1QswPdn8OWfKFxu7GOjuQ85c317" />
+  <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
+  <component name="PropertiesComponent">
+    <property name="SHARE_PROJECT_CONFIGURATION_FILES" value="true" />
+    <property name="WebServerToolWindowFactoryState" value="false" />
+    <property name="last_opened_file_path" value="$PROJECT_DIR$/media/riff" />
+    <property name="node.js.detected.package.eslint" value="true" />
+    <property name="node.js.detected.package.tslint" value="true" />
+    <property name="node.js.path.for.package.eslint" value="project" />
+    <property name="node.js.path.for.package.tslint" value="project" />
+    <property name="node.js.selected.package.eslint" value="(autodetect)" />
+    <property name="node.js.selected.package.tslint" value="(autodetect)" />
+    <property name="settings.editor.selected.configurable" value="terminal" />
+  </component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="C:\webdev\projects\temp\kaitai_struct_formats\media\riff" />
+    </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\webdev\projects\temp\kaitai_struct_formats\media" />
+      <recent name="C:\webdev\projects\temp\kaitai_struct_formats\common\riff" />
+    </key>
+  </component>
+  <component name="RunDashboard">
+    <option name="ruleStates">
+      <list>
+        <RuleState>
+          <option name="name" value="ConfigurationTypeDashboardGroupingRule" />
+        </RuleState>
+        <RuleState>
+          <option name="name" value="StatusDashboardGroupingRule" />
+        </RuleState>
+      </list>
+    </option>
+  </component>
+  <component name="SvnConfiguration">
+    <configuration />
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="e77bc362-908a-4ef3-916e-07da2d0f7693" name="Default Changelist" comment="" />
+      <created>1568572590257</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1568572590257</updated>
+      <workItem from="1568572595896" duration="5586000" />
+      <workItem from="1568644316250" duration="1337000" />
+      <workItem from="1568662717225" duration="2920000" />
+      <workItem from="1568714173109" duration="240000" />
+      <workItem from="1568800873771" duration="880000" />
+      <workItem from="1569095151834" duration="10441000" />
+      <workItem from="1569138084454" duration="17787000" />
+      <workItem from="1569272119602" duration="1886000" />
+      <workItem from="1569357373684" duration="271000" />
+      <workItem from="1569651059317" duration="10888000" />
+      <workItem from="1569672579539" duration="16899000" />
+      <workItem from="1569695896394" duration="7947000" />
+      <workItem from="1569754925793" duration="3171000" />
+      <workItem from="1569783034108" duration="600000" />
+      <workItem from="1569788128613" duration="1311000" />
+      <workItem from="1569863331002" duration="1000000" />
+      <workItem from="1569869567925" duration="4942000" />
+      <workItem from="1569878263021" duration="988000" />
+      <workItem from="1569958010682" duration="1699000" />
+      <workItem from="1570050968894" duration="334000" />
+      <workItem from="1570084409454" duration="827000" />
+      <workItem from="1570129617678" duration="6327000" />
+      <workItem from="1570187112742" duration="3706000" />
+      <workItem from="1573245863552" duration="72000" />
+    </task>
+    <task id="LOCAL-00001" summary="Update WAV format">
+      <created>1569182829000</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1569182829000</updated>
+    </task>
+    <task id="LOCAL-00002" summary="Add RIFF">
+      <created>1569182989811</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1569182989811</updated>
+    </task>
+    <task id="LOCAL-00003" summary="Add rudimentary CDR support">
+      <created>1569879056904</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1569879056904</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="1" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State>
+              <option name="COLUMN_ORDER" />
+            </State>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="Update WAV description" />
+    <MESSAGE value="Update WAV format" />
+    <MESSAGE value="Add RIFF" />
+    <MESSAGE value="Add rudimentary CDR support" />
+    <MESSAGE value="Add rudimentary CDR support" />
+    <option name="LAST_COMMIT_MESSAGE" value="Add rudimentary CDR support" />
+  </component>
+</project>

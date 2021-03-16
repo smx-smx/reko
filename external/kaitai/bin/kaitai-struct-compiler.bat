@@ -80,7 +80,7 @@ rem "-J" is stripped, "-D" is left as is, and everything is appended to JAVA_OPT
 set _JAVA_PARAMS=
 set _APP_ARGS=
 
-set "APP_CLASSPATH=%APP_LIB_DIR%\io.kaitai.kaitai-struct-compiler-0.10-SNAPSHOT20210211.130354.e616927a.jar;%APP_LIB_DIR%\org.scala-lang.scala-library-2.12.12.jar;%APP_LIB_DIR%\com.github.scopt.scopt_2.12-3.6.0.jar;%APP_LIB_DIR%\com.lihaoyi.fastparse_2.12-1.0.0.jar;%APP_LIB_DIR%\org.yaml.snakeyaml-1.25.jar;%APP_LIB_DIR%\com.lihaoyi.fastparse-utils_2.12-1.0.0.jar;%APP_LIB_DIR%\com.lihaoyi.sourcecode_2.12-0.1.4.jar"
+set "APP_CLASSPATH=%APP_LIB_DIR%\io.kaitai.kaitai-struct-compiler-0.9.jar;%APP_LIB_DIR%\org.scala-lang.scala-library-2.12.4.jar;%APP_LIB_DIR%\com.github.scopt.scopt_2.12-3.6.0.jar;%APP_LIB_DIR%\com.lihaoyi.fastparse_2.12-1.0.0.jar;%APP_LIB_DIR%\com.lihaoyi.fastparse-utils_2.12-1.0.0.jar;%APP_LIB_DIR%\com.lihaoyi.sourcecode_2.12-0.1.4.jar;%APP_LIB_DIR%\org.yaml.snakeyaml-1.25.jar"
 set "APP_MAIN_CLASS=io.kaitai.struct.JavaMain"
 set "SCRIPT_CONF_FILE=%APP_HOME%\conf\application.ini"
 
