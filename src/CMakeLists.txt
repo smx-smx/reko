@@ -436,14 +436,26 @@ elseif("${TARGET}" STREQUAL "gen_kaitai_files")
 		set(output_filename "${filename_ucfirst}${filename_substr1}.cs")
 		set(target_name "ksy_${filename}")
 
+		set(ksy_output ${KSY_OUTPUT_DIR}/${output_filename})
+
 		add_ksy_target(
 			SOURCE ${ksy}
-			OUTPUT ${KSY_OUTPUT_DIR}/${output_filename}
+			OUTPUT ${ksy_output}
 			NAMESPACE ${KSY_NAMESPACE}
 			TARGET_NAME ${target_name}
 		)
 
-		add_dependencies(gen_kaitai_files ${target_name})
+		set(ksy_tmp ${CMAKE_CURRENT_BINARY_DIR}/${target_name}.tmp)
+		set(fixed_target_name "ksy_fixed_${target_name}")
+
+		add_custom_target(${fixed_target_name}
+			COMMAND ${CMAKE_COMMAND} -E echo "#nullable disable" > ${ksy_tmp}
+			COMMAND ${CMAKE_COMMAND} -E cat ${ksy_output} >> ${ksy_tmp}
+			COMMAND ${CMAKE_COMMAND} -E cat ${ksy_tmp} > ${ksy_output}
+		)
+		add_dependencies(${fixed_target_name} ${target_name})
+
+		add_dependencies(gen_kaitai_files ${fixed_target_name})
 	endforeach()
 elseif("${TARGET}" STREQUAL "nativeproxy_clean")
 	#
