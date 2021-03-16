@@ -10,6 +10,9 @@
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <Configurations>Debug;Release</Configurations>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="KaitaiStruct.Runtime.CSharp" Version="0.9.0" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\Core\Core.csproj" />
@@ -23,10 +26,9 @@
     <PropertyGroup>
       <KsyOutputDir>$(ProjectDir.TrimEnd('\'))</KsyOutputDir>
       <KsyFileList>@(KsyFiles -> '%(FullPath)', ';')</KsyFileList>
+      <KsyNamespace>$(RootNamespace).Kaitai</KsyNamespace>
     </PropertyGroup>
 
-    <MSBuild Projects="$(ProjectDir)..\..\BuildTargets\BuildTargets.csproj"
-             Properties="Configuration=$(Configuration);Platform=$(Platform);KsyFileList=$(KsyFileList);KsyOutputDir=$(KsyOutputDir);KsyNamespace=$(RootNamespace)"
-             Targets="gen_kaitai_files" />
+    <MSBuild Projects="$(ProjectDir)..\..\BuildTargets\BuildTargets.csproj" Properties="Configuration=$(Configuration);Platform=$(Platform);KsyFileList=$(KsyFileList);KsyOutputDir=$(KsyOutputDir);KsyNamespace=$(KsyNamespace)" Targets="gen_kaitai_files" />
   </Target>
 </Project>

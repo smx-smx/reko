@@ -77,12 +77,12 @@ types:
         pos: s_scnptr
         size: s_size
 seq:
-  - id: filehdr
+  - id: file_header
     type: filehdr
-  - id: aouthdr
+  - id: aout_header
     type: aouthdr
-    size: filehdr.f_opthdr
+    size: file_header.f_opthdr
   - id: sections
     type: scnhdr
     repeat: expr
-    repeat-expr: filehdr.f_nscns
+    repeat-expr: file_header.f_nscns

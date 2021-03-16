@@ -428,7 +428,7 @@ elseif("${TARGET}" STREQUAL "gen_kaitai_files")
 	message(STATUS "Ksy Namespace: ${KSY_NAMESPACE}")
 
 	foreach(ksy ${KSY_SOURCES})
-		get_filename_component(filename ${ksy} NAME_WLE)
+		get_filename_component(filename ${ksy} NAME_WE)
 
 		string(SUBSTRING "${filename}" 0 1 filename_ucfirst)
 		string(TOUPPER "${filename_ucfirst}" filename_ucfirst)
