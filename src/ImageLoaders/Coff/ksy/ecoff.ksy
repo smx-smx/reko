@@ -3,6 +3,40 @@ meta:
   file-extension: ecoff
   endian: be
 
+enums:
+  section_flags:
+    0x0: styp_reg
+    0x20: styp_text
+    0x40: styp_data
+    0x80: styp_bss
+    0x100: styp_rdata
+    0x200: styp_sdata
+    0x400: styp_sbss
+    0x800: styp_ucode
+    0x1000: styp_got
+    0x2000: styp_dynamic
+    0x4000: styp_dynsym
+    0x8000: styp_rel_dyn
+    0x10000: styp_dynstr
+    0x20000: styp_hash
+    0x40000: styp_dsolist
+    0x80000: styp_msym
+    0x100000: styp_conflict
+    0x01000000: styp_fini
+    0x02000000: styp_comment
+    0x02200000: styp_rconst
+    0x02400000: styp_xdata
+    0x02500000: styp_tlsdata
+    0x02600000: styp_tlsbss
+    0x02700000: styp_tlsinit
+    0x02800000: styp_pdata
+    0x04000000: styp_lita
+    0x08000000: styp_lit8
+    0x0ff00000: styp_extmask
+    0x10000000: styp_lit4
+    0x20000000: s_nreloc_ovfl
+    0x40000000: styp_ecoff_lib
+    0x80000000: styp_init
 types:
   filehdr:
     seq:
@@ -72,10 +106,12 @@ types:
         type: u2
       - id: s_flags
         type: u4
+        enum: section_flags
     instances:
       data:
         pos: s_scnptr
         size: s_size
+
 seq:
   - id: file_header
     type: filehdr
