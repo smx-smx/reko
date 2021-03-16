@@ -18,7 +18,7 @@
     <CMakeVS>$([System.IO.Path]::Combine($(VSAPPIDDIR), CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe))</CMakeVS>
     <CMake>cmake</CMake>
     <!-- build the arguments string by joining <CMakeFlags> items by space -->
-    <CMakeArguments>@(CMakeFlags -> '%(Identity)', ' ')</CMakeArguments>
+    <CMakeArguments>@(CMakeFlags -> '%(Identity)', ' ') $(CMakeArguments)</CMakeArguments>
   </PropertyGroup>
 
   <PropertyGroup Condition="Exists('$(CMakeVS)')">
@@ -79,6 +79,10 @@
 
   <Target Name="gen_c2xml_windows">
     <Exec Command="$(CMake) $(CMakeArguments) -DTARGET=gen_c2xml_windows -P $(RekoCMake)" />
+  </Target>
+
+  <Target Name="gen_kaitai_files">
+    <Exec Command="$(CMake) $(CMakeArguments) -DTARGET=gen_kaitai_files -DKSY_SOURCES=&quot;$(KsyFileList)&quot; -DKSY_OUTPUT_DIR=&quot;$(KsyOutputDir)&quot; -DKSY_NAMESPACE=&quot;$(KsyNamespace)&quot; -DEXTRA_PASS_VARIABLES=&quot;KSY_SOURCES;KSY_OUTPUT_DIR;KSY_NAMESPACE&quot; -P $(RekoCMake)" />
   </Target>
 
   <!-- Runs the hdrgen tool to generate the C interop file 'reko.h'from the C# types that have been 

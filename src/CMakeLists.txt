@@ -25,8 +25,16 @@ endif()
 set(REKO_SRC ${CMAKE_CURRENT_LIST_DIR})
 set(REKO_VERSION "0.9.3")
 
-set(artifacts_dir ${REKO_SRC}/../bin)
+set(artifacts_dir ${REKO_TOP}/bin)
 file(MAKE_DIRECTORY ${artifacts_dir})
+
+set(KAITAI_HOME ${REKO_TOP}/external/kaitai)
+
+set(KAITAI_COMPILER ${KAITAI_HOME}/bin/kaitai-struct-compiler)
+if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
+	set(KAITAI_COMPILER "${KAITAI_COMPILER}.bat")
+endif()
+
 
 #
 # This function obtains the output path of a given csproj
@@ -124,6 +132,28 @@ function(add_copy_target)
 		${copy_TARGET_NAME}
 		COMMENT "Copying ${copy_SRC_PATH} -> ${copy_DEST_PATH}"
 		DEPENDS ${copy_DEST_PATH}
+	)
+endfunction()
+
+function(add_ksy_target)
+	cmake_parse_arguments(ksy "" "SOURCE;OUTPUT;NAMESPACE;TARGET_NAME" "" ${ARGN})
+
+	get_filename_component(output_dir ${ksy_OUTPUT} DIRECTORY)
+
+	add_custom_command(
+		OUTPUT ${ksy_OUTPUT}
+		COMMENT "Generating ${ksy_OUTPUT}"
+		COMMAND ${CMAKE_COMMAND} -E env
+				KAITAI_STRUCT_COMPILER_HOME=${KAITAI_HOME}
+				${KAITAI_COMPILER}
+				-t csharp -d ${output_dir} ${ksy_SOURCE}
+				--dotnet-namespace ${ksy_NAMESPACE}
+	)
+
+	add_custom_target(
+		${ksy_TARGET_NAME}
+		COMMENT "${ksy_SOURCE} -> ${ksy_OUTPUT}"
+		DEPENDS ${ksy_OUTPUT}
 	)
 endfunction()
 
@@ -390,6 +420,31 @@ elseif("${TARGET}" STREQUAL "gen_c2xml_sysv")
 	add_c2xml_target_sysv(gen_c2xml_sysv libc.so)
 	add_c2xml_target_sysv(gen_c2xml_sysv Xlib)
 	add_c2xml_target_sysv(gen_c2xml_sysv opengl)
+elseif("${TARGET}" STREQUAL "gen_kaitai_files")
+	add_custom_target(gen_kaitai_files)
+
+	message(STATUS "Ksy Sources: ${KSY_SOURCES}")
+	message(STATUS "Ksy Output : ${KSY_OUTPUT_DIR}")
+	message(STATUS "Ksy Namespace: ${KSY_NAMESPACE}")
+
+	foreach(ksy ${KSY_SOURCES})
+		get_filename_component(filename ${ksy} NAME_WLE)
+
+		string(SUBSTRING "${filename}" 0 1 filename_ucfirst)
+		string(TOUPPER "${filename_ucfirst}" filename_ucfirst)
+		string(SUBSTRING "${filename}" 1 -1 filename_substr1)
+		set(output_filename "${filename_ucfirst}${filename_substr1}.cs")
+		set(target_name "ksy_${filename}")
+
+		add_ksy_target(
+			SOURCE ${ksy}
+			OUTPUT ${KSY_OUTPUT_DIR}/${output_filename}
+			NAMESPACE ${KSY_NAMESPACE}
+			TARGET_NAME ${target_name}
+		)
+
+		add_dependencies(gen_kaitai_files ${target_name})
+	endforeach()
 elseif("${TARGET}" STREQUAL "nativeproxy_clean")
 	#
 	# Create a new target to clean NativeProxy

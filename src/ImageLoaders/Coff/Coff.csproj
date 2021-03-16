@@ -10,7 +10,23 @@
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <Configurations>Debug;Release</Configurations>
   </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\Core\Core.csproj" />
   </ItemGroup>
+
+  <Target Name="GenerateCsFiles" BeforeTargets="CoreCompile">
+    <ItemGroup>
+      <KsyFiles Include="ksy\ecoff.ksy" />
+    </ItemGroup>
+
+    <PropertyGroup>
+      <KsyOutputDir>$(ProjectDir.TrimEnd('\'))</KsyOutputDir>
+      <KsyFileList>@(KsyFiles -> '%(FullPath)', ';')</KsyFileList>
+    </PropertyGroup>
+
+    <MSBuild Projects="$(ProjectDir)..\..\BuildTargets\BuildTargets.csproj"
+             Properties="Configuration=$(Configuration);Platform=$(Platform);KsyFileList=$(KsyFileList);KsyOutputDir=$(KsyOutputDir);KsyNamespace=$(RootNamespace)"
+             Targets="gen_kaitai_files" />
+  </Target>
 </Project>
