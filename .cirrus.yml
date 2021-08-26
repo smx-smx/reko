@@ -7,7 +7,7 @@ linux_x64_task:
   container:
     cpu: 8
     memory: 4G
-    image: mcr.microsoft.com/dotnet/sdk:3.1
+    image: mcr.microsoft.com/dotnet/sdk:5.0
 
   install_script:
     - apt-get update -qq
@@ -38,7 +38,7 @@ darwin_x64_task:
 
   install_script:
     - brew install pkg-config cmake capstone p7zip
-    - curl -L https://dotnet.microsoft.com/download/dotnet/scripts/v1/dotnet-install.sh | bash -s - --channel 3.1
+    - curl -L https://dotnet.microsoft.com/download/dotnet/scripts/v1/dotnet-install.sh | bash -s - --channel 5.0
 
   prepare_script:
     - dotnet nuget locals all --clear
