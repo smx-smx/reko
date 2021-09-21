@@ -1,0 +1,7 @@
+namespace Reko
+{
+    public static partial class AssemblyMetadata
+    {
+        public const string CommitHash = "@BUILD_HASH@";
+    }
+}

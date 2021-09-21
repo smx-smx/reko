@@ -554,7 +554,7 @@ namespace Reko.CmdLine
             if (attrs.Length < 1)
                 return;
             var attr = (AssemblyFileVersionAttribute)attrs[0];
-            w.WriteLine("Decompile.exe version {0}", attr.Version);
+            w.WriteLine(string.Format("Decompile.exe version {0}-{1}", attr.Version, AssemblyMetadata.CommitHash));
         }
 
         private void Usage(TextWriter w)

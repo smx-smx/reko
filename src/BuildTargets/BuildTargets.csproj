@@ -107,6 +107,10 @@
     <Exec Command="$(CMake) $(CMakeArguments) -DTARGET=create_release -P $(RekoCMake)" />
   </Target>
 
+  <Target Name="gen_core_metadata">
+    <Exec Command="$(CMake) $(CMakeArguments) -DTARGET=gen_core_metadata -P $(RekoCMake)" />
+  </Target>
+
   <!-- Convenience target that performs all the above steps in the correct order -->
   <Target Name="reko_all"
     DependsOnTargets="build_solution;run_unit_tests;run_regressions;create_runtime_nupkg;create_msi_wix;create_release">

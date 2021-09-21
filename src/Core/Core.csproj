@@ -24,4 +24,7 @@
   <ItemGroup>
     <PackageReference Include="System.Runtime.Loader" Version="4.3.0" />
   </ItemGroup>
+  <Target Name="GenerateCsFiles" BeforeTargets="CoreCompile">
+    <MSBuild Projects="$(ProjectDir)..\BuildTargets\BuildTargets.csproj" Properties="Configuration=$(Configuration);Platform=$(Platform)" Targets="gen_core_metadata" />
+  </Target>
 </Project>

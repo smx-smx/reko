@@ -40,7 +40,7 @@ using System.Runtime.CompilerServices;
 
 namespace Reko
 {
-    public static class AssemblyMetadata
+    public static partial class AssemblyMetadata
     {
         public const string AssemblyVersion = "0.10.1.0";
         public const string AssemblyFileVersion = "0.10.1.0";

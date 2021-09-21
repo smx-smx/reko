@@ -617,6 +617,23 @@ elseif("${TARGET}" STREQUAL "update_runtime_nuspec")
 			${REKO_SRC}/Installers/Runtime/.skipnuspecupdate
 		TARGET_NAME "update_runtime_nuspec"
 	)
+elseif("${TARGET}" STREQUAL "gen_core_metadata")
+	execute_process(
+		COMMAND git rev-parse HEAD
+		WORKING_DIRECTORY ${REKO_SRC}/../
+		OUTPUT_VARIABLE head_sha
+	)
+	string(SUBSTRING "${head_sha}" 0 10 BUILD_HASH)
+	configure_file(
+		${CMAKE_CURRENT_LIST_DIR}/Metadata.cs.in
+		${REKO_SRC}/Core/Properties/Metadata.cs
+	)
+
+	add_custom_target(
+		gen_core_metadata
+		DEPENDS
+		${REKO_SRC}/Core/Properties/Metadata.cs
+	)
 elseif("${TARGET}" STREQUAL "create_release")
 	include(FindSevenZip)
 
