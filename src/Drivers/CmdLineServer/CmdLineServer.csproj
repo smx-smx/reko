@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="$(ProjectDir)..\Common.items" />
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net5.0</TargetFramework>
+    <RootNamespace>Reko.CmdLineServer</RootNamespace>
+    <AssemblyName>decompiled</AssemblyName>
+    <ApplicationIcon />
+    <StartupObject />
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="App.config" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="K4os.Compression.LZ4" Version="1.2.12" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
+  </ItemGroup>
+
+  <Import Project="$(ProjectDir)..\PreBuild.targets" />
+</Project>
