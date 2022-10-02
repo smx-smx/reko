@@ -9,6 +9,10 @@
     <CMakeFlags Include="-DCMAKE_BUILD_TYPE=$(Configuration)" />
     <CMakeFlags Include="-DREKO_PLATFORM=$(Platform)" />
     <CMakeFlags Include="-DREKO_SRC=$(ProjectDir)../" />
+    <!-- These are used only used in Windows builds -->
+    <CMakeFlags Include="-DVS_VERSION=$(VisualStudioVersion)" />
+	<!-- Required minimum VS version (used to select Visual Studio version in CMake) -->
+    <CMakeFlags Include="-DVS_MIN_VERSION=17.0" />
   </ItemGroup>
 
   <PropertyGroup>

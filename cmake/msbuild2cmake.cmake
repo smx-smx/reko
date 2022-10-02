@@ -49,6 +49,46 @@ function(clean_project name path build_dir)
 	endif()
 endfunction()
 
+function(get_vs_generator_platform platform output)
+	string(TOLOWER "${platform}" _tmp)
+	if(_tmp STREQUAL "x86" OR _tmp STREQUAL "win32")
+		set(${output} "Win32" PARENT_SCOPE)
+	elseif(_tmp STREQUAL "x64" OR _tmp STREQUAL "win64")
+		set(${output} "x64" PARENT_SCOPE)
+	endif()
+endfunction()
+
+function(get_vs_generator version platform output)
+	if(version MATCHES "^17\..*")
+		set(gen_name "Visual Studio 17 2022")
+	elseif(version MATCHES "^16\..*")
+		set(gen_name "Visual Studio 16 2019")
+	elseif(version MATCHES "^15\..*")
+		set(gen_name "Visual Studio 15 2017")
+	elseif(version MATCHES "^14\..*")
+		set(gen_name "Visual Studio 14 2015")
+	elseif(version MATCHES "^13\..*" or version MATCHES "^12\..*")
+		set(gen_name "Visual Studio 12 2013")
+	elseif(version MATCHES "^11\..*")
+		set(gen_name "Visual Studio 11 2012")
+	elseif(version MATCHES "^10\..*")
+		set(gen_name "Visual Studio 10 2010")
+	else()
+		message(FATAL_ERROR "Unsupported VisualStudioVersion \"${version}\"")
+	endif()
+
+	get_vs_generator_platform("${platform}" gen_platform)
+
+	set(args "")
+	list(APPEND args "${gen_name}")
+
+	if(gen_platform)
+		list(APPEND args "-A" "${gen_platform}")
+	endif()
+
+	set(${output} "${args}" PARENT_SCOPE)
+endfunction()
+
 #
 # This function runs CMake in "generation" mode,
 # similarly to what would be done manually when building a CMake project,
@@ -58,6 +98,7 @@ endfunction()
 # - creating a build directory for the CMake generated files (specified by `BUILD_DIR`)
 # - invoking CMake against the directory holding CMakeLists.txt (specified by `DIRECTORY`)
 # - optionally specify a generator to use (specified by `GENERATOR`), e.g. "Unix Makefiles"
+# The VS_VERSION variable is used (if defined - aka build started from within Visual Studio) to pick the generator that matches the running Visual Studio version
 # - specify any variable to be passed to CMakeLists.txt
 # This last part can be controlled by 2 different options: `PASS_VARIABLES` and `EXTRA_ARGUMENTS`:
 # - `PASS_VARIABLES` specifies the name of existing CMake variables that you wish to forward from this script to CMakeLists.txt
@@ -71,7 +112,7 @@ endfunction()
 # This is controlled by the `TARGET` parameter
 #
 function(invoke_cmake)
-	cmake_parse_arguments(proj "QUICK_CONFIGURE" "DIRECTORY;BUILD_DIR;GENERATOR;TARGET" "PASS_VARIABLES;EXTRA_ARGUMENTS" ${ARGN})
+	cmake_parse_arguments(proj "QUICK_CONFIGURE" "DIRECTORY;BUILD_DIR;GENERATOR;PLATFORM;TARGET;VS_VERSION;VS_MIN_VERSION" "PASS_VARIABLES;EXTRA_ARGUMENTS" ${ARGN})
 	
 	## Beginning of the "configuration" phase
 
@@ -80,17 +121,30 @@ function(invoke_cmake)
 	endif()
 
 	# set default generator for win32
-	if(NOT proj_GENERATOR AND WIN32)
-		if(NOT DEFINED IS_MSYS)
-			check_msys(IS_MSYS)
+	if(WIN32 AND NOT DEFINED proj_GENERATOR)
+		# are we building in Visual Studio?
+		if(proj_VS_VERSION)
+			message(STATUS "VS_VERSION: ${proj_VS_VERSION} (min required: ${proj_VS_MIN_VERSION})")
+			if(proj_VS_MIN_VERSION AND proj_VS_VERSION VERSION_LESS proj_VS_MIN_VERSION)
+				set(proj_VS_VERSION ${proj_VS_MIN_VERSION})
+			endif()
+			get_vs_generator("${proj_VS_VERSION}" "${proj_PLATFORM}" proj_GENERATOR)
+		else()
+			# command line build
+			if(NOT DEFINED IS_MSYS)
+				check_msys(IS_MSYS)
+			endif()
+			message(STATUS "IS_MSYS: ${IS_MSYS}")
+			if(IS_MSYS)
+				set(proj_GENERATOR "MSYS Makefiles")
+			elseif(MINGW)
+				set(proj_GENERATOR "MinGW Makefiles")
+			elseif(proj_VS_MIN_VERSION)
+				get_vs_generator("${proj_VS_MIN_VERSION}" "${proj_PLATFORM}" proj_GENERATOR)
+			endif()
+			# if we get this far, use the CMake default generator
 		endif()
-		message(STATUS "IS_MSYS: ${IS_MSYS}")
-		if(IS_MSYS)
-			set(proj_GENERATOR "MSYS Makefiles")
-		elseif(MINGW)
-			set(proj_GENERATOR "MinGW Makefiles")
-		endif()
-	endif()
+	endif()	
 
 	# cmake <directory>
 	set(CMAKE_ARGS ${proj_DIRECTORY})
@@ -121,6 +175,12 @@ function(invoke_cmake)
 	if(proj_EXTRA_ARGUMENTS)
 		set(CMAKE_ARGS "${CMAKE_ARGS};${proj_EXTRA_ARGUMENTS}")
 	endif()
+
+	set(_cmdline_debug "")
+	foreach(arg ${CMAKE_ARGS})
+		string(APPEND _cmdline_debug "\"${arg}\" ")
+	endforeach()
+	message(STATUS "Invoking CMake: ${_cmdline_debug}")
 
 	execute_process(
 		COMMAND ${CMAKE_COMMAND} ${CMAKE_ARGS}
@@ -161,19 +221,8 @@ function(invoke_cmake)
 	endif()
 endfunction()
 
-function(process_project name path)
-	set(BUILD_DIR ${path}/build/${REKO_PLATFORM}/${CMAKE_BUILD_TYPE})
-
-	if(ACTION STREQUAL "clean")
-		clean_project(${name} ${path} ${BUILD_DIR})
-	else()
-		invoke_cmake(${name} ${path} ${BUILD_DIR})
-	endif()
-endfunction()
-
 message("== Configuration ==")
 message("=> Build Type: ${CMAKE_BUILD_TYPE}")
-message("=> Generator : ${REKO_COMPILER}")
 message("=> Platform  : ${REKO_PLATFORM}")
 message("=> Target    : ${TARGET}")
 message("")
