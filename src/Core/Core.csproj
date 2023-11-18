@@ -7,7 +7,7 @@
     <AssemblyName>Reko.Core</AssemblyName>
     <RootNamespace>Reko.Core</RootNamespace>
     <OutputType>Library</OutputType>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <Configurations>Debug;Release</Configurations>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
@@ -29,6 +29,7 @@
 
   <PropertyGroup>
     <CustomAssemblyInfoFile>$([System.IO.Path]::Combine($(MSBuildProjectDirectory), obj\AssemblyData.Extra.cs))</CustomAssemblyInfoFile>
+    <LangVersion>12.0</LangVersion>
   </PropertyGroup>
   <!-- includes the CustomAssemblyInfo for compilation into your project -->
   <ItemGroup>

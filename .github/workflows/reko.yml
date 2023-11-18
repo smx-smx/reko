@@ -2,9 +2,9 @@ name: Reko
 
 on:
   push:
-    branches: [ master, net6.0, msbuildify ]
+    branches: [ master, net8.0, msbuildify ]
   pull_request:
-    branches: [ master, net6.0 ]
+    branches: [ master, net8.0 ]
 
 env:
   MSBUILDDISABLENODEREUSE: 1
@@ -28,7 +28,7 @@ jobs:
     - name: Setup .NET Core
       uses: actions/setup-dotnet@v1
       with:
-        dotnet-version: 6.0.x
+        dotnet-version: 8.0.x
     - name: Install dependencies
       shell: bash
       run: |

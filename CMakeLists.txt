@@ -9,9 +9,9 @@ endif()
 project(Reko NONE)
 enable_testing()
 
-set(REKO_LIB_FRAMEWORK "net6.0")
-set(REKO_EXE_FRAMEWORK "net6.0")
-set(REKO_WINFORMS_EXE_FRAMEWORK "net6.0-windows")
+set(REKO_LIB_FRAMEWORK "net8.0")
+set(REKO_EXE_FRAMEWORK "net8.0")
+set(REKO_WINFORMS_EXE_FRAMEWORK "net8.0-windows")
 
 if(WIN32)
 	set(REKO_COMPILER "Visual Studio 17 2022")
