@@ -11,13 +11,13 @@ linux_arm64_task:
   build_script:
     - dotnet msbuild -p:Platform=ARM64 -p:Configuration=UnixRelease -t:build_solution -m ./src/BuildTargets/BuildTargets.csproj
   test_script:
-    - dotnet msbuild -p:Platform=ARM64 -p:Configuration=Release -t:run_unit_tests -m ./src/BuildTargets/BuildTargets.csproj
+    - dotnet msbuild -p:Platform=ARM64 -p:Configuration=UnixRelease -t:run_unit_tests -m ./src/BuildTargets/BuildTargets.csproj
   regressions_script:
-    - dotnet msbuild -p:Platform=ARM64 -p:Configuration=Release -t:run_regressions -m ./src/BuildTargets/BuildTargets.csproj
+    - dotnet msbuild -p:Platform=ARM64 -p:Configuration=UnixRelease -t:run_regressions -m ./src/BuildTargets/BuildTargets.csproj
   nupkg_script:
-    - dotnet msbuild -p:Platform=ARM64 -p:Configuration=Release -t:create_runtime_nupkg -m ./src/BuildTargets/BuildTargets.csproj
+    - dotnet msbuild -p:Platform=ARM64 -p:Configuration=UnixRelease -t:create_runtime_nupkg -m ./src/BuildTargets/BuildTargets.csproj
   release_script:
-    - dotnet msbuild -p:Platform=ARM64 -p:Configuration=Release -t:create_release -m ./src/BuildTargets/BuildTargets.csproj
+    - dotnet msbuild -p:Platform=ARM64 -p:Configuration=UnixRelease -t:create_release -m ./src/BuildTargets/BuildTargets.csproj
 
   binaries_artifacts:
     path: "bin/*"
@@ -31,13 +31,13 @@ linux_x64_task:
   build_script:
     - dotnet msbuild -p:Platform=x64 -p:Configuration=UnixRelease -t:build_solution -m ./src/BuildTargets/BuildTargets.csproj
   test_script:
-    - dotnet msbuild -p:Platform=x64 -p:Configuration=Release -t:run_unit_tests -m ./src/BuildTargets/BuildTargets.csproj
+    - dotnet msbuild -p:Platform=x64 -p:Configuration=UnixRelease -t:run_unit_tests -m ./src/BuildTargets/BuildTargets.csproj
   regressions_script:
-    - dotnet msbuild -p:Platform=x64 -p:Configuration=Release -t:run_regressions -m ./src/BuildTargets/BuildTargets.csproj
+    - dotnet msbuild -p:Platform=x64 -p:Configuration=UnixRelease -t:run_regressions -m ./src/BuildTargets/BuildTargets.csproj
   nupkg_script:
-    - dotnet msbuild -p:Platform=x64 -p:Configuration=Release -t:create_runtime_nupkg -m ./src/BuildTargets/BuildTargets.csproj
+    - dotnet msbuild -p:Platform=x64 -p:Configuration=UnixRelease -t:create_runtime_nupkg -m ./src/BuildTargets/BuildTargets.csproj
   release_script:
-    - dotnet msbuild -p:Platform=x64 -p:Configuration=Release -t:create_release -m ./src/BuildTargets/BuildTargets.csproj
+    - dotnet msbuild -p:Platform=x64 -p:Configuration=UnixRelease -t:create_release -m ./src/BuildTargets/BuildTargets.csproj
 
   binaries_artifacts:
     path: "bin/*"
@@ -61,13 +61,13 @@ darwin_arm64_task:
   build_script:
     - dotnet msbuild -p:Platform=ARM64 -p:Configuration=UnixRelease -t:build_solution -m ./src/BuildTargets/BuildTargets.csproj
   test_script:
-    - dotnet msbuild -p:Platform=ARM64 -p:Configuration=Release -t:run_unit_tests -m ./src/BuildTargets/BuildTargets.csproj
+    - dotnet msbuild -p:Platform=ARM64 -p:Configuration=UnixRelease -t:run_unit_tests -m ./src/BuildTargets/BuildTargets.csproj
   regressions_script:
-    - dotnet msbuild -p:Platform=ARM64 -p:Configuration=Release -t:run_regressions -m ./src/BuildTargets/BuildTargets.csproj
+    - dotnet msbuild -p:Platform=ARM64 -p:Configuration=UnixRelease -t:run_regressions -m ./src/BuildTargets/BuildTargets.csproj
   nupkg_script:
-    - dotnet msbuild -p:Platform=ARM64 -p:Configuration=Release -t:create_runtime_nupkg -m ./src/BuildTargets/BuildTargets.csproj
+    - dotnet msbuild -p:Platform=ARM64 -p:Configuration=UnixRelease -t:create_runtime_nupkg -m ./src/BuildTargets/BuildTargets.csproj
   release_script:
-    - dotnet msbuild -p:Platform=ARM64 -p:Configuration=Release -t:create_release -m ./src/BuildTargets/BuildTargets.csproj
+    - dotnet msbuild -p:Platform=ARM64 -p:Configuration=UnixRelease -t:create_release -m ./src/BuildTargets/BuildTargets.csproj
 
   binaries_artifacts:
     path: "bin/*"
