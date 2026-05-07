@@ -19,6 +19,6 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && dotnet nuget locals all --clear \
     && rm -f dotnet-install.sh
-    # reserved for cache eviction: 2
+    # reserved for cache eviction: 3
 
 ENV LANG en_US.utf8

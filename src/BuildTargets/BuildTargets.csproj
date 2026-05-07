@@ -9,6 +9,7 @@
     <CMakeFlags Include="-DCMAKE_BUILD_TYPE=$(Configuration)" />
     <CMakeFlags Include="-DREKO_PLATFORM=$(Platform)" />
     <CMakeFlags Include="-DREKO_SRC=$(ProjectDir)../" />
+    <CMakeFlags Include='-DREKO_COMPILER="Visual Studio 17 2022"' Condition="'$(OS)'=='Windows_NT'" />
   </ItemGroup>
 
   <PropertyGroup>

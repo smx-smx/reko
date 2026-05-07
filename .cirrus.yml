@@ -4,8 +4,6 @@ env:
 
 linux_arm64_task:
   arm_container:
-    cpu: 4
-    memory: 4G
     dockerfile: .ci/linux_arm64/Dockerfile
 
   build_script:
@@ -24,8 +22,6 @@ linux_arm64_task:
 
 linux_x64_task:
   container:
-    cpu: 4
-    memory: 4G
     dockerfile: .ci/linux/Dockerfile
 
   build_script:
@@ -74,10 +70,8 @@ darwin_arm64_task:
 
 windows_x64_task:
   windows_container:
-    cpu: 4
-    memory: 6G
     dockerfile: .ci/windows/Dockerfile
-    os_version: 2019
+    os_version: 2022
 
   clone_script:
     # Use custom cloning to set the autocrlf to true

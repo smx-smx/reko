@@ -3,6 +3,10 @@ list(INSERT CMAKE_MODULE_PATH 0 "${REKO_SRC}/../cmake")
 
 include(msbuild2cmake)
 
+if(WIN32 AND NOT REKO_COMPILER)
+    set(REKO_COMPILER "Visual Studio 17 2022")
+endif()
+
 message(STATUS "Building native libraries")
 invoke_cmake(
 	BUILD_DIR ${CMAKE_BINARY_DIR}/build/${REKO_PLATFORM}/${CMAKE_BUILD_TYPE}

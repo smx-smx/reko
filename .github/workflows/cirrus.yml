@@ -1,0 +1,124 @@
+name: Unified Cirrus CLI Pipeline
+on:
+    workflow_dispatch:
+    push:
+        branches: [ ci2 ]
+    pull_request:
+jobs:
+    cirrus-matrix:
+        name: ${{ matrix.task_name }} (${{ matrix.os }})
+        runs-on: ${{ matrix.os }}
+        permissions:
+            contents: read
+            packages: write
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                -
+                    os: ubuntu-24.04
+                    task_name: "linux_x64"
+                -
+                    os: ubuntu-24.04-arm
+                    task_name: "linux_arm64"
+                -
+                    os: windows-2022
+                    task_name: "windows_x64"
+        steps:
+        -
+            name: Print available disk space
+            shell: bash
+            run: df -h
+        -
+            name: Checkout Code
+            uses: actions/checkout@v4
+            with:
+                clean: false
+        -
+            name: Setup Go
+            uses: actions/setup-go@v5
+            with:
+                go-version: '1.25'
+        -
+            name: Checkout cirrus-cli
+            uses: actions/checkout@v4
+            with:
+                repository: smx-smx/cirrus-cli
+                path: cirrus-cli
+        -
+            name: Build cirrus
+            working-directory: cirrus-cli
+            shell: bash
+            run: |
+                if [ "$RUNNER_OS" == "Windows" ]; then
+                    go build -o cirrus.exe ./cmd/cirrus/main.go
+                else
+                    go build -o cirrus ./cmd/cirrus/main.go
+                fi
+        -
+            name: Add cirrus to PATH
+            shell: bash
+            run: echo "${{ github.workspace }}/cirrus-cli" >> $GITHUB_PATH
+
+
+        # ── RDP Debug (Windows only, manual trigger with debug_enabled=true) ────
+        # -
+        #     name: Download ngrok
+        #     if: ${{ runner.os == 'Windows' }}
+        #     run: Invoke-WebRequest https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -OutFile ngrok.zip
+
+        # -
+        #     name: Extract ngrok
+        #     if: ${{ runner.os == 'Windows' }}
+        #     run: Expand-Archive ngrok.zip -DestinationPath ngrok
+
+        # -
+        #     name: Authenticate ngrok
+        #     if: ${{ runner.os == 'Windows' }}
+        #     run: .\ngrok\ngrok.exe authtoken $Env:NGROK_AUTH_TOKEN
+        #     env:
+        #         NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+
+        # -
+        #     name: Enable RDP
+        #     if: ${{ runner.os == 'Windows' }}
+        #     run: |
+        #         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
+        #         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        #         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
+        #         Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText $Env:RDP_PASSWORD -Force)
+        #     env:
+        #         RDP_PASSWORD: ${{ secrets.RDP_PASSWORD }}
+
+        # -
+        #     name: Open RDP tunnel — check ngrok dashboard for address, cancel job when done
+        #     if: ${{ runner.os == 'Windows' }}
+        #     run: .\ngrok\ngrok.exe tcp 3389
+        # ── End RDP Debug ────────────────────────────────────────────────────────
+
+
+        # Workaround https://github.com/actions/runner-images/issues/13729
+        -
+            name: Docker issue workaround
+            id: docker-workaround
+            if: runner.os == 'Windows'
+            shell: pwsh
+            run: |
+                $dockerState = Get-Service -Name "docker"
+                if ($dockerState.Status -ne "Running") {
+                    Start-Service -Name "docker"
+                }
+        -
+            name: Expose GitHub Actions Runtime Variables
+            uses: actions/github-script@v7
+            with:
+                script: |
+                    core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env['ACTIONS_RUNTIME_TOKEN']);
+                    core.exportVariable('ACTIONS_RESULTS_URL', process.env['ACTIONS_RESULTS_URL']);
+        -
+            name: Execute Cirrus Task
+            shell: bash
+            env:
+                GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            run: |
+                cirrus run --no-gitignore --dockerfile-image-push --container-lazy-pull ${{ matrix.task_name }}

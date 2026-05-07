@@ -46,9 +46,6 @@
     <Compile Include="Properties\AssemblyInfo.cs"/>
   </ItemGroup>
   <ItemGroup>
-    <None Include="App.config"/>
-  </ItemGroup>
-  <ItemGroup>
     <ProjectReference Include="..\..\Arch\Arm\Arm.csproj">
       <Project>{32f09304-51be-4797-a86a-c0befed2422b}</Project>
       <Name>Arm</Name>

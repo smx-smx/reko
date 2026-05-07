@@ -38,7 +38,6 @@
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
   </PropertyGroup>
   <ItemGroup>
-    <None Include="App.config" />
     <None Include="genPICdb.licenseheader" />
     <None Include="picdb.zip" />
   </ItemGroup>
